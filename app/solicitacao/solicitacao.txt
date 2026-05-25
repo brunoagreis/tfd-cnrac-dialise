@@ -1,0 +1,947 @@
+"use client"
+
+import { useEffect, useState } from "react"
+import { useForm, useFieldArray } from "react-hook-form"
+import { zodResolver } from "@hookform/resolvers/zod"
+import { z } from "zod"
+import { useStore } from "@/lib/store-context"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Badge } from "@/components/ui/badge"
+import { Separator } from "@/components/ui/separator"
+import { toast } from "sonner"
+import { MODULES, MODULE_LABELS, TIPO_SOLICITACAO, TIPO_SOLICITACAO_LABELS, CATEGORIA_ANEXO, CATEGORIA_ANEXO_LABELS } from "@/lib/types"
+import type { Module, TipoSolicitacao, CategoriaAnexo } from "@/lib/types"
+import { FileText, Plus, Trash2, CheckCircle2, Copy, ArrowLeft, Building2, User, Stethoscope, Paperclip } from "lucide-react"
+import Link from "next/link"
+
+const solicitacaoSchema = z.object({
+  // Paciente
+  cpf: z.string().regex(/^\d{3}\.\d{3}\.\d{3}-\d{2}$/, "CPF invalido (formato: 000.000.000-00)"),
+  cartaoSus: z.string().min(15, "Cartao SUS invalido (15 digitos)").max(15, "Cartao SUS invalido"),
+  nome: z.string().min(2, "Nome obrigatorio"),
+  dataNascimento: z.string().min(1, "Data de nascimento obrigatoria"),
+  telefones: z.array(z.object({ value: z.string().min(10, "Telefone invalido") })).min(1, "Informe ao menos 1 telefone"),
+  emailPaciente: z.string().email("E-mail invalido").or(z.literal("")),
+  municipio: z.string().min(2, "Municipio obrigatorio"),
+  endereco: z.string().min(5, "Endereco obrigatorio"),
+  // Demanda
+  modulo: z.string().min(1, "Selecione o modulo"),
+  localSolicitante: z.string().min(2, "Local solicitante obrigatorio"),
+  telefoneSolicitante: z.array(z.object({ value: z.string().min(10, "Telefone invalido") })).min(1, "Informe ao menos 1 telefone"),
+  emailSolicitante: z.string().email("E-mail da instituicao obrigatorio"),
+  codigoSigtap: z.string().min(1, "Codigo SIGTAP obrigatorio"),
+  descricaoSigtap: z.string().min(1, "Descricao obrigatoria"),
+  cid10: z.string().min(1, "CID-10 obrigatorio"),
+  especialidade: z.string().min(1, "Especialidade obrigatoria"),
+  subespecialidade: z.string().optional(),
+  peso: z.string().optional(),
+  altura: z.string().optional(),
+  tipoSanguineo: z.string().optional(),
+  observacoesUnidade: z.string().optional(),
+  tipoSolicitacao: z.string().min(1, "Tipo de solicitacao obrigatorio"),
+  localSolicitado: z.string().optional(),
+  acaoJudicial: z.boolean().optional(),
+})
+
+type FormData = z.infer<typeof solicitacaoSchema>
+// Máscara do CPF
+function maskCPF(value: string) {
+  const digits = (value || "").replace(/\D/g, "").slice(0, 11)
+  const p1 = digits.slice(0, 3)
+  const p2 = digits.slice(3, 6)
+  const p3 = digits.slice(6, 9)
+  const p4 = digits.slice(9, 11)
+
+  let out = p1
+  if (p2) out += "." + p2
+  if (p3) out += "." + p3
+  if (p4) out += "-" + p4
+  return out
+}
+
+//Máscara do telefone
+function maskPhoneBR(value: string) {
+  const digits = (value || "").replace(/\D/g, "").slice(0, 11) // DDD + 9 dígitos
+  const ddd = digits.slice(0, 2)
+  const part1 = digits.slice(2, 7)  // 5 dígitos (celular)
+  const part2 = digits.slice(7, 11) // 4 dígitos
+
+  let out = ""
+  if (ddd) out = `(${ddd}`
+  if (digits.length >= 3) out += ") "
+  if (part1) out += part1
+  if (part2) out += "-" + part2
+
+  return out
+}
+
+// ✅ Regras de obrigatoriedade de anexos por módulo (descrição padronizada)
+const REQUIRED_DOCS_BY_MODULE: Record<string, string[]> = {
+  hemodialise: [
+    "RG",
+    "CNS",
+    "EXAME DE HIV",
+    "HEPATITE B",
+    "HEPATITE C",
+    "EXAMES MENSAIS (ROTINA DO SERVIÇO)",
+    "COMPROVANTE DE RESIDÊNCIA",
+  ],
+  tfd: [
+    "LAUDO MÉDICO PARA SOLICITAÇÃO DE TFD (MODELO)",
+    "RG",
+    "CNS",
+  ],
+}
+
+// Normaliza texto pra comparar (ignora acento/caixa/espaço)
+function norm(s: string) {
+  return (s || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .replace(/\s+/g, " ")
+    .trim()
+}
+
+function getMissingRequiredDocs(params: {
+  modulo: string
+  arquivos: { descricao: string }[]
+  comprovanteNaoNomeSolicitante?: boolean
+  tfdDeclaracaoNaoManuscrita?: boolean
+}) {
+  const { modulo, arquivos, comprovanteNaoNomeSolicitante, tfdDeclaracaoNaoManuscrita } = params
+
+  const required = [...(REQUIRED_DOCS_BY_MODULE[modulo] || [])]
+
+  // Regra extra: Hemodiálise -> se comprovante não estiver no nome, exigir carta
+  if (modulo === "hemodialise" && comprovanteNaoNomeSolicitante) {
+    required.push("CARTA DE PRÓPRIO PUNHO")
+  }
+
+  // Regra extra: TFD -> não pode ser manuscrita (vamos checar a declaração)
+  // Aqui só devolvemos um “faltando” simbólico pra você mostrar bonito no toast
+  if (modulo === "tfd" && !tfdDeclaracaoNaoManuscrita) {
+    required.push("DECLARAÇÃO: LAUDO NÃO MANUSCRITO")
+  }
+
+  const existing = new Set(arquivos.map(a => norm(a.descricao)))
+
+  const missing = required.filter(r => !existing.has(norm(r)))
+
+  return missing
+}
+
+export default function SolicitacaoPage() {
+  const store = useStore()
+  const [protocoloGerado, setProtocoloGerado] = useState<string | null>(null)
+  const [step, setStep] = useState(1) // 1=paciente, 2=demanda, 3=documentos, 4=sucesso
+  const [arquivos, setArquivos] = useState<{ nome: string; categoria: CategoriaAnexo; descricao: string }[]>([])
+  const [compResidNaoNomeSolicitante, setCompResidNaoNomeSolicitante] = useState(false)
+  const [tfdDeclaracaoNaoManuscrita, setTfdDeclaracaoNaoManuscrita] = useState(false)
+  const [novoArqCategoria, setNovoArqCategoria] = useState<CategoriaAnexo>("laudo")
+  const [novoArqDescricao, setNovoArqDescricao] = useState("")
+  
+    const {
+    register,
+    handleSubmit,
+    control,
+    watch,
+    setValue,
+    trigger,
+    formState: { errors },
+  } = useForm<FormData>({
+    resolver: zodResolver(solicitacaoSchema),
+    defaultValues: {
+      telefones: [{ value: "" }],
+      telefoneSolicitante: [{ value: "" }],
+      emailPaciente: "",
+      acaoJudicial: false,
+    },
+  })
+
+  // ✅ aqui dentro, depois do useForm
+  const moduloAtual = watch("modulo")
+
+  useEffect(() => {
+    if (moduloAtual !== "hemodialise") {
+      setValue("tipoSolicitacao", "", {
+        shouldDirty: false,
+        shouldTouch: false,
+        shouldValidate: false,
+      })
+    }
+  }, [moduloAtual, setValue])
+
+
+    // 🔥 Documentos obrigatórios conforme módulo selecionado
+  const moduloSelecionado = watch("modulo")
+
+  const requiredDocs = (() => {
+    if (!moduloSelecionado) return []
+
+    const base = [...(REQUIRED_DOCS_BY_MODULE[moduloSelecionado] || [])]
+
+    // Hemodiálise: se comprovante não estiver no nome, exigir carta
+    if (moduloSelecionado === "hemodialise" && compResidNaoNomeSolicitante) {
+      base.push("CARTA DE PRÓPRIO PUNHO")
+    }
+
+    return base
+  })()
+
+  const requiredMissing = requiredDocs.filter(
+    (r) => !arquivos.some((a) => norm(a.descricao) === norm(r))
+  )
+
+
+  const { fields: telPacFields, append: appendTelPac, remove: removeTelPac } = useFieldArray({ control, name: "telefones" })
+  const { fields: telSolFields, append: appendTelSol, remove: removeTelSol } = useFieldArray({ control, name: "telefoneSolicitante" })
+
+  const handleBuscarPaciente = () => {
+    const cpf = watch("cpf")
+    if (!cpf) return
+    const paciente = store.findPacienteByCpfOrCns(cpf)
+    if (paciente) {
+      setValue("cartaoSus", paciente.cartaoSus)
+      setValue("nome", paciente.nome)
+      setValue("dataNascimento", paciente.dataNascimento)
+      setValue("emailPaciente", paciente.email)
+      setValue("municipio", paciente.municipio)
+      setValue("endereco", paciente.endereco)
+      // Set telefones
+      const tels = paciente.telefones.map((t) => ({ value: t }))
+      setValue("telefones", tels.length > 0 ? tels : [{ value: "" }])
+      toast.success("Paciente encontrado na base de dados")
+    } else {
+      toast.info("Paciente nao encontrado. Preencha os dados manualmente.")
+    }
+  }
+
+  const nextStep = async () => {
+    if (step === 1) {
+      const valid = await trigger(["cpf", "cartaoSus", "nome", "dataNascimento", "telefones", "emailPaciente", "municipio", "endereco"])
+      if (valid) setStep(2)
+    } else if (step === 2) {
+      const valid = await trigger(["modulo", "localSolicitante", "telefoneSolicitante", "emailSolicitante", "codigoSigtap", "descricaoSigtap", "cid10", "especialidade", "tipoSolicitacao"])
+      if (valid) setStep(3)
+    }
+  }
+
+  const addArquivo = () => {
+    if (!novoArqDescricao.trim()) {
+      toast.error("Informe a descricao do documento")
+      return
+    }
+    setArquivos((prev) => [...prev, { nome: `documento_${prev.length + 1}.pdf`, categoria: novoArqCategoria, descricao: novoArqDescricao }])
+    setNovoArqDescricao("")
+  }
+
+const onSubmit = async (data: FormData) => {
+
+  const response = await fetch("/api/solicitacoes", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      paciente: {
+        cpf: data.cpf,
+        cartaoSus: data.cartaoSus,
+        nome: data.nome,
+        dataNascimento: data.dataNascimento,
+        telefones: data.telefones.map(t => t.value),
+        email: data.emailPaciente,
+        municipio: data.municipio,
+        endereco: data.endereco,
+      },
+      demanda: {
+        modulo: data.modulo,
+        localSolicitante: data.localSolicitante,
+        telefonesSolicitante: data.telefoneSolicitante.map(t => t.value),
+        emailSolicitante: data.emailSolicitante,
+        codigoSigtap: data.codigoSigtap,
+        descricaoSigtap: data.descricaoSigtap,
+        cid10: data.cid10,
+        especialidade: data.especialidade,
+        subespecialidade: data.subespecialidade,
+        peso: data.peso,
+        altura: data.altura,
+        tipoSanguineo: data.tipoSanguineo,
+        observacoesUnidade: data.observacoesUnidade,
+        localSolicitado: data.localSolicitado,
+        tipoSolicitacao: data.tipoSolicitacao,
+        acaoJudicial: data.acaoJudicial,
+      },
+      anexos: arquivos
+    })
+  })
+
+  const result = await response.json()
+
+  if (!response.ok) {
+    toast.error("Erro ao salvar solicitacao")
+    return
+  }
+
+  setProtocoloGerado(result.protocolo)
+  setStep(4)
+}
+
+  if (step === 4 && protocoloGerado) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background p-4">
+        <Card className="w-full max-w-lg text-center">
+          <CardHeader>
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[hsl(var(--success))]">
+              <CheckCircle2 className="h-8 w-8 text-[hsl(var(--success-foreground))]" />
+            </div>
+            <CardTitle className="text-2xl text-foreground">Solicitacao Enviada</CardTitle>
+            <CardDescription>Sua solicitacao foi registrada com sucesso no sistema</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">
+                          {/* ✅ Painel de obrigatórios (dinâmico por módulo) */}
+                <div className="rounded-lg border p-4">
+                  <div className="font-semibold text-foreground">Documentos obrigatórios</div>
+
+                  {!moduloSelecionado ? (
+                    <div className="mt-1 text-sm text-muted-foreground">
+                      Selecione o <b>Módulo</b> na etapa “Demanda” para ver a lista obrigatória.
+                    </div>
+                  ) : (
+                    <>
+                      <div className="mt-1 text-sm text-muted-foreground">
+                        Para <b>{MODULE_LABELS[moduloSelecionado as Module]}</b>, os itens abaixo são <b>obrigatórios</b>.
+                        Você pode adicionar documentos extras no final.
+                      </div>
+
+                      {/* Regras extras */}
+                      {moduloSelecionado === "hemodialise" && (
+                        <div className="mt-3 flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={compResidNaoNomeSolicitante}
+                            onChange={(e) => setCompResidNaoNomeSolicitante(e.target.checked)}
+                          />
+                          <span>
+                            Comprovante de residência <b>não</b> está no nome do solicitante
+                            <span className="ml-1 text-muted-foreground">(vai exigir “Carta de próprio punho”)</span>
+                          </span>
+                        </div>
+                      )}
+
+                      {moduloSelecionado === "tfd" && (
+                        <div className="mt-3 text-sm">
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={tfdDeclaracaoNaoManuscrita}
+                              onChange={(e) => setTfdDeclaracaoNaoManuscrita(e.target.checked)}
+                            />
+                            <span>
+                              Declaro que o <b>laudo de TFD não é manuscrito</b>.
+                            </span>
+                          </div>
+
+                          <div className="mt-2 text-sm text-muted-foreground">
+                            Baixar modelo:{" "}
+                            <a className="underline" href="/modelos/laudo-tfd.pdf" target="_blank" rel="noreferrer">
+                              /modelos/laudo-tfd.pdf
+                            </a>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Lista de obrigatórios + status */}
+                      <ul className="mt-3 space-y-2">
+                        {requiredDocs.map((doc) => {
+                          const ok = arquivos.some((a) => norm(a.descricao) === norm(doc))
+                          return (
+                            <li key={doc} className="flex items-center justify-between gap-3 rounded border p-2">
+                              <div className="text-sm">
+                                <span className={ok ? "font-medium" : "font-semibold"}>{doc}</span>
+                                <span className={`ml-2 text-xs ${ok ? "text-emerald-600" : "text-amber-600"}`}>
+                                  {ok ? "(ok)" : "(pendente)"}
+                                </span>
+                              </div>
+
+                              {!ok ? (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  className="bg-transparent"
+                                  onClick={() => {
+                                    // pré-preenche o “Adicionar Documento”
+                                    setNovoArqCategoria("pessoal") // ajuste se quiser outro padrão
+                                    setNovoArqDescricao(doc)
+                                  }}
+                                >
+                                  Anexar
+                                </Button>
+                              ) : (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => {
+                                    // opcional: rolar pra lista anexada
+                                  }}
+                                >
+                                  Ver
+                                </Button>
+                              )}
+                            </li>
+                          )
+                        })}
+                      </ul>
+
+                      {requiredMissing.length > 0 && (
+                        <div className="mt-3 text-sm text-destructive">
+                          <b>Atenção:</b> faltam <b>{requiredMissing.length}</b> documento(s) obrigatório(s) para enviar.
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+
+            <div className="rounded-lg border bg-muted p-4">
+              <p className="text-sm text-muted-foreground">Numero do Protocolo</p>
+              <p className="text-2xl font-bold font-mono text-primary">{protocoloGerado}</p>
+            </div>
+            <Button
+              variant="outline"
+              onClick={() => {
+                navigator.clipboard.writeText(protocoloGerado)
+                toast.success("Protocolo copiado!")
+              }}
+              className="bg-transparent"
+            >
+              <Copy className="mr-2 h-4 w-4" />
+              Copiar Protocolo
+            </Button>
+            <p className="text-sm text-muted-foreground">
+              Guarde este numero para acompanhar o andamento da solicitacao
+              pela pagina de consulta publica.
+            </p>
+            <Separator />
+            <div className="flex flex-col gap-2">
+              <Link href="/consulta">
+                <Button className="w-full">Consultar Protocolo</Button>
+              </Link>
+              <Button variant="outline" onClick={() => { setStep(1); setProtocoloGerado(null); setArquivos([]) }} className="bg-transparent">
+                Nova Solicitacao
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen bg-background">
+      {/* Header */}
+      <header className="border-b bg-card">
+        <div className="mx-auto flex max-w-4xl items-center gap-4 px-4 py-4">
+          <FileText className="h-8 w-8 text-primary" />
+          <div>
+            <h1 className="text-xl font-bold text-foreground">SIS Regulacao - Formulario de Solicitacao</h1>
+            <p className="text-sm text-muted-foreground">Preencha os dados abaixo para registrar uma solicitacao de TFD, CNRAC ou Hemodialise</p>
+          </div>
+        </div>
+      </header>
+
+      {/* Steps indicator */}
+      <div className="mx-auto max-w-4xl px-4 py-6">
+        <div className="mb-8 flex items-center justify-center gap-2">
+          {[
+            { n: 1, label: "Paciente", icon: User },
+            { n: 2, label: "Demanda", icon: Stethoscope },
+            { n: 3, label: "Documentos", icon: Paperclip },
+          ].map(({ n, label, icon: Icon }) => (
+            <div key={n} className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => n < step && setStep(n)}
+                className={`flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition-colors ${
+                  n === step
+                    ? "bg-primary text-primary-foreground"
+                    : n < step
+                      ? "bg-primary/10 text-primary cursor-pointer"
+                      : "bg-muted text-muted-foreground"
+                }`}
+              >
+                <Icon className="h-4 w-4" />
+                {label}
+              </button>
+              {n < 3 && <div className={`h-px w-8 ${n < step ? "bg-primary" : "bg-border"}`} />}
+            </div>
+          ))}
+        </div>
+
+        <form onSubmit={handleSubmit(onSubmit)}>
+          {/* Step 1: Paciente */}
+          {step === 1 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-foreground">
+                  <User className="h-5 w-5" />
+                  Dados do Paciente
+                </CardTitle>
+                <CardDescription>Busque por CPF ou CNS para reaproveitar dados existentes</CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-4">
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <Label htmlFor="cpf">CPF *</Label>
+                    <Input
+                      id="cpf"
+                      placeholder="000.000.000-00"
+                      inputMode="numeric"
+                      maxLength={14}
+                      {...register("cpf")}
+                      onChange={(e) => {
+                        const masked = maskCPF(e.target.value)
+                        setValue("cpf", masked, { shouldDirty: true, shouldTouch: true, shouldValidate: true })
+                      }}
+                    />
+                    {errors.cpf && <p className="text-sm text-destructive mt-1">{errors.cpf.message}</p>}
+                  </div>
+                  <div className="flex items-end">
+                    <Button type="button" variant="outline" onClick={handleBuscarPaciente} className="bg-transparent">
+                      Buscar
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div>
+                    <Label htmlFor="cartaoSus">Cartao SUS (CNS) *</Label>
+                    <Input id="cartaoSus" placeholder="15 digitos" maxLength={15} {...register("cartaoSus")} />
+                    {errors.cartaoSus && <p className="text-sm text-destructive mt-1">{errors.cartaoSus.message}</p>}
+                  </div>
+                  <div>
+                    <Label htmlFor="nome">Nome Completo *</Label>
+                    <Input id="nome" {...register("nome")} />
+                    {errors.nome && <p className="text-sm text-destructive mt-1">{errors.nome.message}</p>}
+                  </div>
+                  <div>
+                    <Label htmlFor="dataNascimento">Data de Nascimento *</Label>
+                    <Input id="dataNascimento" type="date" {...register("dataNascimento")} />
+                    {errors.dataNascimento && <p className="text-sm text-destructive mt-1">{errors.dataNascimento.message}</p>}
+                  </div>
+                  <div>
+                    <Label htmlFor="emailPaciente">E-mail</Label>
+                    <Input id="emailPaciente" type="email" {...register("emailPaciente")} />
+                    {errors.emailPaciente && <p className="text-sm text-destructive mt-1">{errors.emailPaciente.message}</p>}
+                  </div>
+                  <div>
+                    <Label htmlFor="municipio">Municipio *</Label>
+                    <Input id="municipio" {...register("municipio")} />
+                    {errors.municipio && <p className="text-sm text-destructive mt-1">{errors.municipio.message}</p>}
+                  </div>
+                  <div>
+                    <Label htmlFor="endereco">Endereco Completo *</Label>
+                    <Input id="endereco" {...register("endereco")} />
+                    {errors.endereco && <p className="text-sm text-destructive mt-1">{errors.endereco.message}</p>}
+                  </div>
+                </div>
+
+                {/* Telefones do paciente */}
+                <div>
+                  <Label>Telefone(s) do Paciente *</Label>
+                  <div className="flex flex-col gap-2 mt-1">
+                    {telPacFields.map((field, i) => (
+                      <div key={field.id} className="flex gap-2">
+                        <Input
+                          placeholder="(00) 00000-0000"
+                          inputMode="numeric"
+                          maxLength={15}
+                          {...register(`telefones.${i}.value`)}
+                          onChange={(e) => {
+                            const masked = maskPhoneBR(e.target.value)
+                            setValue(`telefones.${i}.value`, masked, { shouldDirty: true, shouldTouch: true, shouldValidate: true })
+                          }}
+                        />
+
+                        {telPacFields.length > 1 && (
+                          <Button type="button" variant="ghost" size="icon" onClick={() => removeTelPac(i)}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                    ))}
+                    <Button type="button" variant="outline" size="sm" onClick={() => appendTelPac({ value: "" })} className="w-fit bg-transparent">
+                      <Plus className="mr-1 h-3 w-3" /> Adicionar telefone
+                    </Button>
+                  </div>
+                  {errors.telefones && <p className="text-sm text-destructive mt-1">Informe ao menos um telefone valido</p>}
+                </div>
+
+                <div className="flex justify-end">
+                  <Button type="button" onClick={nextStep}>Proximo: Dados da Demanda</Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Step 2: Demanda */}
+          {step === 2 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-foreground">
+                  <Stethoscope className="h-5 w-5" />
+                  Dados da Demanda
+                </CardTitle>
+                <CardDescription>Informacoes clinicas e da instituicao solicitante</CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-6">
+                {/* Instituicao */}
+                <div>
+                  <h3 className="font-semibold text-foreground mb-3 flex items-center gap-2">
+                    <Building2 className="h-4 w-4" /> Instituicao Solicitante
+                  </h3>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div>
+                      <Label>Nome da Unidade *</Label>
+                      <Input {...register("localSolicitante")} />
+                      {errors.localSolicitante && <p className="text-sm text-destructive mt-1">{errors.localSolicitante.message}</p>}
+                    </div>
+                    <div>
+                      <Label>E-mail da Instituicao *</Label>
+                      <Input type="email" {...register("emailSolicitante")} />
+                      {errors.emailSolicitante && <p className="text-sm text-destructive mt-1">{errors.emailSolicitante.message}</p>}
+                    </div>
+                  </div>
+                  <div className="mt-2">
+                    <Label>Telefone(s) da Instituicao *</Label>
+                    <div className="flex flex-col gap-2 mt-1">
+                      {telSolFields.map((field, i) => (
+                        <div key={field.id} className="flex gap-2">
+                          <Input placeholder="(00) 0000-0000" {...register(`telefoneSolicitante.${i}.value`)} />
+                          {telSolFields.length > 1 && (
+                            <Button type="button" variant="ghost" size="icon" onClick={() => removeTelSol(i)}>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
+                      ))}
+                      <Button type="button" variant="outline" size="sm" onClick={() => appendTelSol({ value: "" })} className="w-fit bg-transparent">
+                        <Plus className="mr-1 h-3 w-3" /> Adicionar telefone
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+
+                <Separator />
+
+                {/* Modulo e tipo */}
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div>
+                    <Label>Modulo *</Label>
+                    <Select value={watch("modulo")} onValueChange={(v) => setValue("modulo", v, { shouldDirty: true, shouldTouch: true, shouldValidate: true })}>
+                      <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                      <SelectContent>
+                        {MODULES.map((m) => (
+                          <SelectItem key={m} value={m}>{MODULE_LABELS[m]}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {errors.modulo && <p className="text-sm text-destructive mt-1">{errors.modulo.message}</p>}
+                  </div>
+                 
+                    {watch("modulo") === "hemodialise" && (
+                      <div>
+                        <Label>Tipo de Solicitacao *</Label>
+                        <Select
+                          value={watch("tipoSolicitacao")}
+                          onValueChange={(v) =>
+                            setValue("tipoSolicitacao", v, { shouldDirty: true, shouldTouch: true, shouldValidate: true })
+                          }
+                        >
+                          <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                          <SelectContent>
+                            {TIPO_SOLICITACAO.map((t) => (
+                              <SelectItem key={t} value={t}>{TIPO_SOLICITACAO_LABELS[t]}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {errors.tipoSolicitacao && <p className="text-sm text-destructive mt-1">{errors.tipoSolicitacao.message}</p>}
+                      </div>
+                    )}
+
+
+
+
+                </div>
+
+                {/* Clinico */}
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div>
+                    <Label>Codigo SIGTAP *</Label>
+                    <Input {...register("codigoSigtap")} />
+                    {errors.codigoSigtap && <p className="text-sm text-destructive mt-1">{errors.codigoSigtap.message}</p>}
+                  </div>
+                  <div>
+                    <Label>Descricao do Procedimento *</Label>
+                    <Input {...register("descricaoSigtap")} />
+                    {errors.descricaoSigtap && <p className="text-sm text-destructive mt-1">{errors.descricaoSigtap.message}</p>}
+                  </div>
+                  <div>
+                    <Label>CID-10 *</Label>
+                    <Input {...register("cid10")} />
+                    {errors.cid10 && <p className="text-sm text-destructive mt-1">{errors.cid10.message}</p>}
+                  </div>
+                  <div>
+                    <Label>Especialidade *</Label>
+                    <Input {...register("especialidade")} />
+                    {errors.especialidade && <p className="text-sm text-destructive mt-1">{errors.especialidade.message}</p>}
+                  </div>
+                  <div>
+                    <Label>Subespecialidade</Label>
+                    <Input {...register("subespecialidade")} />
+                  </div>
+                  <div>
+                    <Label>Local Solicitado</Label>
+                    <Input placeholder="Se houver preferencia" {...register("localSolicitado")} />
+                  </div>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-3">
+                  <div>
+                    <Label>Peso (kg)</Label>
+                    <Input {...register("peso")} />
+                  </div>
+                  <div>
+                    <Label>Altura (m)</Label>
+                    <Input {...register("altura")} />
+                  </div>
+                  <div>
+                    <Label>Tipo Sanguineo</Label>
+                    <Input placeholder="Ex: O+" {...register("tipoSanguineo")} />
+                  </div>
+                </div>
+
+                <div>
+                  <Label>Observacoes da Unidade</Label>
+                  <Textarea rows={3} {...register("observacoesUnidade")} />
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="acaoJudicial"
+                    checked={watch("acaoJudicial") || false}
+                    onCheckedChange={(v) => setValue("acaoJudicial", v === true)}
+                  />
+                  <Label htmlFor="acaoJudicial" className="cursor-pointer">Acao Judicial?</Label>
+                </div>
+
+                <div className="flex justify-between">
+                  <Button type="button" variant="outline" onClick={() => setStep(1)} className="bg-transparent">
+                    <ArrowLeft className="mr-1 h-4 w-4" /> Voltar
+                  </Button>
+                  <Button type="button" onClick={nextStep}>Proximo: Documentos</Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Step 3: Documentos */}
+          {step === 3 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-foreground">
+                  <Paperclip className="h-5 w-5" />
+                  Documentos
+                </CardTitle>
+                <CardDescription>Anexe os documentos necessarios (pessoais, laudos, checklist, outros)</CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-4">
+
+                {/* ✅ Aviso + Lista de documentos obrigatórios (com *) */}
+                {moduloSelecionado && (
+                  <div className="rounded-lg border p-4 bg-muted/30">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="font-semibold text-foreground">
+                          Documentos obrigatórios para {MODULE_LABELS[moduloSelecionado as Module]}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          Os itens com <b>*</b> são obrigatórios. Clique em <b>Anexar</b> para preencher automaticamente a descrição padronizada.
+                        </p>
+                      </div>
+                      {requiredMissing.length === 0 ? (
+                        <Badge variant="secondary" className="bg-emerald-100 text-emerald-800">
+                          Tudo OK
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary" className="bg-amber-100 text-amber-800">
+                          Faltam {requiredMissing.length}
+                        </Badge>
+                      )}
+                    </div>
+
+                    {/* Regras extras */}
+                    {moduloSelecionado === "hemodialise" && (
+                      <div className="mt-3 flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={compResidNaoNomeSolicitante}
+                          onChange={(e) => setCompResidNaoNomeSolicitante(e.target.checked)}
+                        />
+                        <span>
+                          Comprovante de residência <b>não</b> está no nome do solicitante
+                          <span className="ml-1 text-muted-foreground">(vai exigir “Carta de próprio punho”)</span>
+                        </span>
+                      </div>
+                    )}
+
+                    {moduloSelecionado === "tfd" && (
+                      <div className="mt-3 text-sm">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={tfdDeclaracaoNaoManuscrita}
+                            onChange={(e) => setTfdDeclaracaoNaoManuscrita(e.target.checked)}
+                          />
+                          <span>
+                            Declaro que o <b>laudo de TFD não é manuscrito</b>.
+                          </span>
+                        </div>
+                        <div className="mt-2 text-sm text-muted-foreground">
+                          Modelo para download:{" "}
+                          <a className="underline" href="/modelos/laudo-tfd.pdf" target="_blank" rel="noreferrer">
+                            Laudo TFD (PDF)
+                          </a>
+                        </div>
+                      </div>
+                    )}
+
+                    <ul className="mt-4 space-y-2">
+                      {requiredDocs.map((doc) => {
+                        const ok = arquivos.some((a) => norm(a.descricao) === norm(doc))
+                        return (
+                          <li key={doc} className="flex items-center justify-between gap-3 rounded border bg-background p-2">
+                            <div className="text-sm">
+                              <span className="font-semibold">{doc} *</span>
+                              <span className={`ml-2 text-xs ${ok ? "text-emerald-600" : "text-amber-600"}`}>
+                                {ok ? "(anexado)" : "(pendente)"}
+                              </span>
+                            </div>
+
+                            {!ok ? (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="bg-transparent"
+                                onClick={() => {
+                                  // padroniza categoria e descrição para bater na validação
+                                  setNovoArqCategoria("pessoal")
+                                  setNovoArqDescricao(doc)
+                                }}
+                              >
+                                Anexar
+                              </Button>
+                            ) : (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => {}}
+                              >
+                                OK
+                              </Button>
+                            )}
+                          </li>
+                        )
+                      })}
+                    </ul>
+
+                    {requiredMissing.length > 0 && (
+                      <div className="mt-3 text-sm text-destructive">
+                        <b>Não será possível enviar</b> enquanto os obrigatórios não forem anexados.
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Existing attachments */}
+                {arquivos.length > 0 && (
+                  <div className="flex flex-col gap-2">
+                    {arquivos.map((arq, i) => (
+                      <div key={i} className="flex items-center justify-between rounded-lg border p-3">
+                        <div className="flex items-center gap-3">
+                          <FileText className="h-4 w-4 text-muted-foreground" />
+                          <div>
+                            <p className="text-sm font-medium text-foreground">{arq.descricao}</p>
+                            <Badge variant="secondary" className="text-xs">{CATEGORIA_ANEXO_LABELS[arq.categoria]}</Badge>
+                          </div>
+                        </div>
+                        <Button type="button" variant="ghost" size="icon" onClick={() => setArquivos((p) => p.filter((_, j) => j !== i))}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Add new */}
+                <div className="rounded-lg border border-dashed p-4 flex flex-col gap-3">
+                  <p className="text-sm font-medium text-foreground">Adicionar Documento</p>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <div>
+                      <Label>Categoria</Label>
+                      <Select value={novoArqCategoria} onValueChange={(v) => setNovoArqCategoria(v as CategoriaAnexo)}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {CATEGORIA_ANEXO.map((c) => (
+                            <SelectItem key={c} value={c}>{CATEGORIA_ANEXO_LABELS[c]}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label>Descricao do documento</Label>
+                      <Input value={novoArqDescricao} onChange={(e) => setNovoArqDescricao(e.target.value)} placeholder="Ex: Laudo medico cardiologico" />
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-muted-foreground text-xs">Arquivo (simulado para demonstracao)</Label>
+                    <Input type="file" className="mt-1" />
+                  </div>
+                  <Button type="button" variant="outline" size="sm" onClick={addArquivo} className="w-fit bg-transparent">
+                    <Plus className="mr-1 h-3 w-3" /> Adicionar documento
+                  </Button>
+                </div>
+
+                <Separator />
+
+                <div className="flex justify-between">
+                  <Button type="button" variant="outline" onClick={() => setStep(2)} className="bg-transparent">
+                    <ArrowLeft className="mr-1 h-4 w-4" /> Voltar
+                  </Button>
+                  <Button type="submit">Enviar Solicitacao</Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </form>
+
+        <div className="mt-8 text-center">
+          <Link href="/consulta" className="text-sm text-primary hover:underline">
+            Ja tem um protocolo? Consulte aqui
+          </Link>
+          <span className="mx-3 text-muted-foreground">|</span>
+          <Link href="/login" className="text-sm text-primary hover:underline">
+            Acesso restrito (login)
+          </Link>
+        </div>
+      </div>
+    </div>
+  )
+}

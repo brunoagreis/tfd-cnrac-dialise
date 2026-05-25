@@ -1,0 +1,1281 @@
+"use client"
+
+import { useEffect, useMemo, useRef, useState } from "react"
+import { toast } from "sonner"
+import {
+  CalendarDays,
+  CheckCircle2,
+  Clock3,
+  Edit3,
+  FileText,
+  Mail,
+  Paperclip,
+  Printer,
+  Scale,
+  Send,
+  ShieldAlert,
+  Upload,
+  XCircle,
+} from "lucide-react"
+
+import { useAuth } from "@/lib/auth-context"
+import { useJudicial } from "@/lib/judicial-context"
+import {
+  JUDICIAL_CASE_STATUS_LABELS,
+  MOVEMENT_TYPE_LABELS,
+  QUEUE_REASON_LABELS,
+  SYSTEM_LABELS,
+  type JudicialAttachment,
+  type JudicialFicha,
+  type MovementType,
+} from "@/lib/judicial-types"
+
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Textarea } from "@/components/ui/textarea"
+
+type UploadedFileMeta = {
+  name: string
+  storedName: string
+  relativePath: string
+  url: string
+  size: number
+  mimeType: string
+}
+
+type HistoryItem = {
+  id: string
+  createdAt: string
+  category:
+    | "movimentacao"
+    | "ficha"
+    | "manifestacao"
+    | "procedimento"
+    | "cid"
+    | "auditoria"
+    | "core"
+  title: string
+  subtitle?: string
+  description?: string
+  badges?: string[]
+  attachments?: JudicialAttachment[]
+  html?: boolean
+}
+
+const MOVEMENT_OPTIONS: MovementType[] = [
+  "monitoramento",
+  "envio_agendamento_demanda",
+  "agendamento",
+  "solicitacao_inclusao",
+  "reiteracao",
+  "descumprimento",
+  "cumprimento",
+  "falta_paciente",
+  "obito",
+  "bloqueio",
+  "sequestro",
+  "encerramento",
+]
+
+const CLOSE_REASONS = [
+  "Cumprimento da decisão",
+  "Perda do objeto",
+  "Óbito do paciente",
+  "Inércia do município",
+  "Determinação judicial revogada",
+  "Duplicidade de cadastro",
+  "Outros",
+]
+
+function mergeCommaNames(currentValue: string, newNames: string[]) {
+  const current = currentValue
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean)
+
+  const merged = [...current]
+
+  for (const name of newNames) {
+    if (!merged.includes(name)) merged.push(name)
+  }
+
+  return merged.join(", ")
+}
+
+function splitCommaNames(value: string) {
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean)
+}
+
+function htmlHasContent(value: string) {
+  return value.replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").trim().length > 0
+}
+
+function formatFileSize(size: number) {
+  if (!Number.isFinite(size)) return "-"
+  if (size < 1024) return `${size} B`
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
+  return `${(size / (1024 * 1024)).toFixed(2)} MB`
+}
+
+function fileListToArray(files: FileList | null) {
+  return files ? Array.from(files) : []
+}
+
+function uniqueAttachments(items: JudicialAttachment[]) {
+  const map = new Map<string, JudicialAttachment>()
+  for (const item of items) {
+    const key = `${item.id}:${item.name}:${item.createdAt}`
+    if (!map.has(key)) map.set(key, item)
+  }
+  return [...map.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+}
+
+function InfoField({ label, value, strong = false }: { label: string; value: string; strong?: boolean }) {
+  return (
+    <div className="rounded-xl border border-border bg-muted/20 p-3">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className={`mt-1 text-sm ${strong ? "font-semibold text-foreground" : "text-muted-foreground"}`}>{value}</p>
+    </div>
+  )
+}
+
+export function JudicialCaseDetail({ caseId }: { caseId: string }) {
+  const { user } = useAuth()
+  const judicial = useJudicial()
+  const caseItem = judicial.getCaseById(caseId)
+
+  const editorRef = useRef<HTMLDivElement | null>(null)
+
+  const [movementType, setMovementType] = useState<MovementType>("monitoramento")
+  const [description, setDescription] = useState("")
+  const [stateAmount, setStateAmount] = useState("")
+  const [municipalityAmount, setMunicipalityAmount] = useState("")
+  const [appointmentDate, setAppointmentDate] = useState("")
+  const [responseRequestedAt, setResponseRequestedAt] = useState("")
+  const [closeReason, setCloseReason] = useState("")
+  const [attachmentNames, setAttachmentNames] = useState("")
+
+  const [selectedMovementFiles, setSelectedMovementFiles] = useState<FileList | null>(null)
+  const [uploadedMovementFiles, setUploadedMovementFiles] = useState<UploadedFileMeta[]>([])
+  const [uploadingMovement, setUploadingMovement] = useState(false)
+
+  const [procedureSearch, setProcedureSearch] = useState("")
+  const [cidSearch, setCidSearch] = useState("")
+  const [selectedProcedure, setSelectedProcedure] = useState("")
+  const [selectedCid, setSelectedCid] = useState("")
+
+  const [editingFichaId, setEditingFichaId] = useState<string | null>(null)
+  const [fichaSystem, setFichaSystem] = useState<"CORE" | "SISREG" | "OUTRO">("CORE")
+  const [fichaNumber, setFichaNumber] = useState("")
+  const [fichaAttachment, setFichaAttachment] = useState("")
+  const [fichaNotes, setFichaNotes] = useState("")
+  const [requestedInclusion, setRequestedInclusion] = useState(false)
+  const [hasJudicialMark, setHasJudicialMark] = useState(true)
+  const [selectedFichaFiles, setSelectedFichaFiles] = useState<FileList | null>(null)
+  const [uploadedFichaFiles, setUploadedFichaFiles] = useState<UploadedFileMeta[]>([])
+  const [uploadingFicha, setUploadingFicha] = useState(false)
+
+  const [manifestSubject, setManifestSubject] = useState("")
+  const [manifestRecipients, setManifestRecipients] = useState("")
+  const [manifestHtml, setManifestHtml] = useState("<p>Prezados,</p><p></p><p>Atenciosamente.</p>")
+  const [manifestAttachments, setManifestAttachments] = useState("")
+  const [selectedManifestFiles, setSelectedManifestFiles] = useState<FileList | null>(null)
+  const [uploadedManifestFiles, setUploadedManifestFiles] = useState<UploadedFileMeta[]>([])
+  const [uploadingManifest, setUploadingManifest] = useState(false)
+
+  const [attachmentsPage, setAttachmentsPage] = useState(1)
+  const attachmentsPageSize = 6
+
+  if (!caseItem) {
+    return (
+      <div className="rounded-xl border border-dashed border-border p-12 text-center text-muted-foreground">
+        Processo judicial não encontrado.
+      </div>
+    )
+  }
+
+  const contacts = judicial.municipalityContacts.find(
+    (item) => item.municipalityName === caseItem.municipalityName,
+  )
+
+  const activeProcedure = [...caseItem.procedures].reverse().find((item) => item.active !== false) ?? caseItem.procedures[caseItem.procedures.length - 1]
+  const activeCid = [...caseItem.cids].reverse().find((item) => item.active !== false) ?? caseItem.cids[caseItem.cids.length - 1]
+  const activeFicha = [...caseItem.fichas].reverse().find((item) => item.active !== false) ?? caseItem.fichas[caseItem.fichas.length - 1]
+  const isJudicialMarked = activeFicha?.hasJudicialMark ?? true
+
+  const procedureOptions = useMemo(
+    () => judicial.procedureCatalog.filter((item) => !procedureSearch || `${item.sigtapCode} ${item.description}`.toLowerCase().includes(procedureSearch.toLowerCase())),
+    [judicial.procedureCatalog, procedureSearch],
+  )
+
+  const cidOptions = useMemo(
+    () => judicial.cidCatalog.filter((item) => !cidSearch || `${item.code} ${item.description}`.toLowerCase().includes(cidSearch.toLowerCase())),
+    [judicial.cidCatalog, cidSearch],
+  )
+
+  const allAttachments = useMemo(() => {
+    const items: JudicialAttachment[] = [
+      ...caseItem.attachments,
+      ...caseItem.movements.flatMap((item) => item.attachments),
+      ...caseItem.municipalityManifestations.flatMap((item) => item.attachments),
+    ]
+    return uniqueAttachments(items)
+  }, [caseItem.attachments, caseItem.movements, caseItem.municipalityManifestations])
+
+  const paginatedAttachments = useMemo(() => {
+    const start = (attachmentsPage - 1) * attachmentsPageSize
+    return allAttachments.slice(start, start + attachmentsPageSize)
+  }, [allAttachments, attachmentsPage])
+
+  const totalAttachmentPages = Math.max(1, Math.ceil(allAttachments.length / attachmentsPageSize))
+
+  const pendingSelectedFiles = [
+    ...fileListToArray(selectedMovementFiles).map((file) => ({ scope: "Movimentação", file })),
+    ...fileListToArray(selectedFichaFiles).map((file) => ({ scope: "Ficha", file })),
+    ...fileListToArray(selectedManifestFiles).map((file) => ({ scope: "Notificação", file })),
+  ]
+
+  const historyItems = useMemo<HistoryItem[]>(() => {
+    const items: HistoryItem[] = []
+
+    for (const item of caseItem.movements) {
+      items.push({
+        id: `mov-${item.id}`,
+        createdAt: item.createdAt,
+        category: "movimentacao",
+        title: MOVEMENT_TYPE_LABELS[item.type],
+        subtitle: item.createdByName,
+        description: item.description,
+        badges: [
+          item.appointmentDate ? `Agendamento: ${new Date(item.appointmentDate).toLocaleString("pt-BR")}` : "",
+          item.responseRequestedAt ? `Solicitado em ${new Date(item.responseRequestedAt).toLocaleDateString("pt-BR")}` : "",
+          item.stateAmount !== undefined ? `Estado R$ ${item.stateAmount.toFixed(2)}` : "",
+          item.municipalityAmount !== undefined ? `Município R$ ${item.municipalityAmount.toFixed(2)}` : "",
+        ].filter(Boolean),
+        attachments: item.attachments,
+      })
+    }
+
+    for (const item of caseItem.fichas) {
+      items.push({
+        id: `ficha-${item.id}`,
+        createdAt: item.updatedAt ?? item.includedAt,
+        category: "ficha",
+        title: `${SYSTEM_LABELS[item.system]} ${item.number || "sem número"}`,
+        subtitle: item.updatedByName ?? "Ficha registrada",
+        description: item.notes,
+        badges: [
+          item.active === false ? "Ficha inativa" : "Ficha ativa",
+          item.requestedInclusion ? "Inclusão solicitada" : "Sem inclusão solicitada",
+          item.hasJudicialMark ? "Marca judicial: sim" : "Marca judicial: não",
+        ],
+        attachments: item.attachmentName
+          ? [{
+              id: `ficha-att-${item.id}`,
+              name: item.attachmentName,
+              category: "ficha",
+              createdAt: item.updatedAt ?? item.includedAt,
+              createdById: "sistema",
+              createdByName: item.updatedByName ?? "Sistema",
+              source: "processo",
+            }]
+          : [],
+      })
+    }
+
+    for (const item of caseItem.procedures) {
+      items.push({
+        id: `proc-${item.id}`,
+        createdAt: item.createdAt,
+        category: "procedimento",
+        title: `Procedimento ${item.sigtapCode}`,
+        subtitle: item.createdByName,
+        description: item.description,
+        badges: [item.active === false ? "Inativo" : "Ativo"],
+      })
+    }
+
+    for (const item of caseItem.cids) {
+      items.push({
+        id: `cid-${item.id}`,
+        createdAt: item.createdAt,
+        category: "cid",
+        title: `CID ${item.code}`,
+        subtitle: item.createdByName,
+        description: item.description,
+        badges: [item.active === false ? "Inativo" : "Ativo"],
+      })
+    }
+
+    for (const item of caseItem.municipalityManifestations) {
+      items.push({
+        id: `man-${item.id}`,
+        createdAt: item.createdAt,
+        category: "manifestacao",
+        title: "Manifestação / notificação do município",
+        subtitle: item.createdByName,
+        description: item.description,
+        attachments: item.attachments,
+        html: /<[^>]+>/.test(item.description),
+      })
+    }
+
+    for (const item of caseItem.coreHistory) {
+      items.push({
+        id: `core-${item.id}`,
+        createdAt: item.importedAt,
+        category: "core",
+        title: `${item.fichaNumber} • ${item.statusText}`,
+        subtitle: item.table.replaceAll("_", " "),
+        description: `${item.procedureCode || "Sem procedimento"}${item.procedureDescription ? ` - ${item.procedureDescription}` : ""}`,
+        badges: [item.appointmentDate ? `Agendamento ${new Date(item.appointmentDate).toLocaleString("pt-BR")}` : "Sem agendamento"],
+      })
+    }
+
+    const auditItems = judicial.auditTrail
+      .filter((item) => item.caseId === caseItem.id)
+      .filter((item) => ["toggle_procedure", "toggle_cid", "toggle_ficha", "atualizacao_ficha"].includes(item.action))
+      .map<HistoryItem>((item) => ({
+        id: `audit-${item.id}`,
+        createdAt: item.createdAt,
+        category: "auditoria",
+        title: item.action.replaceAll("_", " "),
+        subtitle: item.userName,
+        description: item.details,
+      }))
+
+    items.push(...auditItems)
+
+    return items.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+  }, [caseItem, judicial.auditTrail])
+
+  useEffect(() => {
+    if (contacts && !manifestRecipients) {
+      setManifestRecipients(contacts.emails.join(", "))
+    }
+  }, [contacts, manifestRecipients])
+
+  useEffect(() => {
+    if (editorRef.current && editorRef.current.innerHTML !== manifestHtml) {
+      editorRef.current.innerHTML = manifestHtml
+    }
+  }, [manifestHtml])
+
+  async function uploadFiles(params: {
+    files: FileList | null
+    category: "movimentacao" | "ficha" | "manifestacao"
+    setUploading: (value: boolean) => void
+    onSuccess: (files: UploadedFileMeta[]) => void
+  }) {
+    const { files, category, setUploading, onSuccess } = params
+
+    if (!files || files.length === 0) {
+      toast.error("Selecione ao menos um arquivo.")
+      return
+    }
+
+    try {
+      setUploading(true)
+      const form = new FormData()
+      form.append("cpf", caseItem.cpf)
+      form.append("protocol", caseItem.originProtocol)
+      form.append("module", "judicial")
+      form.append("category", category)
+      Array.from(files).forEach((file) => form.append("files", file))
+
+      const response = await fetch("/api/uploads", { method: "POST", body: form })
+      const data = await response.json()
+
+      if (!response.ok || !data?.ok) {
+        throw new Error(data?.error || "Falha no upload.")
+      }
+
+      onSuccess(data.files as UploadedFileMeta[])
+      toast.success("Arquivo(s) enviado(s).")
+    } catch (error) {
+      console.error(error)
+      toast.error("Erro ao enviar arquivo(s).")
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  async function handleUploadMovement() {
+    await uploadFiles({
+      files: selectedMovementFiles,
+      category: "movimentacao",
+      setUploading: setUploadingMovement,
+      onSuccess: (files) => {
+        setUploadedMovementFiles((prev) => [...prev, ...files])
+        setAttachmentNames((prev) => mergeCommaNames(prev, files.map((file) => file.name)))
+        setSelectedMovementFiles(null)
+      },
+    })
+  }
+
+  async function handleUploadFicha() {
+    await uploadFiles({
+      files: selectedFichaFiles,
+      category: "ficha",
+      setUploading: setUploadingFicha,
+      onSuccess: (files) => {
+        setUploadedFichaFiles((prev) => [...prev, ...files])
+        setFichaAttachment((prev) => mergeCommaNames(prev, files.map((file) => file.name)))
+        setSelectedFichaFiles(null)
+      },
+    })
+  }
+
+  async function handleUploadManifest() {
+    await uploadFiles({
+      files: selectedManifestFiles,
+      category: "manifestacao",
+      setUploading: setUploadingManifest,
+      onSuccess: (files) => {
+        setUploadedManifestFiles((prev) => [...prev, ...files])
+        setManifestAttachments((prev) => mergeCommaNames(prev, files.map((file) => file.name)))
+        setSelectedManifestFiles(null)
+      },
+    })
+  }
+
+  function resetMovementForm() {
+    setMovementType("monitoramento")
+    setDescription("")
+    setStateAmount("")
+    setMunicipalityAmount("")
+    setAppointmentDate("")
+    setResponseRequestedAt("")
+    setCloseReason("")
+    setAttachmentNames("")
+    setSelectedMovementFiles(null)
+    setUploadedMovementFiles([])
+  }
+
+  function resetFichaForm() {
+    setEditingFichaId(null)
+    setFichaSystem("CORE")
+    setFichaNumber("")
+    setFichaAttachment("")
+    setFichaNotes("")
+    setRequestedInclusion(false)
+    setHasJudicialMark(true)
+    setSelectedFichaFiles(null)
+    setUploadedFichaFiles([])
+  }
+
+  function handleSaveMovement() {
+    if (!user) return
+    if (!description.trim()) {
+      toast.error("Descreva a movimentação.")
+      return
+    }
+
+    if (movementType === "agendamento" && !appointmentDate) {
+      toast.error("Informe a data do agendamento.")
+      return
+    }
+
+    if (["sequestro", "bloqueio"].includes(movementType) && (!stateAmount || !municipalityAmount)) {
+      toast.error("Informe os valores do estado e do município.")
+      return
+    }
+
+    if (movementType === "encerramento" && !closeReason) {
+      toast.error("Selecione o motivo do encerramento.")
+      return
+    }
+
+    const attachmentNamesList = splitCommaNames(attachmentNames)
+
+    if (movementType === "envio_agendamento_demanda") {
+      judicial.sendToScheduling(caseItem.id, description.trim(), user)
+      toast.success("Movimentação salva e encaminhada ao Agendamento da Demanda.")
+      resetMovementForm()
+      return
+    }
+
+    if (movementType === "encerramento") {
+      judicial.closeCase(caseItem.id, `${closeReason}: ${description.trim()}`, user)
+      toast.success("Processo encerrado.")
+      resetMovementForm()
+      return
+    }
+
+    judicial.registerMovement(caseItem.id, {
+      type: movementType,
+      description: description.trim(),
+      user,
+      appointmentDate: appointmentDate || undefined,
+      responseRequestedAt: responseRequestedAt || undefined,
+      stateAmount: stateAmount ? Number(stateAmount.replace(",", ".")) : undefined,
+      municipalityAmount: municipalityAmount ? Number(municipalityAmount.replace(",", ".")) : undefined,
+      attachments: attachmentNamesList,
+    })
+
+    toast.success("Movimentação registrada.")
+    resetMovementForm()
+  }
+
+  function handleAddProcedure() {
+    if (!user) return
+    const item = procedureOptions.find((option) => option.sigtapCode === selectedProcedure)
+    if (!item) {
+      toast.error("Selecione um procedimento.")
+      return
+    }
+    judicial.addProcedure(caseItem.id, {
+      sigtapCode: item.sigtapCode,
+      description: item.description,
+      user,
+    })
+    setSelectedProcedure("")
+    setProcedureSearch("")
+    toast.success("Procedimento adicionado.")
+  }
+
+  function handleAddCid() {
+    if (!user) return
+    const item = cidOptions.find((option) => option.code === selectedCid)
+    if (!item) {
+      toast.error("Selecione um CID.")
+      return
+    }
+    judicial.addCid(caseItem.id, {
+      code: item.code,
+      description: item.description,
+      user,
+    })
+    setSelectedCid("")
+    setCidSearch("")
+    toast.success("CID adicionado.")
+  }
+
+  function handleEditFicha(item: JudicialFicha) {
+    setEditingFichaId(item.id)
+    setFichaSystem(item.system)
+    setFichaNumber(item.number || "")
+    setFichaAttachment(item.attachmentName || "")
+    setFichaNotes(item.notes)
+    setRequestedInclusion(item.requestedInclusion)
+    setHasJudicialMark(item.hasJudicialMark)
+    setSelectedFichaFiles(null)
+    setUploadedFichaFiles([])
+  }
+
+  function handleSaveFicha() {
+    if (!user) return
+    if (!fichaNotes.trim()) {
+      toast.error("Descreva a ficha.")
+      return
+    }
+
+    const payload = {
+      system: fichaSystem,
+      number: fichaNumber || undefined,
+      requestedInclusion,
+      hasJudicialMark,
+      attachmentName: fichaAttachment || undefined,
+      notes: fichaNotes.trim(),
+      user,
+    }
+
+    if (editingFichaId) {
+      judicial.updateFicha(caseItem.id, editingFichaId, payload)
+      toast.success("Ficha atualizada.")
+    } else {
+      judicial.addFicha(caseItem.id, payload)
+      toast.success("Ficha registrada.")
+    }
+
+    resetFichaForm()
+  }
+
+  function handleToggleFicha(item: JudicialFicha) {
+    if (!user) return
+    let reason = ""
+    if (item.active !== false) {
+      reason = window.prompt("Informe o motivo da inativação da ficha:", "Cadastro incorreto") || "Cadastro incorreto"
+    }
+    judicial.toggleFicha(caseItem.id, item.id, user, reason || undefined)
+    toast.success(item.active === false ? "Ficha reativada." : "Ficha inativada.")
+  }
+
+  function runEditorCommand(command: string, value?: string) {
+    editorRef.current?.focus()
+    document.execCommand(command, false, value)
+    setManifestHtml(editorRef.current?.innerHTML || "")
+  }
+
+  function handleSendMunicipalityNotification() {
+    if (!user) return
+    const html = editorRef.current?.innerHTML || manifestHtml
+    if (!manifestSubject.trim()) {
+      toast.error("Informe o assunto da notificação.")
+      return
+    }
+    if (!htmlHasContent(html)) {
+      toast.error("Escreva o conteúdo da notificação.")
+      return
+    }
+
+    const composedHtml = `
+      <p><strong>Destinatários:</strong> ${manifestRecipients || "Não informado"}</p>
+      <p><strong>Assunto:</strong> ${manifestSubject}</p>
+      <hr />
+      ${html}
+    `
+
+    judicial.registerMovement(caseItem.id, {
+      type: "manifestacao_municipio",
+      description: `Notificação enviada ao município. Assunto: ${manifestSubject}`,
+      user,
+      attachments: splitCommaNames(manifestAttachments),
+    })
+
+    judicial.addMunicipalityManifestation(caseItem.id, {
+      description: composedHtml,
+      attachmentNames: splitCommaNames(manifestAttachments),
+      user,
+    })
+
+    toast.success("Notificação registrada para o município.")
+    setManifestSubject("")
+    setManifestHtml("<p>Prezados,</p><p></p><p>Atenciosamente.</p>")
+    setManifestAttachments("")
+    setSelectedManifestFiles(null)
+    setUploadedManifestFiles([])
+    if (editorRef.current) editorRef.current.innerHTML = "<p>Prezados,</p><p></p><p>Atenciosamente.</p>"
+  }
+
+  return (
+    <div className="flex min-h-[760px] flex-col gap-5 print:min-h-0">
+      <Card className="border-border shadow-sm">
+        <CardContent className="p-5">
+          <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant={caseItem.active ? "secondary" : "outline"}>{caseItem.active ? "Ativo" : "Inativo"}</Badge>
+                <Badge variant="outline">{caseItem.originModule.toUpperCase()}</Badge>
+                <Badge variant="outline">{JUDICIAL_CASE_STATUS_LABELS[caseItem.status]}</Badge>
+                <Badge variant={caseItem.monitoringMode === "automatic_core" ? "default" : "secondary"}>
+                  {caseItem.monitoringMode === "automatic_core" ? "CORE automático" : "Fluxo humano"}
+                </Badge>
+              </div>
+
+              <div>
+                <h1 className="text-3xl font-bold tracking-tight">{caseItem.patientName}</h1>
+                <p className="mt-1 text-sm text-muted-foreground">Protocolo judicial vinculado ao fluxo {caseItem.originProtocol}</p>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                <InfoField label="CPF" value={caseItem.cpf} strong />
+                <InfoField label="CNS" value={caseItem.patientId || "Não informado"} />
+                <InfoField label="Processo" value={caseItem.processNumber || "Não informado"} strong />
+                <InfoField label="PGE.net" value={caseItem.registration?.pgeNetNumber || "Não informado"} />
+                <InfoField label="Especialidade" value={activeProcedure?.specialty || "Não informada"} />
+                <InfoField label="Subespecialidade" value={activeProcedure?.subSpecialty || "Não informada"} />
+                <InfoField label="Procedimento ativo" value={activeProcedure ? `${activeProcedure.sigtapCode} - ${activeProcedure.description}` : "Não informado"} />
+                <InfoField label="CID ativo" value={activeCid ? `${activeCid.code} - ${activeCid.description}` : "Não informado"} />
+                <InfoField label="Ficha ativa" value={activeFicha?.number || "Não informada"} />
+                <InfoField label="Último monitoramento" value={caseItem.lastMonitoredAt ? new Date(caseItem.lastMonitoredAt).toLocaleString("pt-BR") : "Não informado"} />
+                <InfoField label="Município" value={caseItem.municipalityName} />
+                <div className={`rounded-xl border p-3 ${isJudicialMarked ? "border-emerald-200 bg-emerald-50" : "border-red-200 bg-red-50"}`}>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Marca judicial</p>
+                  <p className={`mt-1 text-sm font-semibold ${isJudicialMarked ? "text-emerald-700" : "text-red-700"}`}>{isJudicialMarked ? "Sim" : "Não"}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex shrink-0 flex-wrap gap-2 xl:w-[280px] xl:justify-end">
+              <Button variant="outline" className="bg-transparent" onClick={() => window.history.back()}>
+                Fechar
+              </Button>
+              <Button variant="outline" className="bg-transparent" onClick={() => window.print()}>
+                <Printer className="mr-2 h-4 w-4" />
+                Imprimir
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Tabs defaultValue="monitoramento" className="space-y-4">
+        <TabsList className="flex w-full flex-wrap justify-start gap-2 bg-transparent p-0">
+          <TabsTrigger value="monitoramento">Monitoramento</TabsTrigger>
+          <TabsTrigger value="cadastros">Procedimento/CID</TabsTrigger>
+          <TabsTrigger value="anexos">Anexos</TabsTrigger>
+          <TabsTrigger value="fichas">Fichas (CORE/SISREG)</TabsTrigger>
+          <TabsTrigger value="municipio">Notificação/Manifestação do município</TabsTrigger>
+          <TabsTrigger value="historico">Histórico</TabsTrigger>
+          <TabsTrigger value="auditoria">Auditoria e motivos da exibição</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="monitoramento" className="mt-0 min-h-[640px] space-y-4">
+          <Card className="border-border">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Nova movimentação</CardTitle>
+              <CardDescription>
+                O envio ao Agendamento da Demanda e o encerramento do processo são tratados aqui na própria movimentação.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-3 lg:grid-cols-2">
+                <div>
+                  <Label className="mb-1 block text-xs">Movimentação</Label>
+                  <select
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    value={movementType}
+                    onChange={(e) => setMovementType(e.target.value as MovementType)}
+                  >
+                    {MOVEMENT_OPTIONS.map((item) => (
+                      <option key={item} value={item}>
+                        {MOVEMENT_TYPE_LABELS[item]}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {movementType === "agendamento" && (
+                  <div>
+                    <Label className="mb-1 block text-xs">Data do agendamento</Label>
+                    <Input type="datetime-local" value={appointmentDate} onChange={(e) => setAppointmentDate(e.target.value)} />
+                  </div>
+                )}
+
+                {["solicitacao_inclusao", "reiteracao"].includes(movementType) && (
+                  <div>
+                    <Label className="mb-1 block text-xs">Data da solicitação</Label>
+                    <Input type="date" value={responseRequestedAt} onChange={(e) => setResponseRequestedAt(e.target.value)} />
+                  </div>
+                )}
+
+                {["sequestro", "bloqueio"].includes(movementType) && (
+                  <>
+                    <div>
+                      <Label className="mb-1 block text-xs">Valor do Estado</Label>
+                      <Input value={stateAmount} onChange={(e) => setStateAmount(e.target.value)} placeholder="0,00" />
+                    </div>
+                    <div>
+                      <Label className="mb-1 block text-xs">Valor do Município</Label>
+                      <Input value={municipalityAmount} onChange={(e) => setMunicipalityAmount(e.target.value)} placeholder="0,00" />
+                    </div>
+                  </>
+                )}
+
+                {movementType === "encerramento" && (
+                  <div>
+                    <Label className="mb-1 block text-xs">Motivo do encerramento</Label>
+                    <select
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      value={closeReason}
+                      onChange={(e) => setCloseReason(e.target.value)}
+                    >
+                      <option value="">Selecione</option>
+                      {CLOSE_REASONS.map((item) => (
+                        <option key={item} value={item}>{item}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                <div className="lg:col-span-2">
+                  <Label className="mb-1 block text-xs">Descrição obrigatória</Label>
+                  <Textarea rows={5} value={description} onChange={(e) => setDescription(e.target.value)} />
+                </div>
+              </div>
+
+              <div className="space-y-3 rounded-xl border border-dashed border-border p-4">
+                <div>
+                  <Label className="mb-1 block text-xs">Documentos da movimentação</Label>
+                  <Input type="file" multiple onChange={(e) => setSelectedMovementFiles(e.target.files)} />
+                </div>
+
+                {fileListToArray(selectedMovementFiles).length > 0 && (
+                  <div className="rounded-lg border border-border bg-muted/20 p-3">
+                    <p className="text-sm font-medium">Arquivos selecionados</p>
+                    <div className="mt-2 space-y-1 text-sm text-muted-foreground">
+                      {fileListToArray(selectedMovementFiles).map((file) => (
+                        <p key={`${file.name}-${file.size}`}>{file.name} • {formatFileSize(file.size)}</p>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" variant="outline" className="bg-transparent" disabled={uploadingMovement} onClick={handleUploadMovement}>
+                    <Upload className="mr-2 h-4 w-4" />
+                    {uploadingMovement ? "Enviando..." : "Enviar arquivos"}
+                  </Button>
+                </div>
+
+                <Input value={attachmentNames} onChange={(e) => setAttachmentNames(e.target.value)} placeholder="Arquivos enviados" />
+
+                {uploadedMovementFiles.length > 0 && (
+                  <div className="space-y-2 rounded-lg border border-border p-3">
+                    {uploadedMovementFiles.map((file) => (
+                      <a key={file.relativePath} href={file.url} target="_blank" rel="noreferrer" className="block text-sm text-primary underline">
+                        {file.name}
+                      </a>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <Button onClick={handleSaveMovement}>
+                  <Send className="mr-2 h-4 w-4" />
+                  {movementType === "envio_agendamento_demanda"
+                    ? "Salvar e enviar ao agendamento"
+                    : movementType === "encerramento"
+                      ? "Salvar e encerrar processo"
+                      : "Salvar movimentação"}
+                </Button>
+                <Button variant="outline" className="bg-transparent" onClick={resetMovementForm}>Limpar</Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-border">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Contatos do município</CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-3 md:grid-cols-3">
+              <InfoField label="Município" value={caseItem.municipalityName} strong />
+              <InfoField label="E-mails" value={contacts?.emails.join(", ") || "Não informado"} />
+              <InfoField label="Telefones" value={contacts?.phones.join(", ") || "Não informado"} />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="cadastros" className="mt-0 min-h-[640px] space-y-4">
+          <Card className="border-border">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Procedimentos</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <Input value={procedureSearch} onChange={(e) => setProcedureSearch(e.target.value)} placeholder="Pesquisar procedimento por código ou descrição" />
+              <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={selectedProcedure} onChange={(e) => setSelectedProcedure(e.target.value)}>
+                <option value="">Selecione um procedimento</option>
+                {procedureOptions.map((item) => (
+                  <option key={item.sigtapCode} value={item.sigtapCode}>{item.sigtapCode} - {item.description}</option>
+                ))}
+              </select>
+              <Button onClick={handleAddProcedure}>Adicionar procedimento</Button>
+              <div className="space-y-2">
+                {caseItem.procedures.map((item) => (
+                  <div key={item.id} className="flex flex-col gap-3 rounded-xl border border-border p-3 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <p className="text-sm font-medium">{item.sigtapCode} - {item.description}</p>
+                      <p className="text-xs text-muted-foreground">{item.active === false ? "Inativo" : "Ativo"} • {item.createdByName}</p>
+                    </div>
+                    <Button variant="outline" className="bg-transparent" onClick={() => user && judicial.toggleProcedure(caseItem.id, item.id, user)}>
+                      {item.active === false ? "Ativar" : "Inativar"}
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-border">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">CID</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <Input value={cidSearch} onChange={(e) => setCidSearch(e.target.value)} placeholder="Pesquisar CID por código ou descrição" />
+              <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={selectedCid} onChange={(e) => setSelectedCid(e.target.value)}>
+                <option value="">Selecione um CID</option>
+                {cidOptions.map((item) => (
+                  <option key={item.code} value={item.code}>{item.code} - {item.description}</option>
+                ))}
+              </select>
+              <Button onClick={handleAddCid}>Adicionar CID</Button>
+              <div className="space-y-2">
+                {caseItem.cids.map((item) => (
+                  <div key={item.id} className="flex flex-col gap-3 rounded-xl border border-border p-3 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <p className="text-sm font-medium">{item.code} - {item.description}</p>
+                      <p className="text-xs text-muted-foreground">{item.active === false ? "Inativo" : "Ativo"} • {item.createdByName}</p>
+                    </div>
+                    <Button variant="outline" className="bg-transparent" onClick={() => user && judicial.toggleCid(caseItem.id, item.id, user)}>
+                      {item.active === false ? "Ativar" : "Inativar"}
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="anexos" className="mt-0 min-h-[640px] space-y-4">
+          <Card className="border-border">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Arquivos selecionados na sessão</CardTitle>
+              <CardDescription>Os arquivos escolhidos nos formulários aparecem aqui antes do envio definitivo.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {pendingSelectedFiles.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Nenhum arquivo selecionado nesta sessão.</p>
+              ) : (
+                <div className="space-y-2">
+                  {pendingSelectedFiles.map(({ scope, file }) => (
+                    <div key={`${scope}-${file.name}-${file.size}`} className="rounded-xl border border-border p-3">
+                      <p className="text-sm font-medium">{file.name}</p>
+                      <p className="text-xs text-muted-foreground">{scope} • {formatFileSize(file.size)}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="border-border">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Todos os anexos do processo</CardTitle>
+              <CardDescription>Lista paginada contendo anexos do processo, movimentações e manifestações.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {paginatedAttachments.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Nenhum anexo registrado.</p>
+              ) : (
+                <div className="space-y-2">
+                  {paginatedAttachments.map((item) => (
+                    <div key={`${item.id}-${item.createdAt}`} className="rounded-xl border border-border p-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant="outline">{item.category}</Badge>
+                        <Badge variant="secondary">{item.source}</Badge>
+                      </div>
+                      <p className="mt-2 text-sm font-medium">{item.name}</p>
+                      <p className="text-xs text-muted-foreground">{new Date(item.createdAt).toLocaleString("pt-BR")} • {item.createdByName}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="flex items-center justify-between pt-2">
+                <p className="text-xs text-muted-foreground">Página {attachmentsPage} de {totalAttachmentPages}</p>
+                <div className="flex gap-2">
+                  <Button variant="outline" className="bg-transparent" disabled={attachmentsPage <= 1} onClick={() => setAttachmentsPage((prev) => Math.max(1, prev - 1))}>Anterior</Button>
+                  <Button variant="outline" className="bg-transparent" disabled={attachmentsPage >= totalAttachmentPages} onClick={() => setAttachmentsPage((prev) => Math.min(totalAttachmentPages, prev + 1))}>Próxima</Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="fichas" className="mt-0 min-h-[640px] space-y-4">
+          <Card className="border-border">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">{editingFichaId ? "Alterar ficha" : "Cadastrar ficha"}</CardTitle>
+              <CardDescription>Permite corrigir ou inativar ficha incorreta antes de cadastrar uma nova.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-3 md:grid-cols-2">
+                <div>
+                  <Label className="mb-1 block text-xs">Sistema</Label>
+                  <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={fichaSystem} onChange={(e) => setFichaSystem(e.target.value as "CORE" | "SISREG" | "OUTRO") }>
+                    <option value="CORE">CORE</option>
+                    <option value="SISREG">SISREG</option>
+                    <option value="OUTRO">Outro</option>
+                  </select>
+                </div>
+                <div>
+                  <Label className="mb-1 block text-xs">Número da ficha</Label>
+                  <Input value={fichaNumber} onChange={(e) => setFichaNumber(e.target.value)} placeholder="CORE-202600001" />
+                </div>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2">
+                <label className="flex items-center gap-2 rounded-xl border border-border p-3 text-sm">
+                  <input type="checkbox" checked={requestedInclusion} onChange={(e) => setRequestedInclusion(e.target.checked)} />
+                  Foi solicitada inclusão
+                </label>
+                <label className="flex items-center gap-2 rounded-xl border border-border p-3 text-sm">
+                  <input type="checkbox" checked={hasJudicialMark} onChange={(e) => setHasJudicialMark(e.target.checked)} />
+                  Marca judicial assinalada
+                </label>
+              </div>
+
+              <div className="space-y-3 rounded-xl border border-dashed border-border p-4">
+                <div>
+                  <Label className="mb-1 block text-xs">Documento da ficha</Label>
+                  <Input type="file" multiple onChange={(e) => setSelectedFichaFiles(e.target.files)} />
+                </div>
+
+                {fileListToArray(selectedFichaFiles).length > 0 && (
+                  <div className="rounded-lg border border-border bg-muted/20 p-3 text-sm text-muted-foreground">
+                    {fileListToArray(selectedFichaFiles).map((file) => (
+                      <p key={`${file.name}-${file.size}`}>{file.name} • {formatFileSize(file.size)}</p>
+                    ))}
+                  </div>
+                )}
+
+                <Button type="button" variant="outline" className="bg-transparent" disabled={uploadingFicha} onClick={handleUploadFicha}>
+                  <Upload className="mr-2 h-4 w-4" />
+                  {uploadingFicha ? "Enviando..." : "Enviar arquivos"}
+                </Button>
+
+                <Input value={fichaAttachment} onChange={(e) => setFichaAttachment(e.target.value)} placeholder="Arquivos enviados" />
+
+                {uploadedFichaFiles.length > 0 && (
+                  <div className="space-y-2 rounded-lg border border-border p-3">
+                    {uploadedFichaFiles.map((file) => (
+                      <a key={file.relativePath} href={file.url} target="_blank" rel="noreferrer" className="block text-sm text-primary underline">{file.name}</a>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <Label className="mb-1 block text-xs">Observações</Label>
+                <Textarea rows={4} value={fichaNotes} onChange={(e) => setFichaNotes(e.target.value)} />
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <Button onClick={handleSaveFicha}>{editingFichaId ? "Salvar alterações" : "Salvar ficha"}</Button>
+                <Button variant="outline" className="bg-transparent" onClick={resetFichaForm}>Limpar</Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-border">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Fichas registradas</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {caseItem.fichas.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Nenhuma ficha cadastrada.</p>
+              ) : (
+                caseItem.fichas.map((item) => (
+                  <div key={item.id} className="rounded-xl border border-border p-4">
+                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                      <div className="space-y-2">
+                        <div className="flex flex-wrap gap-2">
+                          <Badge variant="outline">{SYSTEM_LABELS[item.system]}</Badge>
+                          <Badge variant={item.active === false ? "destructive" : "secondary"}>{item.active === false ? "Inativa" : "Ativa"}</Badge>
+                          <Badge variant={item.hasJudicialMark ? "secondary" : "destructive"}>{item.hasJudicialMark ? "Marca judicial: sim" : "Marca judicial: não"}</Badge>
+                        </div>
+                        <p className="text-sm font-medium">{item.number || "Sem número informado"}</p>
+                        <p className="text-xs text-muted-foreground">{new Date(item.includedAt).toLocaleString("pt-BR")}{item.updatedByName ? ` • ${item.updatedByName}` : ""}</p>
+                        <p className="text-sm text-muted-foreground">{item.notes}</p>
+                        {item.inactiveReason && <p className="text-xs text-destructive">Motivo da inativação: {item.inactiveReason}</p>}
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Button variant="outline" className="bg-transparent" onClick={() => handleEditFicha(item)}>
+                          <Edit3 className="mr-2 h-4 w-4" />
+                          Alterar
+                        </Button>
+                        <Button variant="outline" className="bg-transparent" onClick={() => handleToggleFicha(item)}>
+                          {item.active === false ? "Reativar" : "Inativar"}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="municipio" className="mt-0 min-h-[640px] space-y-4">
+          <Card className="border-border">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Dados do município</CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-3 md:grid-cols-3">
+              <InfoField label="Município" value={caseItem.municipalityName} strong />
+              <InfoField label="E-mails" value={contacts?.emails.join(", ") || "Não informado"} />
+              <InfoField label="Responsáveis" value={contacts?.contacts.join(", ") || "Não informado"} />
+            </CardContent>
+          </Card>
+
+          <Card className="border-border">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Notificação ao município</CardTitle>
+              <CardDescription>Editor em formato de e-mail com assunto, formatação, alinhamento e anexos.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-3 md:grid-cols-2">
+                <div>
+                  <Label className="mb-1 block text-xs">Destinatários</Label>
+                  <Input value={manifestRecipients} onChange={(e) => setManifestRecipients(e.target.value)} placeholder="email1@municipio.gov.br, email2@..." />
+                </div>
+                <div>
+                  <Label className="mb-1 block text-xs">Assunto</Label>
+                  <Input value={manifestSubject} onChange={(e) => setManifestSubject(e.target.value)} placeholder="Assunto da notificação" />
+                </div>
+              </div>
+
+              <div className="space-y-2 rounded-xl border border-border p-3">
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" variant="outline" className="bg-transparent" onClick={() => runEditorCommand("bold")}>Negrito</Button>
+                  <Button type="button" variant="outline" className="bg-transparent" onClick={() => runEditorCommand("italic")}>Itálico</Button>
+                  <Button type="button" variant="outline" className="bg-transparent" onClick={() => runEditorCommand("underline")}>Sublinhado</Button>
+                  <Button type="button" variant="outline" className="bg-transparent" onClick={() => runEditorCommand("justifyLeft")}>Esquerda</Button>
+                  <Button type="button" variant="outline" className="bg-transparent" onClick={() => runEditorCommand("justifyCenter")}>Centro</Button>
+                  <Button type="button" variant="outline" className="bg-transparent" onClick={() => runEditorCommand("justifyRight")}>Direita</Button>
+                  <Button type="button" variant="outline" className="bg-transparent" onClick={() => runEditorCommand("fontSize", "3")}>Fonte média</Button>
+                  <Button type="button" variant="outline" className="bg-transparent" onClick={() => runEditorCommand("fontSize", "5")}>Fonte maior</Button>
+                </div>
+                <div
+                  ref={editorRef}
+                  contentEditable
+                  suppressContentEditableWarning
+                  className="min-h-[240px] rounded-lg border border-input bg-background p-3 text-sm outline-none"
+                  onInput={(e) => setManifestHtml((e.target as HTMLDivElement).innerHTML)}
+                  dangerouslySetInnerHTML={{ __html: manifestHtml }}
+                />
+              </div>
+
+              <div className="space-y-3 rounded-xl border border-dashed border-border p-4">
+                <div>
+                  <Label className="mb-1 block text-xs">Anexos</Label>
+                  <Input type="file" multiple onChange={(e) => setSelectedManifestFiles(e.target.files)} />
+                </div>
+
+                {fileListToArray(selectedManifestFiles).length > 0 && (
+                  <div className="rounded-lg border border-border bg-muted/20 p-3 text-sm text-muted-foreground">
+                    {fileListToArray(selectedManifestFiles).map((file) => (
+                      <p key={`${file.name}-${file.size}`}>{file.name} • {formatFileSize(file.size)}</p>
+                    ))}
+                  </div>
+                )}
+
+                <Button type="button" variant="outline" className="bg-transparent" disabled={uploadingManifest} onClick={handleUploadManifest}>
+                  <Upload className="mr-2 h-4 w-4" />
+                  {uploadingManifest ? "Enviando..." : "Enviar anexos"}
+                </Button>
+
+                <Input value={manifestAttachments} onChange={(e) => setManifestAttachments(e.target.value)} placeholder="Arquivos enviados" />
+
+                {uploadedManifestFiles.length > 0 && (
+                  <div className="space-y-2 rounded-lg border border-border p-3">
+                    {uploadedManifestFiles.map((file) => (
+                      <a key={file.relativePath} href={file.url} target="_blank" rel="noreferrer" className="block text-sm text-primary underline">{file.name}</a>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <Button onClick={handleSendMunicipalityNotification}>
+                <Mail className="mr-2 h-4 w-4" />
+                Registrar envio ao município
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Card className="border-border">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Manifestações registradas</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {caseItem.municipalityManifestations.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Sem manifestações registradas.</p>
+              ) : (
+                [...caseItem.municipalityManifestations].reverse().map((item) => (
+                  <div key={item.id} className="rounded-xl border border-border p-4">
+                    <p className="text-sm font-medium">{item.createdByName}</p>
+                    <p className="text-xs text-muted-foreground">{new Date(item.createdAt).toLocaleString("pt-BR")}</p>
+                    {/</.test(item.description) ? (
+                      <div className="prose prose-sm mt-3 max-w-none" dangerouslySetInnerHTML={{ __html: item.description }} />
+                    ) : (
+                      <p className="mt-2 text-sm text-muted-foreground">{item.description}</p>
+                    )}
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="historico" className="mt-0 min-h-[640px] space-y-4">
+          <Card className="border-border">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Linha do tempo do processo</CardTitle>
+              <CardDescription>Inclui movimentações, fichas, procedimentos, CIDs, histórico CORE e manifestações do município.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {historyItems.map((item) => (
+                <div key={item.id} className="rounded-xl border border-border p-4">
+                  <div className="mb-2 flex flex-wrap items-center gap-2">
+                    <Badge variant="outline">{item.category}</Badge>
+                    {(item.badges || []).map((badge) => (
+                      <Badge key={`${item.id}-${badge}`} variant="secondary">{badge}</Badge>
+                    ))}
+                  </div>
+                  <p className="text-sm font-semibold">{item.title}</p>
+                  <p className="text-xs text-muted-foreground">{new Date(item.createdAt).toLocaleString("pt-BR")}{item.subtitle ? ` • ${item.subtitle}` : ""}</p>
+                  {item.description && (item.html ? (
+                    <div className="prose prose-sm mt-2 max-w-none" dangerouslySetInnerHTML={{ __html: item.description }} />
+                  ) : (
+                    <p className="mt-2 text-sm text-muted-foreground">{item.description}</p>
+                  ))}
+                  {item.attachments && item.attachments.length > 0 && (
+                    <p className="mt-2 text-xs text-muted-foreground">Anexos: {item.attachments.map((att) => att.name).join(", ")}</p>
+                  )}
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="auditoria" className="mt-0 min-h-[640px] space-y-4">
+          <Card className="border-border">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Motivos de exibição e fila</CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <div className="rounded-xl border border-border p-4">
+                <div className="mb-2 flex items-center gap-2 text-sm font-semibold"><Scale className="h-4 w-4" />Fluxo atual</div>
+                <p className="text-sm text-muted-foreground">{caseItem.monitoringModeReason}</p>
+              </div>
+              <div className="rounded-xl border border-border p-4">
+                <div className="mb-2 flex items-center gap-2 text-sm font-semibold"><Clock3 className="h-4 w-4" />Status</div>
+                <p className="text-sm text-muted-foreground">{JUDICIAL_CASE_STATUS_LABELS[caseItem.status]}</p>
+              </div>
+              <div className="rounded-xl border border-border p-4">
+                <div className="mb-2 flex items-center gap-2 text-sm font-semibold"><CheckCircle2 className="h-4 w-4" />Agendamento</div>
+                <p className="text-sm text-muted-foreground">{caseItem.appointmentDate ? new Date(caseItem.appointmentDate).toLocaleString("pt-BR") : "Sem agendamento informado"}</p>
+              </div>
+              <div className="rounded-xl border border-border p-4">
+                <div className="mb-2 flex items-center gap-2 text-sm font-semibold"><ShieldAlert className="h-4 w-4" />Fila</div>
+                <div className="space-y-1 text-sm text-muted-foreground">
+                  {Object.values(QUEUE_REASON_LABELS).slice(0, 5).map((item) => <p key={item}>• {item}</p>)}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-border">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Auditoria de tela</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {judicial.auditTrail.filter((item) => item.caseId === caseItem.id).slice().reverse().map((item) => (
+                <div key={item.id} className="rounded-xl border border-border p-4">
+                  <p className="text-sm font-medium">{item.userName}</p>
+                  <p className="text-xs text-muted-foreground">{new Date(item.createdAt).toLocaleString("pt-BR")} • {item.action}</p>
+                  {item.details && <p className="mt-2 text-sm text-muted-foreground">{item.details}</p>}
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+    </div>
+  )
+}

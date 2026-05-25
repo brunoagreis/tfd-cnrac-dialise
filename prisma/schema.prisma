@@ -1,0 +1,424 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Paciente {
+  id             String             @id @default(cuid())
+  cpf            String             @unique
+  cartaoSus      String
+  nome           String
+  dataNascimento DateTime
+  email          String?
+  municipio      String
+  endereco       String
+  nomeMae        String?
+  sexo           Sexo?
+  cep            String?
+  bairro         String?
+  uf             String?
+  observacoes    String?
+  ativo          Boolean            @default(true)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  demandas       Demanda[]
+  telefones      TelefonePaciente[]
+
+  @@map("pacientes")
+}
+
+model TelefonePaciente {
+  id         String   @id @default(cuid())
+  pacienteId String
+  value      String
+  paciente   Paciente @relation(fields: [pacienteId], references: [id], onDelete: Cascade)
+
+  @@map("telefone_paciente")
+}
+
+model Solicitante {
+  id             String    @id @default(cuid())
+  nome           String
+  cpf            String?   @unique
+  email          String?
+  grauParentesco String?
+  observacoes    String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  demandas       Demanda[]
+
+  @@map("solicitantes")
+}
+
+model Demanda {
+  id                     String                @id @default(cuid())
+  protocolo              String                @unique
+  pacienteId             String
+  solicitanteId          String?
+  modulo                 Module
+  localSolicitante       String
+  emailSolicitante       String
+  acaoJudicial           Boolean               @default(false)
+  codigoSigtap           String
+  descricaoSigtap        String
+  cid10                  String
+  especialidade          String
+  subespecialidade       String?
+  peso                   String?
+  altura                 String?
+  tipoSanguineo          String?
+  observacoesUnidade     String?
+  localSolicitado        String?
+  tipoSolicitacao        TipoSolicitacao?
+  criadoPor              String?
+  criadoPorNome          String?
+  codigoConsulta         String?               @unique
+  fluxoId                String?
+  statusId               String?
+  prioridadeId           String?
+  unidadeSolicitanteId   String?
+  unidadeDestinoId       String?
+  descricaoResumo        String?
+  justificativaClinica   String?
+  origemCadastro         OrigemCadastro        @default(sistema)
+  prazoResposta          DateTime?
+  ultimoAndamentoEm      DateTime?
+  encerradaEm            DateTime?
+  motivoEncerramentoId   String?
+  sigilosa               Boolean               @default(false)
+  permiteConsultaExterna Boolean               @default(false)
+  createdAt              DateTime              @default(now())
+  updatedAt              DateTime              @updatedAt
+  anexos                 Anexo[]
+  manifestacoes          Manifestacao[]
+  movimentacoes          MovimentacaoDemanda[]
+  notificacoes           Notificacao[]
+  paciente               Paciente              @relation(fields: [pacienteId], references: [id])
+  solicitante            Solicitante?          @relation(fields: [solicitanteId], references: [id])
+  telefonesSolicitante   TelefoneSolicitante[]
+  fluxo                  TipoFluxo?            @relation(fields: [fluxoId], references: [id])
+  status                 StatusDemanda?        @relation("DemandaStatusAtual", fields: [statusId], references: [id])
+  prioridade             PrioridadeDemanda?    @relation(fields: [prioridadeId], references: [id])
+  unidadeSolicitanteRef  Unidade?              @relation("DemandaUnidadeSolicitante", fields: [unidadeSolicitanteId], references: [id])
+  unidadeDestinoRef      Unidade?              @relation("DemandaUnidadeDestino", fields: [unidadeDestinoId], references: [id])
+  motivoEncerramento     MotivoEncerramento?   @relation(fields: [motivoEncerramentoId], references: [id])
+
+  @@index([pacienteId])
+  @@index([solicitanteId])
+  @@index([fluxoId])
+  @@index([statusId])
+  @@index([prioridadeId])
+  @@index([unidadeSolicitanteId])
+  @@index([unidadeDestinoId])
+  @@map("demandas")
+}
+
+model TelefoneSolicitante {
+  id        String  @id @default(cuid())
+  demandaId String
+  value     String
+  demanda   Demanda @relation(fields: [demandaId], references: [id], onDelete: Cascade)
+
+  @@map("telefone_solicitante")
+}
+
+model Anexo {
+  id            String         @id @default(cuid())
+  demandaId     String
+  nome          String
+  tipo          String
+  tamanho       Int
+  categoria     CategoriaAnexo
+  descricao     String
+  mimeType      String?
+  hashArquivo   String?
+  ativo         Boolean        @default(true)
+  criadoPor     String?
+  criadoPorNome String?
+  createdAt     DateTime       @default(now())
+  demanda       Demanda        @relation(fields: [demandaId], references: [id], onDelete: Cascade)
+
+  @@map("anexos")
+}
+
+model Notificacao {
+  id             String    @id @default(cuid())
+  protocolo      String
+  modulo         Module
+  mensagem       String
+  destinatarioId String
+  pacienteNome   String?
+  demandaId      String?
+  titulo         String?
+  linkDestino    String?
+  lidaEm         DateTime?
+  createdAt      DateTime  @default(now())
+  demanda        Demanda?  @relation(fields: [demandaId], references: [id])
+
+  @@index([protocolo])
+  @@index([destinatarioId])
+  @@map("notificacoes")
+}
+
+model Unidade {
+  id                  String       @id @default(cuid())
+  nome                String
+  email               String       @unique
+  telefone            String?
+  tipoUnidade         TipoUnidade?
+  cnes                String?      @unique
+  municipio           String?
+  uf                  String?
+  endereco            String?
+  responsavelNome     String?
+  responsavelEmail    String?
+  permiteAcessoPortal Boolean      @default(false)
+  ativo               Boolean      @default(true)
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+  usuarios            Usuario[]
+  demandasSolicitadas Demanda[]    @relation("DemandaUnidadeSolicitante")
+  demandasDestino     Demanda[]    @relation("DemandaUnidadeDestino")
+
+  @@map("unidades")
+}
+
+model Usuario {
+  id              String                @id @default(cuid())
+  nome            String
+  email           String                @unique
+  senhaHash       String
+  role            UserRole              @default(admin)
+  telefone        String?
+  cargo           String?
+  ultimoLoginEm   DateTime?
+  deveTrocarSenha Boolean               @default(false)
+  ativo           Boolean               @default(true)
+  unidadeId       String?
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+  resetTokens     PasswordResetToken[]
+  permissoes      UsuarioPermissao[]
+  manifestacoes   Manifestacao[]
+  movimentacoes   MovimentacaoDemanda[]
+  unidade         Unidade?              @relation(fields: [unidadeId], references: [id])
+
+  @@map("usuarios")
+}
+
+model Permissao {
+  id        String             @id @default(cuid())
+  chave     String             @unique
+  descricao String?
+  createdAt DateTime           @default(now())
+  usuarios  UsuarioPermissao[]
+
+  @@map("permissoes")
+}
+
+model UsuarioPermissao {
+  id          String    @id @default(cuid())
+  usuarioId   String
+  permissaoId String
+  createdAt   DateTime  @default(now())
+  permissao   Permissao @relation(fields: [permissaoId], references: [id], onDelete: Cascade)
+  usuario     Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@unique([usuarioId, permissaoId])
+  @@map("usuario_permissao")
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  usuarioId String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  usuario   Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@index([usuarioId])
+  @@map("password_reset_tokens")
+}
+
+model TipoFluxo {
+  id        String    @id @default(cuid())
+  codigo    String    @unique
+  nome      String
+  descricao String?
+  ordem     Int       @default(0)
+  ativo     Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  demandas  Demanda[]
+
+  @@map("tipos_fluxo")
+}
+
+model StatusDemanda {
+  id                   String                @id @default(cuid())
+  codigo               String                @unique
+  nome                 String
+  descricao            String?
+  cor                  String?
+  ordem                Int                   @default(0)
+  ativo                Boolean               @default(true)
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  demandas             Demanda[]             @relation("DemandaStatusAtual")
+  movimentacoesOrigem  MovimentacaoDemanda[] @relation("MovimentacaoStatusOrigem")
+  movimentacoesDestino MovimentacaoDemanda[] @relation("MovimentacaoStatusDestino")
+
+  @@map("status_demanda")
+}
+
+model PrioridadeDemanda {
+  id        String    @id @default(cuid())
+  codigo    String    @unique
+  nome      String
+  descricao String?
+  ordem     Int       @default(0)
+  ativo     Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  demandas  Demanda[]
+
+  @@map("prioridades_demanda")
+}
+
+model TipoMovimentacao {
+  id            String                @id @default(cuid())
+  codigo        String                @unique
+  nome          String
+  descricao     String?
+  ordem         Int                   @default(0)
+  ativo         Boolean               @default(true)
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+  movimentacoes MovimentacaoDemanda[]
+
+  @@map("tipos_movimentacao")
+}
+
+model MovimentacaoDemanda {
+  id                 String            @id @default(cuid())
+  demandaId          String
+  usuarioId          String?
+  tipoMovimentacaoId String?
+  statusOrigemId     String?
+  statusDestinoId    String?
+  descricao          String
+  interna            Boolean           @default(false)
+  visivelHospital    Boolean           @default(true)
+  visivelExterno     Boolean           @default(false)
+  createdAt          DateTime          @default(now())
+  demanda            Demanda           @relation(fields: [demandaId], references: [id], onDelete: Cascade)
+  usuario            Usuario?          @relation(fields: [usuarioId], references: [id])
+  tipoMovimentacao   TipoMovimentacao? @relation(fields: [tipoMovimentacaoId], references: [id])
+  statusOrigem       StatusDemanda?    @relation("MovimentacaoStatusOrigem", fields: [statusOrigemId], references: [id])
+  statusDestino      StatusDemanda?    @relation("MovimentacaoStatusDestino", fields: [statusDestinoId], references: [id])
+
+  @@index([demandaId, createdAt])
+  @@index([usuarioId])
+  @@index([tipoMovimentacaoId])
+  @@map("movimentacoes_demanda")
+}
+
+model TipoManifestacao {
+  id            String         @id @default(cuid())
+  codigo        String         @unique
+  nome          String
+  descricao     String?
+  ordem         Int            @default(0)
+  ativo         Boolean        @default(true)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  manifestacoes Manifestacao[]
+
+  @@map("tipos_manifestacao")
+}
+
+model Manifestacao {
+  id                 String            @id @default(cuid())
+  demandaId          String
+  usuarioId          String?
+  tipoManifestacaoId String?
+  texto              String
+  sigilosa           Boolean           @default(false)
+  createdAt          DateTime          @default(now())
+  demanda            Demanda           @relation(fields: [demandaId], references: [id], onDelete: Cascade)
+  usuario            Usuario?          @relation(fields: [usuarioId], references: [id])
+  tipoManifestacao   TipoManifestacao? @relation(fields: [tipoManifestacaoId], references: [id])
+
+  @@index([demandaId, createdAt])
+  @@index([usuarioId])
+  @@map("manifestacoes")
+}
+
+model MotivoEncerramento {
+  id        String    @id @default(cuid())
+  codigo    String    @unique
+  nome      String
+  descricao String?
+  ativo     Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  demandas  Demanda[]
+
+  @@map("motivos_encerramento")
+}
+
+enum Module {
+  tfd
+  cnrac
+  hemodialise
+  judicial
+  pre_judicial
+  agendamento_demanda
+}
+
+enum CategoriaAnexo {
+  pessoal
+  laudo
+  checklist
+  outros
+}
+
+enum TipoSolicitacao {
+  inclusao
+  substituicao
+  alta
+  outros
+}
+
+enum UserRole {
+  admin
+  unidade
+  hospital
+  regulacao
+  judicial
+  pre_judicial
+}
+
+enum Sexo {
+  masculino
+  feminino
+  outro
+}
+
+enum TipoUnidade {
+  solicitante
+  hospitalar
+  regulacao
+  administrativo
+}
+
+enum OrigemCadastro {
+  sistema
+  protocolo
+  importacao
+  api
+}

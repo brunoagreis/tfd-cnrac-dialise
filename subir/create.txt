@@ -1,0 +1,59 @@
+-- 1) cria o banco (vai ficar com owner = postgres)
+CREATE DATABASE sis_regulacao;
+
+-- 2) cria o usuário
+CREATE USER sis_regulacao_app WITH LOGIN PASSWORD 'kY9!qP3@vN7#zT2$wX8';
+
+-- 3) define o usuário como dono do banco
+ALTER DATABASE sis_regulacao OWNER TO sis_regulacao_app;
+
+-- 4) garante privilégios
+GRANT ALL PRIVILEGES ON DATABASE sis_regulacao TO sis_regulacao_app;
+
+
+
+********** ACESSAR O BANCO E EXECUTAR
+
+-- dono do schema public (muito comum dar pau no migrate por causa disso)
+ALTER SCHEMA public OWNER TO sis_regulacao_app;
+
+-- permissões básicas no schema
+GRANT USAGE, CREATE ON SCHEMA public TO sis_regulacao_app;
+
+-- permissões para objetos já existentes (se tiver)
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO sis_regulacao_app;
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO sis_regulacao_app;
+
+-- permissões automáticas para objetos futuros (importantíssimo)
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT ALL ON TABLES TO sis_regulacao_app;
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT ALL ON SEQUENCES TO sis_regulacao_app;
+
+
+
+
+
+1. Copie o arquivo .env.example para .env
+2. Substitua os valores fictícios pelos dados reais do seu SMTP
+3. Reinicie a aplicação
+4. Teste um envio pela tela que dispara notificação
+
+Campos obrigatórios:
+- MAIL_HOST
+- MAIL_PORT
+- MAIL_USERNAME
+- MAIL_PASSWORD
+- MAIL_FROM_ADDRESS
+
+Campos recomendados:
+- MAIL_FROM_NAME
+- MAIL_SECURE
+- MAIL_REPLY_TO
+
+Observações:
+- Porta 587 normalmente usa MAIL_SECURE=false
+- Porta 465 normalmente usa MAIL_SECURE=true
+- Se usar Gmail/Workspace, geralmente precisa senha de app
+

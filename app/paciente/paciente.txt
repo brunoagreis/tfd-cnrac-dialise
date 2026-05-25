@@ -1,0 +1,37 @@
+// app/paciente/page.tsx
+const handleBuscarPaciente = async () => {
+  const cpf = watch("cpf")?.trim()
+  if (!cpf) return
+
+  try {
+    const res = await fetch(`/api/pacientes?cpf=${encodeURIComponent(cpf)}`, {
+      method: "GET",
+      cache: "no-store",
+    })
+
+    const json = await res.json()
+
+    if (!json?.found) {
+      toast.info("Paciente não encontrado. Preencha os dados manualmente.")
+      return
+    }
+
+    const p = json.paciente
+
+    setValue("cartaoSus", p.cartaoSus ?? "")
+    setValue("nome", p.nome ?? "")
+    setValue("dataNascimento", p.dataNascimento ? String(p.dataNascimento).slice(0, 10) : "")
+    setValue("emailPaciente", p.email ?? "")
+    setValue("municipio", p.municipio ?? "")
+    setValue("endereco", p.endereco ?? "")
+
+    // Telefones (vem como [{id, pacienteId, value}])
+    const tels = Array.isArray(p.telefones) ? p.telefones.map((t: any) => ({ value: t.value })) : []
+    setValue("telefones", tels.length > 0 ? tels : [{ value: "" }])
+
+    toast.success("Paciente encontrado no banco ✅")
+  } catch (e) {
+    console.error(e)
+    toast.error("Falha ao consultar o paciente no servidor")
+  }
+}

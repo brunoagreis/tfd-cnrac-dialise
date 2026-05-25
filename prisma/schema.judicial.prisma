@@ -1,0 +1,355 @@
+// Fragmento de schema para migração futura dos módulos Judicial + Pré Judicial + Agendamento da Demanda
+
+enum JudicialCaseStatus {
+  ATIVO
+  AGUARDANDO_AGENDAMENTO
+  AGENDADO
+  CUMPRIDO
+  DESCUMPRIDO
+  INERCIA_MUNICIPIO
+  ENCERRADO
+}
+
+enum MonitoringMode {
+  AUTOMATIC_CORE
+  HUMANO
+}
+
+enum SchedulingStatus {
+  FORA_FILA
+  PENDENTE
+  RESERVADO
+}
+
+enum JudicialMovementType {
+  MONITORAMENTO
+  DESCUMPRIMENTO
+  SEQUESTRO
+  BLOQUEIO
+  AGENDAMENTO
+  MANIFESTACAO_MUNICIPIO
+  SOLICITACAO_INCLUSAO
+  REITERACAO
+  ENVIO_AGENDAMENTO_DEMANDA
+  RESERVA_AGENDAMENTO
+  NAO_AGENDADO
+  CUMPRIMENTO
+  FALTA_PACIENTE
+  OBITO
+  ENCERRAMENTO_INERCIA
+  REABERTURA
+  RETORNO_FLUXO_AUTOMATICO
+  MONITORAMENTO_AUTOMATICO_CORE
+}
+
+enum JudicialSystem {
+  CORE
+  SISREG
+  OUTRO
+}
+
+enum CoreTableType {
+  AMBULATORIAL
+  LEITO
+  URGENCIA
+}
+
+enum PreJudicialCaseStatus {
+  ATIVO
+  ENVIADO_AGENDAMENTO
+  RESERVADO
+  NAO_RESOLVIDO_SETOR
+  RESOLVIDO
+  ENCERRADO
+}
+
+enum PreJudicialSchedulingStatus {
+  FORA_FILA
+  PENDENTE
+  RESERVADO
+}
+
+enum PreJudicialMovementType {
+  CADASTRO
+  INTERACAO
+  ANEXO
+  NOTIFICACAO_MUNICIPIO
+  ENVIO_AGENDAMENTO_DEMANDA
+  RESERVA_AGENDAMENTO
+  AGENDADO
+  NAO_AGENDADO
+  MANIFESTACAO_AUTOMATICA_PRAZO
+  RETORNO_FILA
+  ENCERRAMENTO
+  REABERTURA
+}
+
+model JudicialCase {
+  id                     String                     @id @default(cuid())
+  pacienteId             String
+  origemModulo           String
+  origemProtocolo        String
+  numeroProcesso         String                     @unique
+  municipioResidencia    String
+  status                 JudicialCaseStatus         @default(ATIVO)
+  ativo                  Boolean                    @default(true)
+  monitoringMode         MonitoringMode             @default(HUMANO)
+  monitoringModeReason   String?
+  schedulingStatus       SchedulingStatus           @default(FORA_FILA)
+  schedulingRequestedAt  DateTime?
+  schedulingReservedAt   DateTime?
+  appointmentDate        DateTime?
+  appointmentConfirmedAt DateTime?
+  lastMonitoredAt        DateTime?
+  priority               Int                        @default(50)
+  createdAt              DateTime                   @default(now())
+  updatedAt              DateTime                   @updatedAt
+
+  procedures             JudicialProcedure[]
+  cids                   JudicialCid[]
+  fichas                 JudicialFicha[]
+  movements              JudicialMovement[]
+  municipalityManifestations MunicipalityManifestation[]
+  coreHistory            JudicialCoreHistory[]
+}
+
+model JudicialProcedure {
+  id          String   @id @default(cuid())
+  caseId      String
+  sigtapCode  String
+  description String
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  createdById String?
+
+  case JudicialCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+}
+
+model JudicialCid {
+  id          String   @id @default(cuid())
+  caseId      String
+  code        String
+  description String
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  createdById String?
+
+  case JudicialCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+}
+
+model JudicialFicha {
+  id                 String         @id @default(cuid())
+  caseId             String
+  system             JudicialSystem
+  number             String?
+  requestedInclusion Boolean        @default(false)
+  hasJudicialMark    Boolean        @default(false)
+  attachmentName     String?
+  notes              String
+  includedAt         DateTime       @default(now())
+
+  case JudicialCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+}
+
+model JudicialMovement {
+  id                 String               @id @default(cuid())
+  caseId             String
+  type               JudicialMovementType
+  description        String
+  appointmentDate    DateTime?
+  stateAmount        Decimal?             @db.Decimal(14,2)
+  municipalityAmount Decimal?             @db.Decimal(14,2)
+  responseRequestedAt DateTime?
+  createdAt          DateTime             @default(now())
+  createdById        String?
+  createdByName      String?
+
+  case JudicialCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  attachments JudicialAttachment[]
+}
+
+model MunicipalityManifestation {
+  id            String   @id @default(cuid())
+  caseId        String
+  description   String
+  createdAt     DateTime @default(now())
+  createdById   String?
+  createdByName String?
+
+  case JudicialCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  attachments JudicialAttachment[]
+}
+
+model JudicialAttachment {
+  id                           String   @id @default(cuid())
+  judicialMovementId           String?
+  municipalityManifestationId  String?
+  caseId                       String?
+  name                         String
+  category                     String
+  source                       String
+  createdAt                    DateTime @default(now())
+  createdById                  String?
+  createdByName                String?
+
+  movement      JudicialMovement?          @relation(fields: [judicialMovementId], references: [id], onDelete: Cascade)
+  manifestation MunicipalityManifestation? @relation(fields: [municipalityManifestationId], references: [id], onDelete: Cascade)
+}
+
+model PreJudicialCase {
+  id                          String                       @id @default(cuid())
+  pacienteId                  String
+  origemModulo                String
+  origemProtocolo             String
+  numeroProtocolo             String                       @unique
+  municipioResidencia         String
+  status                      PreJudicialCaseStatus        @default(ATIVO)
+  ativo                       Boolean                      @default(true)
+  priority                    Int                          @default(50)
+  deadlineAt                  DateTime
+  schedulingStatus            PreJudicialSchedulingStatus  @default(FORA_FILA)
+  schedulingRequestedAt       DateTime?
+  schedulingReservedAt        DateTime?
+  schedulingResponseDeadlineAt DateTime?
+  appointmentDate             DateTime?
+  createdAt                   DateTime                     @default(now())
+  updatedAt                   DateTime                     @updatedAt
+
+  procedures                  PreJudicialProcedure[]
+  cids                        PreJudicialCid[]
+  movements                   PreJudicialMovement[]
+  attachments                 PreJudicialAttachment[]
+}
+
+model PreJudicialProcedure {
+  id          String   @id @default(cuid())
+  caseId      String
+  sigtapCode  String
+  description String
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  createdById String?
+
+  case PreJudicialCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+}
+
+model PreJudicialCid {
+  id          String   @id @default(cuid())
+  caseId      String
+  code        String
+  description String
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  createdById String?
+
+  case PreJudicialCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+}
+
+model PreJudicialMovement {
+  id                 String                   @id @default(cuid())
+  caseId             String
+  type               PreJudicialMovementType
+  description        String
+  dueAt              DateTime?
+  appointmentDate    DateTime?
+  createdAt          DateTime                 @default(now())
+  createdById        String?
+  createdByName      String?
+
+  case PreJudicialCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  attachments PreJudicialAttachment[]
+}
+
+model PreJudicialAttachment {
+  id                 String   @id @default(cuid())
+  caseId             String?
+  movementId         String?
+  name               String
+  category           String
+  createdAt          DateTime @default(now())
+  createdById        String?
+  createdByName      String?
+
+  case PreJudicialCase? @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  movement PreJudicialMovement? @relation(fields: [movementId], references: [id], onDelete: Cascade)
+}
+
+model MunicipalityContact {
+  id               String   @id @default(cuid())
+  municipalityName String   @unique
+  emailsJson       Json
+  phonesJson       Json
+  contactsJson     Json
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model JudicialEmailTemplate {
+  id         String   @id @default(cuid())
+  type       String   @unique
+  title      String
+  subject    String
+  body       String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model CoreImportRow {
+  id                   String       @id @default(cuid())
+  tableType            CoreTableType
+  fichaNumber          String
+  patientName          String
+  cpf                  String?
+  appointmentDate      DateTime?
+  procedureCode        String?
+  procedureDescription String?
+  statusText           String
+  importedAt           DateTime     @default(now())
+}
+
+model JudicialCoreHistory {
+  id                   String       @id @default(cuid())
+  caseId               String
+  tableType            CoreTableType
+  fichaNumber          String
+  patientName          String
+  appointmentDate      DateTime?
+  procedureCode        String?
+  procedureDescription String?
+  statusText           String
+  importedAt           DateTime
+
+  case JudicialCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+}
+
+model AgendaOffer {
+  id                   String   @id @default(cuid())
+  specialty            String
+  subSpecialty         String?
+  procedureCode        String?
+  procedureDescription String?
+  cidCode              String?
+  date                 DateTime
+  seats                Int
+  importedAt           DateTime @default(now())
+}
+
+model JudicialAuditEvent {
+  id         String   @id @default(cuid())
+  caseId      String?
+  userId      String?
+  userName    String?
+  action      String
+  details     String?
+  createdAt   DateTime @default(now())
+}
+
+model PreJudicialAuditEvent {
+  id         String   @id @default(cuid())
+  caseId      String?
+  userId      String?
+  userName    String?
+  action      String
+  details     String?
+  createdAt   DateTime @default(now())
+}
