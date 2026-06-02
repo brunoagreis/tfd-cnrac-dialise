@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useMemo, useState } from "react"
@@ -7,7 +6,10 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 
-import type { CidCatalogItem } from "@/lib/paciente-demand-catalogs"
+export type CidCatalogItem = {
+  code: string
+  description: string
+}
 
 export type CidEntry = {
   code: string
@@ -68,7 +70,7 @@ export function CidMultiEntry({
           <div className="mt-2 max-h-52 overflow-auto rounded-xl border border-border bg-background p-1">
             {filtered.map((item) => (
               <button
-                key={item.code}
+                key={`${item.code}-${item.description}`}
                 type="button"
                 className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-muted"
                 onClick={() => selectItem(item)}
@@ -92,9 +94,14 @@ export function CidMultiEntry({
           <p className="text-sm text-muted-foreground">Nenhum CID adicionado.</p>
         ) : (
           value.map((item, index) => (
-            <div key={`${item.code}-${index}`} className="flex items-center justify-between rounded-xl border border-border p-3">
+            <div
+              key={`${item.code}-${index}`}
+              className="flex items-center justify-between rounded-xl border border-border p-3"
+            >
               <div>
-                <p className="text-sm font-medium">{item.code} - {item.description}</p>
+                <p className="text-sm font-medium">
+                  {item.code} - {item.description}
+                </p>
               </div>
               <Button type="button" variant="ghost" size="icon" onClick={() => removeAt(index)}>
                 <Trash2 className="h-4 w-4" />

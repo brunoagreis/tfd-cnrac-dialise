@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import {
   AlertTriangle,
   CheckCircle2,
@@ -13,11 +13,6 @@ import {
 } from "lucide-react"
 
 import { useAuth } from "@/lib/auth-context"
-import { useJudicial } from "@/lib/judicial-context"
-import {
-  JUDICIAL_CASE_STATUS_LABELS,
-  QUEUE_REASON_LABELS,
-} from "@/lib/judicial-types"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -30,69 +25,172 @@ import {
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 
-const STATUS_VARIANTS: Record<
-  string,
-  { variant: "secondary" | "default" | "destructive" }
-> = {
-  ativo: { variant: "secondary" },
-  aguardando_agendamento: { variant: "secondary" },
-  agendado: { variant: "default" },
-  cumprido: { variant: "default" },
-  descumprido: { variant: "destructive" },
-  inercia_municipio: { variant: "destructive" },
-  encerrado: { variant: "destructive" },
+type JudicialBoardItem = {
+  id: string
+  monitoramentoId: number
+  demandaId: string
+  pacienteId: string
+  protocolo: string
+  nomePaciente: string
+  cpf: string
+  cns: string
+  fichaCore: string
+  procedimentoCodigo: string
+  procedimentoDescricao: string
+  cidCodigo: string
+  cidDescricao: string
+  statusMonitoramentoAtual: string
+  statusLabel: string
+  origemModulo: string
+  origemTabela: string
+  origemRegistroId: string
+  ativoMonitoramento: boolean
+  dataUltimoMonitoramento: string
+  atribuicaoStatus: string
+  atribuicaoStatusLabel: string
+  atribuidaEm: string
+  usuarioAtribuidoNome: string
 }
 
-const PROCESS_STATUS_LABELS = {
-  em_andamento: "Em andamento",
-  descumprimento: "Descumprimento",
-  decisao_judicial_prazo: "Decisão com prazo",
-} as const
+const STATUS_BADGE_VARIANTS: Record<
+  string,
+  "secondary" | "default" | "destructive" | "outline"
+> = {
+  PENDENTE: "secondary",
+  EM_ANDAMENTO: "default",
+  FINALIZADO: "outline",
+  RESOLVIDO: "default",
+  DEVOLVIDA: "destructive",
+  DEVOLVIDO: "destructive",
+  BLOQUEIO: "destructive",
+  SEQUESTRO: "destructive",
+  OBITO: "outline",
+}
+
+function getStatusVariant(status: string) {
+  const key = String(status || "").trim().toUpperCase()
+  return STATUS_BADGE_VARIANTS[key] ?? "secondary"
+}
+
+function formatDateTime(value: string) {
+  if (!value) return "Não informado"
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return "Não informado"
+
+  return date.toLocaleString("pt-BR")
+}
 
 export function JudicialMonitoringBoard() {
   const { user } = useAuth()
-  const judicial = useJudicial()
 
+  const [loading, setLoading] = useState(true)
+  const [items, setItems] = useState<JudicialBoardItem[]>([])
   const [search, setSearch] = useState("")
-  const [reason, setReason] = useState("todos")
-  const [status, setStatus] = useState("todos")
+  const [status, setStatus] = useState("pendente")
+  const [origemModulo, setOrigemModulo] = useState("todos")
 
-  const all =
-    user?.role === "UNIDADE_HOSPITALAR"
-      ? judicial.getMunicipalityCases(user)
-      : judicial.getDailyQueueForUser(user, 30)
+  useEffect(() => {
+    void fetchCases()
+  }, [])
+
+  async function fetchCases() {
+    try {
+      setLoading(true)
+
+      const response = await fetch("/api/judicial/casos?somenteAtivos=true", {
+        method: "GET",
+        cache: "no-store",
+      })
+
+      const json = await response.json().catch(() => ({}))
+
+      if (!response.ok || !json?.ok) {
+        return
+      }
+
+      setItems(Array.isArray(json?.items) ? json.items : [])
+    } catch (error) {
+      console.error("LOAD_JUDICIAL_CASES_ERROR", error)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const filtered = useMemo(() => {
-    return all.filter((item) => {
-      if (reason !== "todos" && item.queueReason !== reason) return false
-      if (status !== "todos" && item.status !== status) return false
+    return items.filter((item) => {
+      if (status !== "todos" && item.statusMonitoramentoAtual.toLowerCase() !== status) {
+        return false
+      }
+
+      if (origemModulo !== "todos" && item.origemModulo.toLowerCase() !== origemModulo) {
+        return false
+      }
 
       if (search.trim()) {
         const q = search.toLowerCase()
-        const hay = `${item.patientName} ${item.cpf} ${item.processNumber} ${(item.processNumbers ?? []).join(" ")} ${item.originProtocol} ${item.municipalityName} ${item.registration?.pgeNetNumber ?? ""}`.toLowerCase()
-        if (!hay.includes(q)) return false
+        const haystack = [
+          item.protocolo,
+          item.nomePaciente,
+          item.cpf,
+          item.cns,
+          item.fichaCore,
+          item.procedimentoCodigo,
+          item.procedimentoDescricao,
+          item.cidCodigo,
+          item.cidDescricao,
+          item.origemModulo,
+          item.usuarioAtribuidoNome,
+        ]
+          .join(" ")
+          .toLowerCase()
+
+        if (!haystack.includes(q)) return false
       }
 
       return true
     })
-  }, [all, reason, search, status])
+  }, [items, origemModulo, search, status])
 
   const stats = useMemo(() => {
     return {
-      total: all.length,
-      pendente: all.filter((item) => item.finalization?.status === "pendente").length,
-      resolvido: all.filter((item) => item.finalization?.status === "resolvido" || ["cumprido", "agendado"].includes(item.status)).length,
-      devolvida: all.filter((item) => item.finalization?.status === "devolvida").length,
+      total: items.length,
+      pendente: items.filter((item) =>
+        ["pendente", "em_andamento", ""].includes(item.statusMonitoramentoAtual.toLowerCase()),
+      ).length,
+      resolvido: items.filter((item) =>
+        ["resolvido", "finalizado"].includes(item.statusMonitoramentoAtual.toLowerCase()),
+      ).length,
+      devolvida: items.filter((item) =>
+        ["devolvida", "devolvido"].includes(item.statusMonitoramentoAtual.toLowerCase()),
+      ).length,
     }
-  }, [all])
+  }, [items])
+
+  const statusOptions = useMemo(() => {
+    const unique = Array.from(
+      new Set(
+        items
+          .map((item) => item.statusMonitoramentoAtual.toLowerCase())
+          .filter(Boolean),
+      ),
+    )
+
+    return unique.sort()
+  }, [items])
+
+  const origemOptions = useMemo(() => {
+    const unique = Array.from(
+      new Set(
+        items.map((item) => item.origemModulo.toLowerCase()).filter(Boolean),
+      ),
+    )
+
+    return unique.sort()
+  }, [items])
+
+  const showMunicipalityMode = user?.role === "UNIDADE_HOSPITALAR"
 
   return (
     <div className="flex flex-col gap-4">
@@ -139,45 +237,62 @@ export function JudicialMonitoringBoard() {
         <CardContent className="pt-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+              <Search
+                className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                aria-hidden="true"
+              />
               <Input
-                placeholder="Buscar por protocolo, paciente, CPF, processo, PGE.net..."
+                placeholder="Buscar por protocolo, paciente, CPF, CNS, ficha CORE, procedimento ou CID..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="pl-9"
-                aria-label="Buscar processos judiciais"
+                aria-label="Buscar casos judiciais"
               />
             </div>
 
             <div className="flex flex-wrap items-end gap-3">
               <div className="flex flex-col gap-1">
                 <Label className="text-xs">Status</Label>
-                <Select value={status} onValueChange={setStatus}>
-                  <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="todos">Todos ({all.length})</SelectItem>
-                    {Object.entries(JUDICIAL_CASE_STATUS_LABELS).map(([value, label]) => (
-                      <SelectItem key={value} value={value}>{label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <select
+                  className="flex h-10 w-44 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value)}
+                >
+                  <option value="todos">Todos ({items.length})</option>
+                  {statusOptions.map((value) => (
+                    <option key={value} value={value}>
+                      {value.toUpperCase()}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div className="flex flex-col gap-1">
-                <Label className="text-xs">Motivo</Label>
-                <Select value={reason} onValueChange={setReason}>
-                  <SelectTrigger className="w-56"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="todos">Todos</SelectItem>
-                    {Object.entries(QUEUE_REASON_LABELS).map(([value, label]) => (
-                      <SelectItem key={value} value={value}>{label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label className="text-xs">Origem</Label>
+                <select
+                  className="flex h-10 w-44 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  value={origemModulo}
+                  onChange={(e) => setOrigemModulo(e.target.value)}
+                >
+                  <option value="todos">Todos</option>
+                  {origemOptions.map((value) => (
+                    <option key={value} value={value}>
+                      {value.toUpperCase()}
+                    </option>
+                  ))}
+                </select>
               </div>
 
-              {(status !== "todos" || reason !== "todos" || search) && (
-                <Button variant="ghost" size="sm" onClick={() => { setStatus("todos"); setReason("todos"); setSearch("") }}>
+              {(status !== "todos" || origemModulo !== "todos" || search) && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setStatus("todos")
+                    setOrigemModulo("todos")
+                    setSearch("")
+                  }}
+                >
                   Limpar filtros
                 </Button>
               )}
@@ -188,100 +303,107 @@ export function JudicialMonitoringBoard() {
 
       <Card className="border-border">
         <CardHeader className="pb-3">
-          <CardTitle className="text-base text-card-foreground">Demandas ({filtered.length})</CardTitle>
-          <CardDescription>Clique em um processo para abrir a página completa do paciente.</CardDescription>
+          <CardTitle className="text-base text-card-foreground">
+            Demandas ({filtered.length})
+          </CardTitle>
+          <CardDescription>
+            {showMunicipalityMode
+              ? "Visualização simplificada da Judicialização."
+              : "Fila judicial baseada no banco de dados real."}
+          </CardDescription>
         </CardHeader>
+
         <CardContent>
-          {filtered.length === 0 ? (
+          {loading ? (
+            <div className="py-12 text-center text-muted-foreground">
+              <p className="text-sm">Carregando casos judiciais...</p>
+            </div>
+          ) : filtered.length === 0 ? (
             <div className="py-12 text-center text-muted-foreground">
               <Filter className="mx-auto mb-2 h-8 w-8" />
               <p className="text-sm">Nenhum processo encontrado com os filtros selecionados.</p>
             </div>
           ) : (
             <div className="flex flex-col gap-2">
-              {filtered.map((item) => {
-                const statusConfig = STATUS_VARIANTS[item.status] ?? STATUS_VARIANTS.ativo
-                const manifestacao = item.pendingMunicipalityAction ? "Pendente" : "Regular"
-                const latestProcessStatus = item.processStatusHistory?.[item.processStatusHistory.length - 1]
-                const procedurePriorityHighlights = item.priorityHighlights?.filter(
-                  (priority) => priority.mode === "procedure",
-                ) ?? []
-                const cidPriorityHighlights = item.priorityHighlights?.filter(
-                  (priority) => priority.mode === "cid",
-                ) ?? []
-                const prioritySummary = item.priorityHighlights?.map((priority) => {
-                  const prefix = priority.mode === "procedure" ? "Procedimento" : "CID"
-                  const validity = priority.expiresAt
-                    ? ` até ${new Date(`${priority.expiresAt}T00:00:00`).toLocaleDateString("pt-BR")}`
-                    : ""
-                  return `${prefix}: ${priority.label}${validity}`
-                }).join(" • ")
-                return (
-                  <Link
-                    key={item.id}
-                    href={`/judicial/${item.id}`}
-                    className="group flex w-full items-center gap-4 rounded-lg border border-border p-4 text-left transition-colors hover:bg-muted/50"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-mono text-sm font-semibold text-card-foreground">{item.originProtocol}</span>
-                        <Badge variant={statusConfig.variant} className="text-xs">{JUDICIAL_CASE_STATUS_LABELS[item.status]}</Badge>
-                        <Badge variant="destructive" className="text-xs">Judicial</Badge>
-                        {latestProcessStatus && (
-                          <Badge variant="outline" className="text-xs">
-                            {PROCESS_STATUS_LABELS[latestProcessStatus.status]}
-                            {latestProcessStatus.deadlineType && latestProcessStatus.deadlineValue
-                              ? ` • ${latestProcessStatus.deadlineValue} ${latestProcessStatus.deadlineType}`
-                              : ""}
-                          </Badge>
-                        )}
-                        {item.finalization && (
-                          <Badge variant="outline" className="text-xs">
-                            Finalizado: {item.finalization.status}
-                          </Badge>
-                        )}
-                        {procedurePriorityHighlights.length > 0 && (
-                          <Badge variant="default" className="text-xs">
-                            Procedimento priorizado
-                          </Badge>
-                        )}
-                        {cidPriorityHighlights.length > 0 && (
-                          <Badge variant="secondary" className="text-xs">
-                            CID priorizado
-                          </Badge>
-                        )}
-                      </div>
+              {filtered.map((item) => (
+                <Link
+                  key={item.id}
+                  href={`/judicial/${item.id}`}
+                  className="group flex w-full items-center gap-4 rounded-lg border border-border p-4 text-left transition-colors hover:bg-muted/50"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-mono text-sm font-semibold text-card-foreground">
+                        {item.protocolo}
+                      </span>
 
-                      <p className="mt-1 text-lg font-semibold leading-tight text-card-foreground">{item.patientName}</p>
+                      <Badge variant={getStatusVariant(item.statusMonitoramentoAtual)}>
+                        {item.statusLabel}
+                      </Badge>
 
-                      <p className="truncate text-sm text-muted-foreground">
-                        <span className="font-medium text-foreground">CPF:</span> {item.cpf || "Não informado"} | <span className="font-medium text-foreground">PGE.net:</span> {item.registration?.pgeNetNumber || "Não informado"} | <span className="font-medium text-foreground">Município:</span> {item.municipalityName || "Não informado"}
-                      </p>
+                      <Badge variant="outline">
+                        {item.origemModulo || "JUDICIAL"}
+                      </Badge>
 
-                      <p className="truncate text-sm text-muted-foreground">
-                        <span className="font-medium text-foreground">Processos:</span> {(item.processNumbers ?? [item.processNumber]).filter(Boolean).join(" | ") || "Não informado"}
-                      </p>
+                      {item.usuarioAtribuidoNome && (
+                        <Badge variant="secondary">
+                          {item.usuarioAtribuidoNome}
+                        </Badge>
+                      )}
 
-                      <p className="truncate text-sm text-muted-foreground">
-                        <span className="font-medium text-foreground">Prazo:</span> {item.queueDueLabel || "Não informado"} | <span className="font-medium text-foreground">Manifestação:</span> {manifestacao}
-                      </p>
-
-                      {prioritySummary && (
-                        <p className="truncate text-sm text-muted-foreground">
-                          <span className="font-medium text-foreground">Prioridades:</span> {prioritySummary}
-                        </p>
+                      {item.atribuicaoStatus && (
+                        <Badge variant="outline">
+                          {item.atribuicaoStatusLabel}
+                        </Badge>
                       )}
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      <span className="pointer-events-none inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-input bg-background text-foreground shadow-xs">
-                        <Eye className="h-4 w-4" />
-                      </span>
-                      <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
-                    </div>
-                  </Link>
-                )
-              })}
+                    <p className="mt-1 text-lg font-semibold leading-tight text-card-foreground">
+                      {item.nomePaciente}
+                    </p>
+
+                    <p className="truncate text-sm text-muted-foreground">
+                      <span className="font-medium text-foreground">CPF:</span>{" "}
+                      {item.cpf || "Não informado"}
+                      {" | "}
+                      <span className="font-medium text-foreground">CNS:</span>{" "}
+                      {item.cns || "Não informado"}
+                    </p>
+
+                    <p className="truncate text-sm text-muted-foreground">
+                      <span className="font-medium text-foreground">Ficha CORE:</span>{" "}
+                      {item.fichaCore || "Não informada"}
+                    </p>
+
+                    <p className="truncate text-sm text-muted-foreground">
+                      <span className="font-medium text-foreground">Procedimento:</span>{" "}
+                      {item.procedimentoCodigo || "-"}
+                      {item.procedimentoDescricao ? ` - ${item.procedimentoDescricao}` : ""}
+                    </p>
+
+                    <p className="truncate text-sm text-muted-foreground">
+                      <span className="font-medium text-foreground">CID:</span>{" "}
+                      {item.cidCodigo || "-"}
+                      {item.cidDescricao ? ` - ${item.cidDescricao}` : ""}
+                    </p>
+
+                    <p className="truncate text-sm text-muted-foreground">
+                      <span className="font-medium text-foreground">Último monitoramento:</span>{" "}
+                      {formatDateTime(item.dataUltimoMonitoramento)}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="pointer-events-none inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-input bg-background text-foreground shadow-xs">
+                      <Eye className="h-4 w-4" />
+                    </span>
+                    <ChevronRight
+                      className="h-5 w-5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5"
+                      aria-hidden="true"
+                    />
+                  </div>
+                </Link>
+              ))}
             </div>
           )}
         </CardContent>

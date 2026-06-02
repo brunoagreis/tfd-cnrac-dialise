@@ -22,6 +22,9 @@ import {
   AlignLeft,
   AlignCenter,
   AlignRight,
+  Edit3,
+  Info,
+  Plus,
 } from "lucide-react"
 
 import { useAuth } from "@/lib/auth-context"
@@ -34,6 +37,7 @@ import {
   QUEUE_REASON_LABELS,
   SYSTEM_LABELS,
   type JudicialAttachment,
+  type JudicialCase,
   type JudicialFicha,
   type MovementType,
 } from "@/lib/judicial-types"
@@ -69,6 +73,24 @@ type UploadedFileMeta = {
   mimeType: string
 }
 
+type SigtapOption = {
+  id: string
+  sigtapCode: string
+  description: string
+  active: boolean
+}
+
+type SpecialtyOption = {
+  id: string
+  nome: string
+}
+
+type SubSpecialtyOption = {
+  id: string
+  especialidadeId: string
+  nome: string
+}
+
 type HistoryItem = {
   id: string
   createdAt: string
@@ -96,13 +118,15 @@ const MOVEMENT_OPTIONS: MovementType[] = [
   "reiteracao",
   "descumprimento",
   "cumprimento",
+  "cumprido",
+  "resolvido",
+  "arquivado",
   "falta_paciente",
   "obito",
   "bloqueio",
   "sequestro",
   "encerramento_processo",
 ]
-
 const CLOSE_REASONS = [
   "Cumprimento da decisão",
   "Perda do objeto",
@@ -197,9 +221,11 @@ const PROCESS_STATUS_LABELS = {
 const FINALIZATION_STATUS_LABELS = {
   pendente: "Pendente",
   resolvido: "Resolvido",
+  cumprido: "Cumprido",
   bloqueio: "Bloqueio",
   sequestro: "Sequestro",
   obito: "Óbito",
+  arquivado: "Arquivado",
   devolvida: "Devolvida",
 } as const
 
@@ -267,9 +293,88 @@ function InfoField({
 }
 
 export function JudicialCaseDetail({ caseId }: { caseId: string }) {
+  const [caseItem, setCaseItem] = useState<JudicialCase | null>(null)
+  const [loadingCase, setLoadingCase] = useState(true)
+  const [caseError, setCaseError] = useState("")
+
+  useEffect(() => {
+    let active = true
+
+    async function loadCase() {
+      try {
+        setLoadingCase(true)
+        setCaseError("")
+
+        const response = await fetch(
+          `/api/judicial/casos/${encodeURIComponent(caseId)}`,
+          {
+            cache: "no-store",
+          },
+        )
+
+        const data = await response.json()
+
+        if (!response.ok || !data?.ok || !data?.item) {
+          throw new Error(data?.error || "Processo judicial não encontrado.")
+        }
+
+        if (!active) return
+
+        setCaseItem(data.item as JudicialCase)
+      } catch (error) {
+        if (!active) return
+
+        console.error("[JudicialCaseDetail] erro ao carregar caso:", error)
+        setCaseItem(null)
+        setCaseError(
+          error instanceof Error
+            ? error.message
+            : "Erro ao carregar processo judicial.",
+        )
+      } finally {
+        if (active) {
+          setLoadingCase(false)
+        }
+      }
+    }
+
+    if (caseId) {
+      loadCase()
+    }
+
+    return () => {
+      active = false
+    }
+  }, [caseId])
+
+  if (loadingCase) {
+    return (
+      <div className="rounded-xl border border-dashed border-border p-12 text-center text-muted-foreground">
+        Carregando processo judicial...
+      </div>
+    )
+  }
+
+  if (!caseItem) {
+    return (
+      <div className="rounded-xl border border-dashed border-border p-12 text-center text-muted-foreground">
+        {caseError || "Processo judicial não encontrado."}
+      </div>
+    )
+  }
+
+  return <JudicialCaseDetailContent caseId={caseId} caseItem={caseItem} />
+}
+
+function JudicialCaseDetailContent({
+  caseId,
+  caseItem,
+}: {
+  caseId: string
+  caseItem: JudicialCase
+}) {
   const { user } = useAuth()
   const judicial = useJudicial()
-  const caseItem = judicial.getCaseById(caseId)
 
   const editorRef = useRef<HTMLDivElement | null>(null)
   const lastTrackedTabRef = useRef<string>("")
@@ -288,6 +393,12 @@ export function JudicialCaseDetail({ caseId }: { caseId: string }) {
   const [uploadingMovement, setUploadingMovement] = useState(false)
 
   const [procedureSearch, setProcedureSearch] = useState("")
+  const [procedureOptions, setProcedureOptions] = useState<SigtapOption[]>([])
+  const [loadingProcedures, setLoadingProcedures] = useState(false)
+  const [specialtyOptions, setSpecialtyOptions] = useState<SpecialtyOption[]>([])
+  const [subSpecialtyOptions, setSubSpecialtyOptions] = useState<SubSpecialtyOption[]>([])
+  const [loadingSpecialties, setLoadingSpecialties] = useState(false)
+  const [loadingSubSpecialties, setLoadingSubSpecialties] = useState(false)
   const [cidSearch, setCidSearch] = useState("")
   const [selectedProcedure, setSelectedProcedure] = useState("")
   const [selectedProcedureSpecialty, setSelectedProcedureSpecialty] = useState("")
@@ -325,9 +436,18 @@ export function JudicialCaseDetail({ caseId }: { caseId: string }) {
   const [uploadingManifest, setUploadingManifest] = useState(false)
 
   const [attachmentsPage, setAttachmentsPage] = useState(1)
+  const [latestMovementsPage, setLatestMovementsPage] = useState(1)
   const attachmentsPageSize = 6
   const [activeTab, setActiveTab] = useState("monitoramento")
   const [finalizeOpen, setFinalizeOpen] = useState(false)
+  const [processStatusOpen, setProcessStatusOpen] = useState(false)
+  const [pgeNetOpen, setPgeNetOpen] = useState(false)
+  const [fichaModalOpen, setFichaModalOpen] = useState(false)
+  const [procedureCidModalOpen, setProcedureCidModalOpen] = useState(false)
+  const [notificationModalOpen, setNotificationModalOpen] = useState(false)
+  const [historyModalOpen, setHistoryModalOpen] = useState(false)
+  const [auditModalOpen, setAuditModalOpen] = useState(false)
+  const [municipalityContactsOpen, setMunicipalityContactsOpen] = useState(false)
   const [finalizeStatus, setFinalizeStatus] =
     useState<keyof typeof FINALIZATION_STATUS_LABELS>("resolvido")
   const [finalizePendingLocation, setFinalizePendingLocation] = useState<
@@ -337,28 +457,22 @@ export function JudicialCaseDetail({ caseId }: { caseId: string }) {
   const [processStatus, setProcessStatus] =
     useState<keyof typeof PROCESS_STATUS_LABELS>("em_andamento")
   const [processStatusReason, setProcessStatusReason] = useState("")
-  const [processDeadlineType, setProcessDeadlineType] = useState<"dias" | "horas">(
-    "dias",
-  )
-  const [processDeadlineValue, setProcessDeadlineValue] = useState("")
+  const [processPrazoInicio, setProcessPrazoInicio] = useState("")
+  const [processPrazoDescricao, setProcessPrazoDescricao] = useState("")
   const [newProcessNumber, setNewProcessNumber] = useState("")
+  const [newPgeNetNumber, setNewPgeNetNumber] = useState("")
+  const [finalizeValorEstado, setFinalizeValorEstado] = useState("")
+  const [finalizeValorMunicipio, setFinalizeValorMunicipio] = useState("")
 
   useEffect(() => {
-    if (typeof window === "undefined") return
-    const storedTab = window.sessionStorage.getItem(`judicial-tab:${caseId}`)
-    if (storedTab) {
-      setActiveTab(storedTab)
-    }
+    setActiveTab("monitoramento")
     lastTrackedTabRef.current = ""
+
+    if (typeof window !== "undefined") {
+      window.sessionStorage.removeItem(`judicial-tab:${caseId}`)
+    }
   }, [caseId])
 
-  if (!caseItem) {
-    return (
-      <div className="rounded-xl border border-dashed border-border p-12 text-center text-muted-foreground">
-        Processo judicial não encontrado.
-      </div>
-    )
-  }
 
   function handleTabChange(nextTab: string) {
     setActiveTab(nextTab)
@@ -385,46 +499,142 @@ export function JudicialCaseDetail({ caseId }: { caseId: string }) {
     caseItem.fichas[caseItem.fichas.length - 1]
   const isJudicialMarked = activeFicha?.hasJudicialMark ?? true
 
-  const procedureOptions = useMemo(
-    () =>
-      judicial.procedureCatalog.filter(
-        (item) =>
-          !procedureSearch ||
-          `${item.sigtapCode} ${item.description} ${item.specialty || ""} ${
-            item.subSpecialty || ""
-          }`
-            .toLowerCase()
-            .includes(procedureSearch.toLowerCase()),
-      ),
-    [judicial.procedureCatalog, procedureSearch],
-  )
+  useEffect(() => {
+    let active = true
+    const controller = new AbortController()
 
-  const procedureSpecialtyOptions = useMemo(
-    () =>
-      [
-        ...new Set(
-          judicial.procedureCatalog.map((item) => item.specialty).filter(Boolean),
-        ),
-      ],
-    [judicial.procedureCatalog],
-  )
+    async function loadSigtap() {
+      try {
+        setLoadingProcedures(true)
+        const response = await fetch(
+          `/api/judicial/sigtap?q=${encodeURIComponent(procedureSearch)}&limit=50`,
+          {
+            cache: "no-store",
+            signal: controller.signal,
+          },
+        )
 
-  const procedureSubSpecialtyOptions = useMemo(
-    () =>
-      [
-        ...new Set(
-          judicial.procedureCatalog
-            .filter(
-              (item) =>
-                !selectedProcedureSpecialty ||
-                item.specialty === selectedProcedureSpecialty,
-            )
-            .map((item) => item.subSpecialty)
-            .filter(Boolean),
-        ),
-      ],
-    [judicial.procedureCatalog, selectedProcedureSpecialty],
-  )
+        const data = await response.json()
+
+        if (!response.ok || !data?.ok) {
+          throw new Error(data?.error || "Erro ao pesquisar SIGTAP.")
+        }
+
+        if (!active) return
+
+        setProcedureOptions((data.items || []) as SigtapOption[])
+      } catch (error) {
+        if (!active || controller.signal.aborted) return
+        console.error("[JudicialCaseDetail] erro ao pesquisar SIGTAP:", error)
+        setProcedureOptions([])
+      } finally {
+        if (active) setLoadingProcedures(false)
+      }
+    }
+
+    const timer = window.setTimeout(loadSigtap, 250)
+
+    return () => {
+      active = false
+      controller.abort()
+      window.clearTimeout(timer)
+    }
+  }, [procedureSearch])
+
+  useEffect(() => {
+    let active = true
+    const controller = new AbortController()
+
+    async function loadSpecialties() {
+      try {
+        setLoadingSpecialties(true)
+
+        const response = await fetch("/api/judicial/especialidades", {
+          cache: "no-store",
+          signal: controller.signal,
+        })
+
+        const data = await response.json()
+
+        if (!response.ok || !data?.ok) {
+          throw new Error(data?.error || "Erro ao carregar especialidades.")
+        }
+
+        if (!active) return
+
+        setSpecialtyOptions((data.items || []) as SpecialtyOption[])
+      } catch (error) {
+        if (!active || controller.signal.aborted) return
+        console.error("[JudicialCaseDetail] erro ao carregar especialidades:", error)
+        setSpecialtyOptions([])
+      } finally {
+        if (active) setLoadingSpecialties(false)
+      }
+    }
+
+    loadSpecialties()
+
+    return () => {
+      active = false
+      controller.abort()
+    }
+  }, [])
+
+  useEffect(() => {
+    let active = true
+    const controller = new AbortController()
+
+    if (!selectedProcedureSpecialty) {
+      setSubSpecialtyOptions([])
+      setSelectedProcedureSubSpecialty("")
+      return () => {
+        active = false
+        controller.abort()
+      }
+    }
+
+    async function loadSubSpecialties() {
+      try {
+        setLoadingSubSpecialties(true)
+
+        const response = await fetch(
+          `/api/judicial/subespecialidades?especialidadeId=${encodeURIComponent(
+            selectedProcedureSpecialty,
+          )}`,
+          {
+            cache: "no-store",
+            signal: controller.signal,
+          },
+        )
+
+        const data = await response.json()
+
+        if (!response.ok || !data?.ok) {
+          throw new Error(data?.error || "Erro ao carregar subespecialidades.")
+        }
+
+        if (!active) return
+
+        setSubSpecialtyOptions((data.items || []) as SubSpecialtyOption[])
+      } catch (error) {
+        if (!active || controller.signal.aborted) return
+        console.error(
+          "[JudicialCaseDetail] erro ao carregar subespecialidades:",
+          error,
+        )
+        setSubSpecialtyOptions([])
+      } finally {
+        if (active) setLoadingSubSpecialties(false)
+      }
+    }
+
+    loadSubSpecialties()
+
+    return () => {
+      active = false
+      controller.abort()
+    }
+  }, [selectedProcedureSpecialty])
 
   const cidOptions = useMemo(
     () =>
@@ -461,11 +671,30 @@ export function JudicialCaseDetail({ caseId }: { caseId: string }) {
     ? caseItem.processStatusHistory[caseItem.processStatusHistory.length - 1]
     : undefined
 
+  const currentFinalizationLabel = caseItem.finalization
+    ? FINALIZATION_STATUS_LABELS[caseItem.finalization.status]
+    : "Pendente"
+
+  const currentProcessStatusLabel = latestProcessStatus
+    ? PROCESS_STATUS_LABELS[latestProcessStatus.status]
+    : "Em andamento"
+
   const processNumbers = caseItem.processNumbers?.length
     ? caseItem.processNumbers
     : caseItem.processNumber
       ? [caseItem.processNumber]
       : []
+
+  const pgeNetNumbers = caseItem.registration?.pgeNetNumber
+    ? caseItem.registration.pgeNetNumber
+        .split("|")
+        .map((item) => item.trim())
+        .filter(Boolean)
+    : []
+
+  const activeProcedures = caseItem.procedures.filter(
+    (item) => item.active !== false,
+  )
 
   const pendingSelectedFiles = [
     ...fileListToArray(selectedMovementFiles).map((file) => ({
@@ -640,6 +869,24 @@ export function JudicialCaseDetail({ caseId }: { caseId: string }) {
     return items.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
   }, [caseItem, judicial.auditTrail])
 
+  const latestMovementItems = useMemo(
+    () =>
+      historyItems.filter((item) =>
+        ["movimentacao", "manifestacao", "ficha"].includes(item.category),
+      ),
+    [historyItems],
+  )
+
+  const latestMovementsPageSize = 5
+  const totalLatestMovementsPages = Math.max(
+    1,
+    Math.ceil(latestMovementItems.length / latestMovementsPageSize),
+  )
+  const paginatedLatestMovements = latestMovementItems.slice(
+    (latestMovementsPage - 1) * latestMovementsPageSize,
+    latestMovementsPage * latestMovementsPageSize,
+  )
+
   useEffect(() => {
     if (contacts && !manifestRecipients) {
       setManifestRecipients(contacts.emails.join(", "))
@@ -662,7 +909,7 @@ export function JudicialCaseDetail({ caseId }: { caseId: string }) {
 
     if (!files || files.length === 0) {
       toast.error("Selecione ao menos um arquivo.")
-      return
+      return [] as UploadedFileMeta[]
     }
 
     try {
@@ -681,11 +928,14 @@ export function JudicialCaseDetail({ caseId }: { caseId: string }) {
         throw new Error(data?.error || "Falha no upload.")
       }
 
-      onSuccess(data.files as UploadedFileMeta[])
+      const uploadedFiles = data.files as UploadedFileMeta[]
+      onSuccess(uploadedFiles)
       toast.success("Arquivo(s) enviado(s).")
+      return uploadedFiles
     } catch (error) {
       console.error(error)
       toast.error("Erro ao enviar arquivo(s).")
+      return [] as UploadedFileMeta[]
     } finally {
       setUploading(false)
     }
@@ -771,8 +1021,9 @@ export function JudicialCaseDetail({ caseId }: { caseId: string }) {
     setUploadedFichaFiles([])
   }
 
-  function handleSaveMovement() {
+  async function handleSaveMovement() {
     if (!user) return
+
     if (!description.trim()) {
       toast.error("Descreva a movimentação.")
       return
@@ -783,9 +1034,16 @@ export function JudicialCaseDetail({ caseId }: { caseId: string }) {
       return
     }
 
-    if (["sequestro", "bloqueio"].includes(movementType) && (!stateAmount || !municipalityAmount)) {
-      toast.error("Informe os valores do estado e do município.")
-      return
+    if (["sequestro", "bloqueio"].includes(movementType)) {
+      if (!stateAmount.trim()) {
+        toast.error("Informe o valor do Estado.")
+        return
+      }
+
+      if (!municipalityAmount.trim()) {
+        toast.error("Informe o valor do Município.")
+        return
+      }
     }
 
     if (movementType === "encerramento_processo" && !closeReason) {
@@ -793,69 +1051,206 @@ export function JudicialCaseDetail({ caseId }: { caseId: string }) {
       return
     }
 
+    let movementFilesToAttach = [...uploadedMovementFiles]
+
+    if (selectedMovementFiles && selectedMovementFiles.length > 0) {
+      const uploadedBeforeSave = await uploadFiles({
+        files: selectedMovementFiles,
+        category: "movimentacao",
+        setUploading: setUploadingMovement,
+        onSuccess: (files) => {
+          setUploadedMovementFiles((prev) => [...prev, ...files])
+          setAttachmentNames((prev) =>
+            mergeCommaNames(
+              prev,
+              files.map((file) => file.name),
+            ),
+          )
+          setSelectedMovementFiles(null)
+        },
+      })
+
+      if (uploadedBeforeSave.length === 0) {
+        toast.error("Não foi possível enviar o(s) arquivo(s) da movimentação.")
+        return
+      }
+
+      movementFilesToAttach = [...movementFilesToAttach, ...uploadedBeforeSave]
+    }
+
     const attachmentPayload =
-      uploadedMovementFiles.length > 0
-        ? uploadedMovementFiles
+      movementFilesToAttach.length > 0
+        ? movementFilesToAttach
         : splitCommaNames(attachmentNames)
 
-    if (movementType === "envio_agendamento_demanda") {
-      judicial.sendToScheduling(caseItem.id, description.trim(), user)
-      toast.success("Movimentação salva e encaminhada ao Agendamento da Demanda.")
+    const movementDescription =
+      movementType === "encerramento_processo"
+        ? `${closeReason}: ${description.trim()}`
+        : description.trim()
+
+    try {
+      const response = await fetch(
+        `/api/judicial/casos/${encodeURIComponent(caseItem.id)}/movimentacoes`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            type: movementType,
+            description: movementDescription,
+            appointmentDate: appointmentDate || undefined,
+            responseRequestedAt: responseRequestedAt || undefined,
+            stateAmount: stateAmount || undefined,
+            municipalityAmount: municipalityAmount || undefined,
+            attachments: attachmentPayload,
+            user,
+          }),
+        },
+      )
+
+      const data = await response.json()
+
+      if (!response.ok || !data?.ok) {
+        throw new Error(data?.error || "Erro ao registrar movimentação judicial.")
+      }
+
+      toast.success(
+        movementType === "envio_agendamento_demanda"
+          ? "Movimentação salva e encaminhada ao Agendamento da Demanda."
+          : movementType === "encerramento_processo"
+            ? "Movimentação salva e processo marcado para encerramento."
+            : "Movimentação registrada no banco.",
+      )
+
       resetMovementForm()
-      return
+      window.location.reload()
+    } catch (error) {
+      console.error("[JudicialCaseDetail] erro ao salvar movimentação:", error)
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Erro ao registrar movimentação judicial.",
+      )
     }
-
-    if (movementType === "encerramento_processo") {
-      judicial.closeCase(caseItem.id, `${closeReason}: ${description.trim()}`, user)
-      toast.success("Processo encerrado.")
-      resetMovementForm()
-      return
-    }
-
-    judicial.registerMovement(caseItem.id, {
-      type: movementType,
-      description: description.trim(),
-      user,
-      appointmentDate: appointmentDate || undefined,
-      responseRequestedAt: responseRequestedAt || undefined,
-      stateAmount: stateAmount
-        ? Number(stateAmount.replace(",", "."))
-        : undefined,
-      municipalityAmount: municipalityAmount
-        ? Number(municipalityAmount.replace(",", "."))
-        : undefined,
-      attachments: attachmentPayload,
-    })
-
-    toast.success("Movimentação registrada.")
-    resetMovementForm()
   }
 
-  function handleAddProcedure() {
+  async function handleAddProcedure() {
     if (!user) return
-    const item = procedureOptions.find(
-      (option) => option.sigtapCode === selectedProcedure,
+
+    const item = procedureOptions.find((option) => option.id === selectedProcedure)
+    const selectedSpecialty = specialtyOptions.find(
+      (option) => option.id === selectedProcedureSpecialty,
     )
+    const selectedSubSpecialty = subSpecialtyOptions.find(
+      (option) => option.id === selectedProcedureSubSpecialty,
+    )
+
     if (!item) {
-      toast.error("Selecione um procedimento.")
+      toast.error("Selecione um procedimento da tabela SIGTAP.")
       return
     }
-    if (!selectedProcedureSpecialty.trim()) {
-      toast.error("Selecione ao menos a especialidade do procedimento.")
+
+    if (!selectedSpecialty) {
+      toast.error("Selecione a especialidade do procedimento.")
       return
     }
-    judicial.addProcedure(caseItem.id, {
-      sigtapCode: item.sigtapCode,
-      description: item.description,
-      specialty: selectedProcedureSpecialty,
-      subSpecialty: selectedProcedureSubSpecialty || undefined,
-      user,
-    })
-    setSelectedProcedure("")
-    setProcedureSearch("")
-    setSelectedProcedureSpecialty("")
-    setSelectedProcedureSubSpecialty("")
-    toast.success("Procedimento adicionado.")
+
+    try {
+      const response = await fetch(
+        `/api/judicial/casos/${encodeURIComponent(caseItem.id)}/procedimentos`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            sigtapId: item.id,
+            sigtapCode: item.sigtapCode,
+            specialty: selectedSpecialty.nome,
+            subSpecialty: selectedSubSpecialty?.nome || undefined,
+            user,
+          }),
+        },
+      )
+
+      const data = await response.json()
+
+      if (!response.ok || !data?.ok) {
+        throw new Error(data?.error || "Erro ao adicionar procedimento judicial.")
+      }
+
+      toast.success("Procedimento SIGTAP adicionado e salvo no banco.")
+      setSelectedProcedure("")
+      setProcedureSearch("")
+      setSelectedProcedureSpecialty("")
+      setSelectedProcedureSubSpecialty("")
+
+      window.location.reload()
+    } catch (error) {
+      console.error("[JudicialCaseDetail] erro ao adicionar procedimento:", error)
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Erro ao adicionar procedimento judicial.",
+      )
+    }
+  }
+
+  async function handleRemoveProcedure(procedureId: string) {
+    if (!user) return
+
+    const item = caseItem.procedures.find((procedure) => procedure.id === procedureId)
+
+    if (!item) {
+      toast.error("Procedimento não encontrado.")
+      return
+    }
+
+    const reason = window.prompt(
+      `Informe o motivo para apagar/inativar o procedimento ${item.sigtapCode}:`,
+      "",
+    )
+
+    if (reason === null) return
+
+    const confirmed = window.confirm(
+      `Confirma apagar/inativar o procedimento ${item.sigtapCode} - ${item.description}?`,
+    )
+
+    if (!confirmed) return
+
+    try {
+      const response = await fetch(
+        `/api/judicial/casos/${encodeURIComponent(caseItem.id)}/procedimentos/${encodeURIComponent(procedureId)}`,
+        {
+          method: "DELETE",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            reason: reason.trim() || undefined,
+            user,
+          }),
+        },
+      )
+
+      const data = await response.json()
+
+      if (!response.ok || !data?.ok) {
+        throw new Error(data?.error || "Erro ao apagar procedimento judicial.")
+      }
+
+      toast.success("Procedimento apagado/inativado e registrado em auditoria.")
+      window.location.reload()
+    } catch (error) {
+      console.error("[JudicialCaseDetail] erro ao apagar procedimento:", error)
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Erro ao apagar procedimento judicial.",
+      )
+    }
   }
 
   function handleAddCid() {
@@ -1023,61 +1418,250 @@ export function JudicialCaseDetail({ caseId }: { caseId: string }) {
     }
   }
 
-  function handleFinalizeDemand() {
+  async function handleFinalizeDemand() {
     if (!user) return
-    if (["devolvida", "pendente"].includes(finalizeStatus) && !finalizeReason.trim()) {
-      toast.error(
-        finalizeStatus === "devolvida"
-          ? "Justifique a devolução."
-          : "Descreva a pendência.",
+
+    if (finalizeStatus === "pendente") {
+      if (!finalizePendingLocation) {
+        toast.error("Informe onde está pendente.")
+        return
+      }
+
+      if (!finalizeReason.trim()) {
+        toast.error("Justifique a pendência.")
+        return
+      }
+    }
+
+    if ((finalizeStatus === "resolvido" || finalizeStatus === "cumprido") && !finalizeReason.trim()) {
+      toast.error(finalizeStatus === "cumprido" ? "Justifique o cumprimento." : "Justifique a resolução.")
+      return
+    }
+
+    if ((finalizeStatus === "obito" || finalizeStatus === "arquivado") && !finalizeReason.trim()) {
+      toast.error(finalizeStatus === "obito" ? "Justifique o óbito." : "Justifique o arquivamento.")
+      return
+    }
+
+    if (["bloqueio", "sequestro"].includes(finalizeStatus)) {
+      if (!finalizeValorEstado.trim()) {
+        toast.error(
+          finalizeStatus === "bloqueio"
+            ? "Informe o valor do bloqueio para o Estado."
+            : "Informe o valor do sequestro para o Estado.",
+        )
+        return
+      }
+
+      if (!finalizeValorMunicipio.trim()) {
+        toast.error(
+          finalizeStatus === "bloqueio"
+            ? "Informe o valor do bloqueio para o Município."
+            : "Informe o valor do sequestro para o Município.",
+        )
+        return
+      }
+    }
+
+    try {
+      const response = await fetch(
+        `/api/judicial/casos/${encodeURIComponent(caseItem.id)}/finalizacao`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            status: finalizeStatus,
+            pendingLocation:
+              finalizeStatus === "pendente" ? finalizePendingLocation : undefined,
+            reason: finalizeReason.trim() || undefined,
+            valorEstado:
+              ["bloqueio", "sequestro"].includes(finalizeStatus)
+                ? finalizeValorEstado
+                : undefined,
+            valorMunicipio:
+              ["bloqueio", "sequestro"].includes(finalizeStatus)
+                ? finalizeValorMunicipio
+                : undefined,
+            user,
+          }),
+        },
       )
-      return
+
+      const data = await response.json()
+
+      if (!response.ok || !data?.ok) {
+        throw new Error(data?.error || "Erro ao finalizar demanda judicial.")
+      }
+
+      toast.success("Finalização salva no banco.")
+      setFinalizeOpen(false)
+      setFinalizeReason("")
+      setFinalizeValorEstado("")
+      setFinalizeValorMunicipio("")
+
+      window.location.reload()
+    } catch (error) {
+      console.error("[JudicialCaseDetail] erro ao finalizar demanda:", error)
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Erro ao finalizar demanda judicial.",
+      )
     }
-    judicial.finalizeDemand(caseItem.id, {
-      status: finalizeStatus,
-      pendingLocation:
-        finalizeStatus === "pendente" ? finalizePendingLocation : undefined,
-      reason: finalizeReason.trim() || undefined,
-      user,
-    })
-    toast.success("Demanda finalizada.")
-    setFinalizeOpen(false)
-    setFinalizeReason("")
   }
 
-  function handleRegisterProcessStatus() {
+  async function handleRegisterProcessStatus() {
     if (!user) return
-    if (processStatus === "decisao_judicial_prazo" && !processDeadlineValue) {
-      toast.error("Informe o prazo da decisão judicial.")
+
+    if (
+      (processStatus === "em_andamento" || processStatus === "descumprimento") &&
+      !processStatusReason.trim()
+    ) {
+      toast.error("Justifique o status do processo judicial.")
       return
     }
-    judicial.registerProcessStatus(caseItem.id, {
-      status: processStatus,
-      reason: processStatusReason.trim() || undefined,
-      deadlineType:
-        processStatus === "decisao_judicial_prazo"
-          ? processDeadlineType
-          : undefined,
-      deadlineValue:
-        processStatus === "decisao_judicial_prazo" && processDeadlineValue
-          ? Number(processDeadlineValue)
-          : undefined,
-      user,
-    })
-    toast.success("Status do processo registrado.")
-    setProcessStatusReason("")
-    setProcessDeadlineValue("")
+
+    if (processStatus === "decisao_judicial_prazo") {
+      if (!processPrazoInicio) {
+        toast.error("Informe a data de início do prazo judicial.")
+        return
+      }
+
+      if (!processPrazoDescricao.trim()) {
+        toast.error("Informe o prazo. Exemplo: 5 dias, 10 dias, 1 mês.")
+        return
+      }
+    }
+
+    try {
+      const response = await fetch(
+        `/api/judicial/casos/${encodeURIComponent(caseItem.id)}/status-processo`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            status: processStatus,
+            reason: processStatusReason.trim() || undefined,
+            prazoInicio: processPrazoInicio || undefined,
+            prazoDescricao: processPrazoDescricao.trim() || undefined,
+            user,
+          }),
+        },
+      )
+
+      const data = await response.json()
+
+      if (!response.ok || !data?.ok) {
+        throw new Error(data?.error || "Erro ao registrar status do processo judicial.")
+      }
+
+      toast.success("Status do processo judicial salvo no banco.")
+      setProcessStatusReason("")
+      setProcessPrazoInicio("")
+      setProcessPrazoDescricao("")
+      setProcessStatusOpen(false)
+
+      window.location.reload()
+    } catch (error) {
+      console.error("[JudicialCaseDetail] erro ao registrar status:", error)
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Erro ao registrar status do processo judicial.",
+      )
+    }
   }
 
-  function handleAddProcessNumber() {
+  async function handleAddPgeNetNumber() {
     if (!user) return
+
+    if (!newPgeNetNumber.trim()) {
+      toast.error("Informe o número do PGE.net.")
+      return
+    }
+
+    try {
+      const response = await fetch(
+        `/api/judicial/casos/${encodeURIComponent(caseItem.id)}/processos`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            tipo: "PGE_NET",
+            numero: newPgeNetNumber.trim(),
+            user,
+          }),
+        },
+      )
+
+      const data = await response.json()
+
+      if (!response.ok || !data?.ok) {
+        throw new Error(data?.error || "Erro ao registrar PGE.net.")
+      }
+
+      toast.success("PGE.net registrado no banco.")
+      setNewPgeNetNumber("")
+      setPgeNetOpen(false)
+
+      window.location.reload()
+    } catch (error) {
+      console.error("[JudicialCaseDetail] erro ao registrar PGE.net:", error)
+      toast.error(
+        error instanceof Error ? error.message : "Erro ao registrar PGE.net.",
+      )
+    }
+  }
+
+  async function handleAddProcessNumber() {
+    if (!user) return
+
     if (!newProcessNumber.trim()) {
-      toast.error("Informe o número do processo.")
+      toast.error("Informe o número do processo vinculado.")
       return
     }
-    judicial.addProcessNumber(caseItem.id, newProcessNumber, user)
-    toast.success("Novo processo vinculado ao PGE.net.")
-    setNewProcessNumber("")
+
+    try {
+      const response = await fetch(
+        `/api/judicial/casos/${encodeURIComponent(caseItem.id)}/processos`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            tipo: "PROCESSO",
+            numero: newProcessNumber.trim(),
+            user,
+          }),
+        },
+      )
+
+      const data = await response.json()
+
+      if (!response.ok || !data?.ok) {
+        throw new Error(data?.error || "Erro ao registrar processo vinculado.")
+      }
+
+      toast.success("Processo vinculado registrado no banco.")
+      setNewProcessNumber("")
+      setPgeNetOpen(false)
+
+      window.location.reload()
+    } catch (error) {
+      console.error("[JudicialCaseDetail] erro ao registrar processo vinculado:", error)
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Erro ao registrar processo vinculado.",
+      )
+    }
   }
 
   function handleProcedureStatus(itemId: string) {
@@ -1109,11 +1693,205 @@ export function JudicialCaseDetail({ caseId }: { caseId: string }) {
     toast.success("Status do procedimento atualizado.")
   }
 
+  function renderProcedureCidContent() {
+    return (
+      <div className="space-y-4">
+        <Card className="border-border">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Procedimentos</CardTitle>
+            <CardDescription>
+              Pesquise procedimentos diretamente na tabela SIGTAP do banco.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Input
+              value={procedureSearch}
+              onChange={(e) => setProcedureSearch(e.target.value)}
+              placeholder="Pesquisar na tabela SIGTAP por código ou descrição"
+            />
+
+            <div className="grid gap-3 md:grid-cols-3">
+              <div>
+                <Label className="mb-1 block text-xs">Procedimento</Label>
+                <select
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  value={selectedProcedure}
+                  onChange={(e) => setSelectedProcedure(e.target.value)}
+                >
+                  <option value="">
+                    {loadingProcedures ? "Carregando..." : "Selecione um procedimento"}
+                  </option>
+                  {procedureOptions.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.sigtapCode} - {item.description}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <Label className="mb-1 block text-xs">Especialidade</Label>
+                <select
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  value={selectedProcedureSpecialty}
+                  onChange={(e) => {
+                    setSelectedProcedureSpecialty(e.target.value)
+                    setSelectedProcedureSubSpecialty("")
+                  }}
+                >
+                  <option value="">
+                    {loadingSpecialties ? "Carregando..." : "Selecione uma especialidade"}
+                  </option>
+                  {specialtyOptions.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.nome}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <Label className="mb-1 block text-xs">Subespecialidade</Label>
+                <select
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  value={selectedProcedureSubSpecialty}
+                  disabled={!selectedProcedureSpecialty || loadingSubSpecialties}
+                  onChange={(e) => setSelectedProcedureSubSpecialty(e.target.value)}
+                >
+                  <option value="">
+                    {!selectedProcedureSpecialty
+                      ? "Selecione a especialidade primeiro"
+                      : loadingSubSpecialties
+                        ? "Carregando..."
+                        : "Selecione uma subespecialidade"}
+                  </option>
+                  {subSpecialtyOptions.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.nome}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <Button type="button" onClick={handleAddProcedure}>
+              Adicionar procedimento
+            </Button>
+
+            <div className="space-y-2">
+              {caseItem.procedures.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  Nenhum procedimento registrado.
+                </p>
+              ) : (
+                caseItem.procedures.map((item) => (
+                  <div
+                    key={item.id}
+                    className="flex flex-col gap-3 rounded-xl border border-border p-3 md:flex-row md:items-center md:justify-between"
+                  >
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-sm font-medium">
+                          {item.sigtapCode} - {item.description}
+                        </p>
+                        <Badge variant={item.active === false ? "outline" : "secondary"}>
+                          {item.active === false ? "Inativo" : "Ativo"}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {item.createdByName}
+                        {item.specialty ? ` • ${item.specialty}` : ""}
+                        {item.subSpecialty ? ` • ${item.subSpecialty}` : ""}
+                        {(item as any).updatedAt
+                          ? ` • ${new Date((item as any).updatedAt).toLocaleString("pt-BR")}`
+                          : item.statusUpdatedAt
+                            ? ` • ${new Date(item.statusUpdatedAt).toLocaleString("pt-BR")}`
+                            : ""}
+                      </p>
+                      {(item as any).inactiveReason && (
+                        <p className="text-xs text-muted-foreground">
+                          Motivo da inativação: {(item as any).inactiveReason}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      {item.active !== false && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="bg-transparent"
+                          onClick={() => handleRemoveProcedure(item.id)}
+                        >
+                          Apagar
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-border">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">CID</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Input
+              value={cidSearch}
+              onChange={(e) => setCidSearch(e.target.value)}
+              placeholder="Pesquisar CID por código ou descrição"
+            />
+            <select
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              value={selectedCid}
+              onChange={(e) => setSelectedCid(e.target.value)}
+            >
+              <option value="">Selecione um CID</option>
+              {cidOptions.map((item) => (
+                <option key={item.code} value={item.code}>
+                  {item.code} - {item.description}
+                </option>
+              ))}
+            </select>
+            <Button onClick={handleAddCid}>Adicionar CID</Button>
+            <div className="space-y-2">
+              {caseItem.cids.map((item) => (
+                <div
+                  key={item.id}
+                  className="flex flex-col gap-3 rounded-xl border border-border p-3 md:flex-row md:items-center md:justify-between"
+                >
+                  <div>
+                    <p className="text-sm font-medium">
+                      {item.code} - {item.description}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {item.active === false ? "Inativo" : "Ativo"} • {item.createdByName}
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    className="bg-transparent"
+                    onClick={() => user && judicial.toggleCid(caseItem.id, item.id, user)}
+                  >
+                    {item.active === false ? "Ativar" : "Inativar"}
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
   const printDate = new Date().toLocaleString("pt-BR")
   const printedBy = user?.nome || user?.name || "Usuário não identificado"
 
   return (
-    <div className="flex min-h-[760px] flex-col gap-5 print:min-h-0">
+    <div className="flex min-h-[760px] flex-col gap-3 print:min-h-0">
       <div className="hidden print:block">
         <section className="space-y-5 px-2 py-2 text-black">
           <header className="border-b-2 border-black pb-4">
@@ -1219,11 +1997,61 @@ export function JudicialCaseDetail({ caseId }: { caseId: string }) {
         </section>
       </div>
 
+      <div className="flex items-center justify-between print:hidden">
+        <Button
+          variant="outline"
+          className="bg-transparent"
+          onClick={() => {
+            if (user) {
+              judicial.trackUiAction("voltar_processo_judicial", user, caseItem.id)
+            }
+            window.history.back()
+          }}
+        >
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Voltar
+        </Button>
+
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button
+            variant="outline"
+            className="bg-transparent"
+            onClick={() => {
+              if (user) {
+                judicial.trackUiAction("imprimir_processo_judicial", user, caseItem.id)
+              }
+              window.print()
+            }}
+          >
+            <Printer className="mr-2 h-4 w-4" />
+            Imprimir
+          </Button>
+
+          <Button
+            variant="outline"
+            className="bg-transparent"
+            onClick={() => setHistoryModalOpen(true)}
+          >
+            <Eye className="mr-2 h-4 w-4" />
+            Ver histórico
+          </Button>
+
+          <Button
+            variant="outline"
+            className="bg-transparent"
+            onClick={() => setAuditModalOpen(true)}
+          >
+            <ShieldAlert className="mr-2 h-4 w-4" />
+            Auditoria
+          </Button>
+        </div>
+      </div>
+
       <Card className="border-border shadow-sm print:hidden">
-        <CardContent className="p-5">
-          <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
-            <div className="space-y-4">
-              <div className="flex flex-wrap items-center gap-2">
+        <CardContent className="p-3">
+          <div className="flex flex-col gap-2">
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-1.5">
                 <Badge variant={caseItem.active ? "secondary" : "outline"}>
                   {caseItem.active ? "Ativo" : "Encerrado"}
                 </Badge>
@@ -1255,30 +2083,95 @@ export function JudicialCaseDetail({ caseId }: { caseId: string }) {
               </div>
 
               <div>
-                <h1 className="text-3xl font-bold tracking-tight">
+                <h1 className="text-2xl font-bold tracking-tight leading-tight">
                   {caseItem.patientName}
                 </h1>
-                <div className="mt-2 space-y-1 text-sm text-muted-foreground">
-                  <p>
-                    <span className="font-semibold text-foreground">
-                      Protocolo:
-                    </span>{" "}
-                    {caseItem.originProtocol}
-                  </p>
-                  <p>
-                    CPF {caseItem.cpf} | CNS: {caseItem.patientId || "Não informado"} |
-                    Município: {caseItem.municipalityName}
-                  </p>
-                  <p>
-                    <span className="font-semibold text-foreground">PGE.net:</span>{" "}
-                    {caseItem.registration?.pgeNetNumber || "Não informado"}
-                  </p>
-                  <p>
-                    <span className="font-semibold text-foreground">
-                      Processos vinculados:
-                    </span>{" "}
-                    {processNumbers.join(" | ") || "Não informado"}
-                  </p>
+
+                <div className="mt-1 space-y-0.5 text-sm leading-tight text-muted-foreground">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span>
+                      <span className="font-semibold text-foreground">
+                        Protocolo:
+                      </span>{" "}
+                      {caseItem.originProtocol}
+                    </span>
+                    <Badge variant="secondary">{currentFinalizationLabel}</Badge>
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      className="h-6 w-6"
+                      title="Finalizar demanda"
+                      onClick={() => setFinalizeOpen(true)}
+                    >
+                      <Edit3 className="h-3 w-3" />
+                    </Button>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span>
+                      CPF {caseItem.cpf} | CNS: {caseItem.patientId || "Não informado"} |
+                      Município: {caseItem.municipalityName}
+                    </span>
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      className="h-6 w-6"
+                      title="Ver contatos do município"
+                      onClick={() => setMunicipalityContactsOpen(true)}
+                    >
+                      <Info className="h-3 w-3" />
+                    </Button>
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      className="h-6 w-6"
+                      title="Notificação/manifestação do município"
+                      onClick={() => setNotificationModalOpen(true)}
+                    >
+                      <Mail className="h-3 w-3" />
+                    </Button>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span>
+                      <span className="font-semibold text-foreground">PGE.net:</span>{" "}
+                      {pgeNetNumbers.join(" | ") || "Não informado"}
+                    </span>
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      className="h-6 w-6"
+                      title="Adicionar PGE.net"
+                      onClick={() => setPgeNetOpen(true)}
+                    >
+                      <Plus className="h-3 w-3" />
+                    </Button>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span>
+                      <span className="font-semibold text-foreground">
+                        Processos vinculados:
+                      </span>{" "}
+                      {processNumbers.join(" | ") || "Não informado"}
+                    </span>
+                    <Badge variant="outline">{currentProcessStatusLabel}</Badge>
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      className="h-6 w-6"
+                      title="Alterar status do processo judicial"
+                      onClick={() => setProcessStatusOpen(true)}
+                    >
+                      <Edit3 className="h-3 w-3" />
+                    </Button>
+                  </div>
+
                   <p>
                     Último monitoramento:{" "}
                     {caseItem.lastMonitoredAt
@@ -1286,76 +2179,115 @@ export function JudicialCaseDetail({ caseId }: { caseId: string }) {
                       : "Não informado"}
                   </p>
                 </div>
+		
+
+
               </div>
 
-              <div className="space-y-2 rounded-xl border border-border bg-muted/10 p-4">
-                <p className="text-sm text-muted-foreground">
-                  <span className="font-semibold text-foreground">
-                    Fichas ativas:
-                  </span>{" "}
-                  {caseItem.fichas
-                    .filter((item) => item.active !== false)
-                    .map((item) => `${item.system} - ${item.number || "Sem número"}`)
-                    .join(" | ") || "Nenhuma ficha ativa"}
-                  {" | "}
-                  <span className="font-semibold text-foreground">
-                    Marca judicial:
-                  </span>{" "}
-                  <span
-                    className={
-                      isJudicialMarked
-                        ? "font-semibold text-emerald-700"
-                        : "font-semibold text-red-700"
-                    }
-                  >
-                    {isJudicialMarked ? "Sim" : "Não"}
+              <div className="space-y-1 text-sm leading-tight text-muted-foreground">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span>
+                    <span className="font-semibold text-foreground">Fichas ativas:</span>{" "}
+                    {caseItem.fichas
+                      .filter((item) => item.active !== false)
+                      .map((item) => `${item.system} - ${item.number || "Sem número"}`)
+                      .join(" | ") || "Nenhuma ficha ativa"}
+                    {" | "}
+                    <span className="font-semibold text-foreground">Marca judicial:</span>{" "}
+                    <span
+                      className={
+                        isJudicialMarked
+                          ? "font-semibold text-emerald-700"
+                          : "font-semibold text-red-700"
+                      }
+                    >
+                      {isJudicialMarked ? "Sim" : "Não"}
+                    </span>
+                    {caseItem.finalization?.reason ? (
+                      <>
+                        {" | "}
+                        <span className="font-semibold text-foreground">
+                          Justificativa final:
+                        </span>{" "}
+                        {caseItem.finalization.reason}
+                      </>
+                    ) : null}
                   </span>
-                </p>
-                {caseItem.finalization?.reason && (
-                  <p className="text-xs text-muted-foreground">
-                    <span className="font-semibold text-foreground">
-                      Justificativa final:
-                    </span>{" "}
-                    {caseItem.finalization.reason}
-                  </p>
-                )}
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    className="h-6 w-6"
+                    title="Adicionar ficha CORE/SISREG"
+                    onClick={() => setFichaModalOpen(true)}
+                  >
+                    <Plus className="h-3 w-3" />
+                  </Button>
+                </div>
+
+                <div className="flex flex-wrap items-start gap-1.5">
+                  <span className="font-semibold text-foreground">Procedimentos SIGTAP:</span>
+                  <div className="space-y-0.5">
+                    {activeProcedures.length === 0 ? (
+                      <span>Nenhum procedimento registrado.</span>
+                    ) : (
+                      activeProcedures.map((item) => (
+                        <p key={item.id}>
+                          {item.sigtapCode} - {item.description}
+                          {item.specialty || item.subSpecialty
+                            ? ` | ${item.specialty || "Especialidade"} - ${
+                                item.subSpecialty || "Subespecialidade"
+                              }`
+                            : ""}
+                        </p>
+                      ))
+                    )}
+                  </div>
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    className="h-6 w-6"
+                    title="Adicionar procedimento SIGTAP"
+                    onClick={() => setProcedureCidModalOpen(true)}
+                  >
+                    <Plus className="h-3 w-3" />
+                  </Button>
+                </div>
+
+                <div className="flex flex-wrap items-start gap-1.5">
+                  <span className="font-semibold text-foreground">CID10:</span>
+                  <div className="space-y-0.5">
+                    {caseItem.cids.length === 0 ? (
+                      <span>Nenhum CID registrado.</span>
+                    ) : (
+                      caseItem.cids.map((item) => (
+                        <p key={item.id}>
+                          {item.code} - {item.description}
+                        </p>
+                      ))
+                    )}
+                  </div>
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    className="h-6 w-6"
+                    title="Adicionar CID10"
+                    onClick={() => setProcedureCidModalOpen(true)}
+                  >
+                    <Plus className="h-3 w-3" />
+                  </Button>
+                </div>
               </div>
             </div>
 
-            <div className="flex shrink-0 flex-wrap gap-2 xl:w-[360px] xl:justify-end">
-              <Button
-                variant="outline"
-                className="bg-transparent"
-                onClick={() => {
-                  if (user) {
-                    judicial.trackUiAction("voltar_processo_judicial", user, caseItem.id)
-                  }
-                  window.history.back()
-                }}
-              >
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                Voltar
-              </Button>
-              <Button
-                variant="outline"
-                className="bg-transparent"
-                onClick={() => {
-                  if (user) {
-                    judicial.trackUiAction("imprimir_processo_judicial", user, caseItem.id)
-                  }
-                  window.print()
-                }}
-              >
-                <Printer className="mr-2 h-4 w-4" />
-                Imprimir
-              </Button>
-            </div>
           </div>
         </CardContent>
       </Card>
 
-      <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-4 print:hidden">
-        <TabsList className="flex w-full flex-wrap justify-start gap-2 bg-transparent p-0">
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-3 print:hidden">
+        <TabsList className="hidden">
           <TabsTrigger value="monitoramento">Monitoramento</TabsTrigger>
           <TabsTrigger value="cadastros">Procedimento/CID</TabsTrigger>
           <TabsTrigger value="anexos">Anexos</TabsTrigger>
@@ -1368,206 +2300,7 @@ export function JudicialCaseDetail({ caseId }: { caseId: string }) {
         </TabsList>
 
         <TabsContent value="monitoramento" className="mt-0 min-h-[640px] space-y-4">
-          <Card className="border-border">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Finalizar demanda</CardTitle>
-              <CardDescription>
-                Posicione a demanda em encerrados com motivo e, quando necessário,
-                identifique onde está pendente.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex flex-wrap gap-2">
-                {(
-                  [
-                    "pendente",
-                    "resolvido",
-                    "bloqueio",
-                    "sequestro",
-                    "obito",
-                    "devolvida",
-                  ] as Array<keyof typeof FINALIZATION_STATUS_LABELS>
-                ).map((status) => (
-                  <Button
-                    key={status}
-                    type="button"
-                    variant={status === finalizeStatus ? "default" : "outline"}
-                    className={
-                      status === finalizeStatus
-                        ? "border-primary bg-primary text-primary-foreground"
-                        : "bg-background text-foreground hover:bg-muted"
-                    }
-                    onClick={() => {
-                      setFinalizeStatus(status)
-                      setFinalizeReason("")
-                      setFinalizeOpen(true)
-                    }}
-                  >
-                    {FINALIZATION_STATUS_LABELS[status]}
-                  </Button>
-                ))}
-              </div>
-              {caseItem.finalization && (
-                <div className="rounded-xl border border-border bg-muted/20 p-4 text-sm text-muted-foreground">
-                  <p>
-                    <span className="font-semibold text-foreground">
-                      Última finalização:
-                    </span>{" "}
-                    {FINALIZATION_STATUS_LABELS[caseItem.finalization.status]}
-                  </p>
-                  <p>
-                    {new Date(caseItem.finalization.createdAt).toLocaleString("pt-BR")} •{" "}
-                    {caseItem.finalization.createdByName}
-                  </p>
-                  {caseItem.finalization.pendingLocation && (
-                    <p>
-                      Pendente em: {caseItem.finalization.pendingLocation.toUpperCase()}
-                    </p>
-                  )}
-                  {caseItem.finalization.reason && (
-                    <p>Justificativa: {caseItem.finalization.reason}</p>
-                  )}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card className="border-border">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Status do processo judicial</CardTitle>
-              <CardDescription>
-                Cada registro vira uma nova linha do processo. Na listagem principal,
-                aparece apenas o último status lançado.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-3 lg:grid-cols-[1fr_1fr_0.8fr_0.8fr]">
-                <div>
-                  <Label className="mb-1 block text-xs">Status</Label>
-                  <select
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    value={processStatus}
-                    onChange={(e) =>
-                      setProcessStatus(
-                        e.target.value as keyof typeof PROCESS_STATUS_LABELS,
-                      )
-                    }
-                  >
-                    {Object.entries(PROCESS_STATUS_LABELS).map(([value, label]) => (
-                      <option key={value} value={value}>
-                        {label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <Label className="mb-1 block text-xs">
-                    Descrição / justificativa
-                  </Label>
-                  <Input
-                    value={processStatusReason}
-                    onChange={(e) => setProcessStatusReason(e.target.value)}
-                    placeholder="Ex.: 1º descumprimento registrado"
-                  />
-                </div>
-                {processStatus === "decisao_judicial_prazo" && (
-                  <>
-                    <div>
-                      <Label className="mb-1 block text-xs">Tipo de prazo</Label>
-                      <select
-                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                        value={processDeadlineType}
-                        onChange={(e) =>
-                          setProcessDeadlineType(e.target.value as "dias" | "horas")
-                        }
-                      >
-                        <option value="dias">Dias</option>
-                        <option value="horas">Horas</option>
-                      </select>
-                    </div>
-                    <div>
-                      <Label className="mb-1 block text-xs">Prazo</Label>
-                      <Input
-                        value={processDeadlineValue}
-                        onChange={(e) => setProcessDeadlineValue(e.target.value)}
-                        placeholder="Ex.: 72"
-                      />
-                    </div>
-                  </>
-                )}
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Button type="button" onClick={handleRegisterProcessStatus}>
-                  Registrar status
-                </Button>
-              </div>
-              <div className="space-y-2">
-                {[...(caseItem.processStatusHistory ?? [])]
-                  .slice()
-                  .reverse()
-                  .map((item) => (
-                    <div key={item.id} className="rounded-xl border border-border p-3">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge variant="outline">
-                          {PROCESS_STATUS_LABELS[item.status]}
-                        </Badge>
-                        {item.deadlineType && item.deadlineValue && (
-                          <Badge variant="secondary">
-                            {item.deadlineValue} {item.deadlineType}
-                          </Badge>
-                        )}
-                      </div>
-                      <p className="mt-2 text-sm font-medium">{item.createdByName}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {new Date(item.createdAt).toLocaleString("pt-BR")}
-                      </p>
-                      {item.reason && (
-                        <p className="mt-1 text-sm text-muted-foreground">
-                          {item.reason}
-                        </p>
-                      )}
-                    </div>
-                  ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-border">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">
-                Processos vinculados ao PGE.net
-              </CardTitle>
-              <CardDescription>
-                Permite vincular mais de um processo ao mesmo PGE.net.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex flex-col gap-3 md:flex-row">
-                <Input
-                  value={newProcessNumber}
-                  onChange={(e) => setNewProcessNumber(e.target.value)}
-                  placeholder="Adicionar novo número de processo"
-                />
-                <Button type="button" onClick={handleAddProcessNumber}>
-                  Adicionar processo
-                </Button>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {processNumbers.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    Nenhum processo vinculado.
-                  </p>
-                ) : (
-                  processNumbers.map((number) => (
-                    <Badge key={number} variant="outline">
-                      {number}
-                    </Badge>
-                  ))
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
           <Card className="border-border">
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Nova movimentação</CardTitle>
@@ -1576,6 +2309,7 @@ export function JudicialCaseDetail({ caseId }: { caseId: string }) {
                 centralizados aqui.
               </CardDescription>
             </CardHeader>
+
             <CardContent className="space-y-4">
               <div className="grid gap-3 lg:grid-cols-2">
                 <div>
@@ -1629,6 +2363,7 @@ export function JudicialCaseDetail({ caseId }: { caseId: string }) {
                         placeholder="0,00"
                       />
                     </div>
+
                     <div>
                       <Label className="mb-1 block text-xs">
                         Valor do Município
@@ -1699,18 +2434,6 @@ export function JudicialCaseDetail({ caseId }: { caseId: string }) {
                   </div>
                 )}
 
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="bg-transparent"
-                    disabled={uploadingMovement}
-                    onClick={handleUploadMovement}
-                  >
-                    <Upload className="mr-2 h-4 w-4" />
-                    {uploadingMovement ? "Enviando..." : "Enviar arquivos"}
-                  </Button>
-                </div>
 
                 <Input
                   value={attachmentNames}
@@ -1744,6 +2467,7 @@ export function JudicialCaseDetail({ caseId }: { caseId: string }) {
                       ? "Salvar e encerrar processo"
                       : "Salvar movimentação"}
                 </Button>
+
                 <Button
                   variant="outline"
                   className="bg-transparent"
@@ -1757,208 +2481,89 @@ export function JudicialCaseDetail({ caseId }: { caseId: string }) {
 
           <Card className="border-border">
             <CardHeader className="pb-3">
-              <CardTitle className="text-base">Contatos do município</CardTitle>
+              <CardTitle className="text-base">Últimas movimentações</CardTitle>
+              <CardDescription>
+                Exibe as últimas movimentações registradas no processo, com até 5 por página.
+              </CardDescription>
             </CardHeader>
-            <CardContent className="grid gap-3 md:grid-cols-3">
-              <InfoField label="Município" value={caseItem.municipalityName} strong />
-              <InfoField
-                label="E-mails"
-                value={contacts?.emails.join(", ") || "Não informado"}
-              />
-              <InfoField
-                label="Telefones"
-                value={contacts?.phones.join(", ") || "Não informado"}
-              />
+            <CardContent className="space-y-3">
+              {paginatedLatestMovements.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  Nenhuma movimentação registrada.
+                </p>
+              ) : (
+                paginatedLatestMovements.map((item) => (
+                  <div key={`ult-${item.id}`} className="rounded-xl border border-border p-3">
+                    <div className="mb-1 flex flex-wrap items-center gap-2">
+                      <Badge variant="outline">{item.category}</Badge>
+                      {(item.badges || []).slice(0, 2).map((badge) => (
+                        <Badge key={`ult-${item.id}-${badge}`} variant="secondary">
+                          {badge}
+                        </Badge>
+                      ))}
+                    </div>
+                    <p className="text-sm font-semibold">{item.title}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {new Date(item.createdAt).toLocaleString("pt-BR")}
+                      {item.subtitle ? ` • ${item.subtitle}` : ""}
+                    </p>
+                    {item.description && (
+                      <p className="mt-1 line-clamp-4 whitespace-pre-line text-sm text-muted-foreground">
+                        {item.description}
+                      </p>
+                    )}
+                    {item.attachments && item.attachments.length > 0 && (
+                      <div className="mt-2 space-y-2">
+                        {item.attachments.map((att) => (
+                          <div key={`ult-att-${item.id}-${att.id}`} className="rounded-lg border border-border p-2">
+                            <p className="text-sm font-medium">{att.name}</p>
+                            <AttachmentActions attachment={att} />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+
+              <div className="flex items-center justify-between pt-1">
+                <p className="text-xs text-muted-foreground">
+                  Página {latestMovementsPage} de {totalLatestMovementsPages}
+                </p>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="bg-transparent"
+                    disabled={latestMovementsPage <= 1}
+                    onClick={() =>
+                      setLatestMovementsPage((prev) => Math.max(1, prev - 1))
+                    }
+                  >
+                    Anterior
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="bg-transparent"
+                    disabled={latestMovementsPage >= totalLatestMovementsPages}
+                    onClick={() =>
+                      setLatestMovementsPage((prev) =>
+                        Math.min(totalLatestMovementsPages, prev + 1),
+                      )
+                    }
+                  >
+                    Próxima
+                  </Button>
+                </div>
+              </div>
             </CardContent>
           </Card>
+          </div>
         </TabsContent>
 
         <TabsContent value="cadastros" className="mt-0 min-h-[640px] space-y-4">
-          <Card className="border-border">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Procedimentos</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <Input
-                value={procedureSearch}
-                onChange={(e) => setProcedureSearch(e.target.value)}
-                placeholder="Pesquisar procedimento por código, descrição ou especialidade"
-              />
-              <div className="grid gap-3 md:grid-cols-3">
-                <div>
-                  <Label className="mb-1 block text-xs">Código SIGTAP</Label>
-                  <select
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    value={selectedProcedure}
-                    onChange={(e) => {
-                      const code = e.target.value
-                      setSelectedProcedure(code)
-                      const selectedItem = procedureOptions.find(
-                        (item) => item.sigtapCode === code,
-                      )
-                      setSelectedProcedureSpecialty(selectedItem?.specialty || "")
-                      setSelectedProcedureSubSpecialty(
-                        selectedItem?.subSpecialty || "",
-                      )
-                    }}
-                  >
-                    <option value="">Selecione um procedimento</option>
-                    {procedureOptions.map((item) => (
-                      <option key={item.sigtapCode} value={item.sigtapCode}>
-                        {item.sigtapCode} - {item.description}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <Label className="mb-1 block text-xs">Especialidade *</Label>
-                  <select
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    value={selectedProcedureSpecialty}
-                    onChange={(e) => {
-                      setSelectedProcedureSpecialty(e.target.value)
-                      if (
-                        !procedureSubSpecialtyOptions.includes(
-                          selectedProcedureSubSpecialty,
-                        )
-                      ) {
-                        setSelectedProcedureSubSpecialty("")
-                      }
-                    }}
-                  >
-                    <option value="">Selecione</option>
-                    {procedureSpecialtyOptions.map((item) => (
-                      <option key={item} value={item}>
-                        {item}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <Label className="mb-1 block text-xs">Subespecialidade</Label>
-                  <select
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    value={selectedProcedureSubSpecialty}
-                    onChange={(e) =>
-                      setSelectedProcedureSubSpecialty(e.target.value)
-                    }
-                  >
-                    <option value="">Selecione</option>
-                    {procedureSubSpecialtyOptions.map((item) => (
-                      <option key={item} value={item}>
-                        {item}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <Button onClick={handleAddProcedure}>Adicionar procedimento</Button>
-              <div className="space-y-2">
-                {caseItem.procedures.map((item) => (
-                  <div
-                    key={item.id}
-                    className="flex flex-col gap-3 rounded-xl border border-border p-3 md:flex-row md:items-center md:justify-between"
-                  >
-                    <div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="text-sm font-medium">
-                          {item.sigtapCode} - {item.description}
-                        </p>
-                        {item.status && (
-                          <Badge variant="secondary">
-                            {JUDICIAL_PROCEDURE_STATUS_LABELS[item.status]}
-                          </Badge>
-                        )}
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        {item.active === false ? "Inativo" : "Ativo"} •{" "}
-                        {item.createdByName}
-                        {item.specialty ? ` • ${item.specialty}` : ""}
-                        {item.subSpecialty ? ` • ${item.subSpecialty}` : ""}
-                        {item.statusUpdatedAt
-                          ? ` • ${new Date(item.statusUpdatedAt).toLocaleString("pt-BR")}`
-                          : ""}
-                      </p>
-                      {item.statusReason && (
-                        <p className="text-xs text-muted-foreground">
-                          Motivo do status: {item.statusReason}
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <Button
-                        variant="outline"
-                        className="bg-transparent"
-                        onClick={() => handleProcedureStatus(item.id)}
-                      >
-                        Alterar status
-                      </Button>
-                      <Button
-                        variant="outline"
-                        className="bg-transparent"
-                        onClick={() =>
-                          user && judicial.toggleProcedure(caseItem.id, item.id, user)
-                        }
-                      >
-                        {item.active === false ? "Ativar" : "Inativar"}
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-border">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">CID</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <Input
-                value={cidSearch}
-                onChange={(e) => setCidSearch(e.target.value)}
-                placeholder="Pesquisar CID por código ou descrição"
-              />
-              <select
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                value={selectedCid}
-                onChange={(e) => setSelectedCid(e.target.value)}
-              >
-                <option value="">Selecione um CID</option>
-                {cidOptions.map((item) => (
-                  <option key={item.code} value={item.code}>
-                    {item.code} - {item.description}
-                  </option>
-                ))}
-              </select>
-              <Button onClick={handleAddCid}>Adicionar CID</Button>
-              <div className="space-y-2">
-                {caseItem.cids.map((item) => (
-                  <div
-                    key={item.id}
-                    className="flex flex-col gap-3 rounded-xl border border-border p-3 md:flex-row md:items-center md:justify-between"
-                  >
-                    <div>
-                      <p className="text-sm font-medium">
-                        {item.code} - {item.description}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {item.active === false ? "Inativo" : "Ativo"} •{" "}
-                        {item.createdByName}
-                      </p>
-                    </div>
-                    <Button
-                      variant="outline"
-                      className="bg-transparent"
-                      onClick={() => user && judicial.toggleCid(caseItem.id, item.id, user)}
-                    >
-                      {item.active === false ? "Ativar" : "Inativar"}
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+          {renderProcedureCidContent()}
         </TabsContent>
 
         <TabsContent value="anexos" className="mt-0 min-h-[640px] space-y-4">
@@ -2504,7 +3109,504 @@ export function JudicialCaseDetail({ caseId }: { caseId: string }) {
           </Card>
         </TabsContent>
       </Tabs>
+      <Dialog open={fichaModalOpen} onOpenChange={setFichaModalOpen}>
+        <DialogContent className="max-w-5xl">
+          <DialogHeader>
+            <DialogTitle>Fichas CORE/SISREG</DialogTitle>
+            <DialogDescription>
+              Cadastre e acompanhe fichas vinculadas ao processo judicial.
+            </DialogDescription>
+          </DialogHeader>
+          <JudicialFichasPanel caseId={caseItem.id} />
+        </DialogContent>
+      </Dialog>
 
+      <Dialog open={procedureCidModalOpen} onOpenChange={setProcedureCidModalOpen}>
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Procedimento/CID</DialogTitle>
+            <DialogDescription>
+              Adicione procedimentos da tabela SIGTAP e CIDs ao processo judicial.
+            </DialogDescription>
+          </DialogHeader>
+
+          {renderProcedureCidContent()}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={notificationModalOpen} onOpenChange={setNotificationModalOpen}>
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Notificação/Manifestação do município</DialogTitle>
+            <DialogDescription>
+              Registre notificação, manifestação e anexos para o município envolvido.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid gap-3 md:grid-cols-3">
+              <InfoField label="Município" value={caseItem.municipalityName} strong />
+              <InfoField
+                label="E-mails"
+                value={contacts?.emails.join(", ") || "Não informado"}
+              />
+              <InfoField
+                label="Responsáveis"
+                value={contacts?.contacts.join(", ") || "Não informado"}
+              />
+            </div>
+
+            <Card className="border-border">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Notificação ao município</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-3 md:grid-cols-[1fr_auto]">
+                  <div>
+                    <Label className="mb-1 block text-xs">Modelo de resposta</Label>
+                    <select
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      value={selectedManifestTemplateId}
+                      onChange={(e) => setSelectedManifestTemplateId(e.target.value)}
+                    >
+                      <option value="">Selecione um modelo salvo no Admin Judicial</option>
+                      {judicial.emailTemplates.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.title}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex items-end">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="bg-transparent"
+                      onClick={handleApplyManifestTemplate}
+                    >
+                      Usar modelo
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div>
+                    <Label className="mb-1 block text-xs">Destinatários</Label>
+                    <Input
+                      value={manifestRecipients}
+                      onChange={(e) => setManifestRecipients(e.target.value)}
+                      placeholder="email1@municipio.gov.br, email2@..."
+                    />
+                  </div>
+                  <div>
+                    <Label className="mb-1 block text-xs">Assunto</Label>
+                    <Input
+                      value={manifestSubject}
+                      onChange={(e) => setManifestSubject(e.target.value)}
+                      placeholder="Assunto da notificação"
+                    />
+                  </div>
+                </div>
+
+                <div
+                  ref={editorRef}
+                  contentEditable
+                  suppressContentEditableWarning
+                  className="prose prose-sm min-h-[220px] max-w-none rounded-lg border border-input bg-background p-4 text-sm outline-none"
+                  onInput={(e) =>
+                    setManifestHtml((e.target as HTMLDivElement).innerHTML)
+                  }
+                  dangerouslySetInnerHTML={{ __html: manifestHtml }}
+                />
+
+                <div className="space-y-3 rounded-xl border border-dashed border-border p-4">
+                  <Label className="mb-1 block text-xs">Anexos</Label>
+                  <Input
+                    type="file"
+                    multiple
+                    onChange={(e) => setSelectedManifestFiles(e.target.files)}
+                  />
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="bg-transparent"
+                    disabled={uploadingManifest}
+                    onClick={handleUploadManifest}
+                  >
+                    <Upload className="mr-2 h-4 w-4" />
+                    {uploadingManifest ? "Enviando..." : "Enviar anexos"}
+                  </Button>
+
+                  <Input
+                    value={manifestAttachments}
+                    onChange={(e) => setManifestAttachments(e.target.value)}
+                    placeholder="Arquivos enviados"
+                  />
+                </div>
+
+                <Button onClick={handleSendMunicipalityNotification}>
+                  <Mail className="mr-2 h-4 w-4" />
+                  Registrar envio ao município
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={historyModalOpen} onOpenChange={setHistoryModalOpen}>
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Histórico do processo</DialogTitle>
+            <DialogDescription>
+              Linha do tempo contendo movimentações, fichas, procedimentos, CIDs e manifestações.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            {historyItems.map((item) => (
+              <div key={`modal-hist-${item.id}`} className="rounded-xl border border-border p-4">
+                <div className="mb-2 flex flex-wrap items-center gap-2">
+                  <Badge variant="outline">{item.category}</Badge>
+                  {(item.badges || []).map((badge) => (
+                    <Badge key={`modal-hist-${item.id}-${badge}`} variant="secondary">
+                      {badge}
+                    </Badge>
+                  ))}
+                </div>
+                <p className="text-sm font-semibold">{item.title}</p>
+                <p className="text-xs text-muted-foreground">
+                  {new Date(item.createdAt).toLocaleString("pt-BR")}
+                  {item.subtitle ? ` • ${item.subtitle}` : ""}
+                </p>
+                {item.description &&
+                  (item.html ? (
+                    <div
+                      className="prose prose-sm mt-2 max-w-none"
+                      dangerouslySetInnerHTML={{ __html: item.description }}
+                    />
+                  ) : (
+                    <p className="mt-2 whitespace-pre-line text-sm text-muted-foreground">
+                      {item.description}
+                    </p>
+                  ))}
+                {item.attachments && item.attachments.length > 0 && (
+                  <div className="mt-2 space-y-2">
+                    {item.attachments.map((att) => (
+                      <div key={`modal-hist-att-${item.id}-${att.id}`} className="rounded-lg border border-border p-3">
+                        <p className="text-sm font-medium">{att.name}</p>
+                        <AttachmentActions attachment={att} />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={auditModalOpen} onOpenChange={setAuditModalOpen}>
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Auditoria e motivos da exibição</DialogTitle>
+            <DialogDescription>
+              Dados de auditoria da tela e justificativas de exibição no fluxo judicial.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <div className="rounded-xl border border-border p-4">
+              <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
+                <Scale className="h-4 w-4" />
+                Fluxo atual
+              </div>
+              <p className="text-sm text-muted-foreground">
+                {caseItem.monitoringModeReason}
+              </p>
+            </div>
+            <div className="rounded-xl border border-border p-4">
+              <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
+                <Clock3 className="h-4 w-4" />
+                Status
+              </div>
+              <p className="text-sm text-muted-foreground">
+                {JUDICIAL_CASE_STATUS_LABELS[caseItem.status]}
+              </p>
+            </div>
+            <div className="rounded-xl border border-border p-4">
+              <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
+                <CheckCircle2 className="h-4 w-4" />
+                Agendamento
+              </div>
+              <p className="text-sm text-muted-foreground">
+                {caseItem.appointmentDate
+                  ? new Date(caseItem.appointmentDate).toLocaleString("pt-BR")
+                  : "Sem agendamento informado"}
+              </p>
+            </div>
+            <div className="rounded-xl border border-border p-4">
+              <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
+                <ShieldAlert className="h-4 w-4" />
+                Fila
+              </div>
+              <div className="space-y-1 text-sm text-muted-foreground">
+                {Object.values(QUEUE_REASON_LABELS)
+                  .slice(0, 5)
+                  .map((item) => (
+                    <p key={item}>• {item}</p>
+                  ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-4 space-y-3">
+            {judicial.auditTrail
+              .filter((item) => item.caseId === caseItem.id)
+              .slice()
+              .reverse()
+              .map((item) => (
+                <div key={`modal-audit-${item.id}`} className="rounded-xl border border-border p-4">
+                  <p className="text-sm font-medium">{item.userName}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {new Date(item.createdAt).toLocaleString("pt-BR")} • {item.action}
+                  </p>
+                  {item.details && (
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      {item.details}
+                    </p>
+                  )}
+                </div>
+              ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={processStatusOpen} onOpenChange={setProcessStatusOpen}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Status do processo judicial</DialogTitle>
+            <DialogDescription>
+              Informe o status atual do processo. O último status registrado aparece
+              em destaque ao lado de “Processos vinculados”.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div>
+              <Label className="mb-1 block text-xs">Status obrigatório</Label>
+              <select
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={processStatus}
+                onChange={(e) => {
+                  setProcessStatus(
+                    e.target.value as keyof typeof PROCESS_STATUS_LABELS,
+                  )
+                  setProcessStatusReason("")
+                              setProcessPrazoInicio("")
+                  setProcessPrazoDescricao("")
+                }}
+              >
+                <option value="em_andamento">EM ANDAMENTO</option>
+                <option value="descumprimento">DESCUMPRIMENTO</option>
+                <option value="decisao_judicial_prazo">
+                  DECISÃO JUDICIAL COM PRAZO
+                </option>
+              </select>
+            </div>
+
+            {(processStatus === "em_andamento" ||
+              processStatus === "descumprimento") && (
+              <div>
+                <Label className="mb-1 block text-xs">
+                  Justificativa obrigatória
+                </Label>
+                <Textarea
+                  rows={4}
+                  value={processStatusReason}
+                  onChange={(e) => setProcessStatusReason(e.target.value)}
+                  placeholder="Descreva a situação atual do processo judicial."
+                />
+              </div>
+            )}
+
+            {processStatus === "decisao_judicial_prazo" && (
+              <div className="grid gap-3 md:grid-cols-2">
+                <div>
+                  <Label className="mb-1 block text-xs">
+                    Data de início do prazo
+                  </Label>
+                  <Input
+                    type="date"
+                    value={processPrazoInicio}
+                    onChange={(e) => setProcessPrazoInicio(e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <Label className="mb-1 block text-xs">Prazo</Label>
+                  <Input
+                    value={processPrazoDescricao}
+                    onChange={(e) => setProcessPrazoDescricao(e.target.value)}
+                    placeholder="Ex.: 5 dias, 10 dias, 1 mês"
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="bg-transparent"
+                onClick={() => setProcessStatusOpen(false)}
+              >
+                Cancelar
+              </Button>
+
+              <Button type="button" onClick={handleRegisterProcessStatus}>
+                Registrar status
+              </Button>
+            </div>
+
+            <div className="space-y-2 border-t border-border pt-4">
+              <p className="text-sm font-semibold">Histórico de status</p>
+
+              {[...(caseItem.processStatusHistory ?? [])].length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  Nenhum status de processo registrado.
+                </p>
+              ) : (
+                [...(caseItem.processStatusHistory ?? [])]
+                  .slice()
+                  .reverse()
+                  .map((item) => (
+                    <div key={item.id} className="rounded-xl border border-border p-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant="outline">
+                          {PROCESS_STATUS_LABELS[item.status]}
+                        </Badge>
+
+                        {item.deadlineType && item.deadlineValue && (
+                          <Badge variant="secondary">
+                            {item.deadlineValue} {item.deadlineType}
+                          </Badge>
+                        )}
+                      </div>
+
+                      <p className="mt-2 text-sm font-medium">{item.createdByName}</p>
+
+                      <p className="text-xs text-muted-foreground">
+                        {new Date(item.createdAt).toLocaleString("pt-BR")}
+                      </p>
+
+                      {item.reason && (
+                        <p className="mt-1 whitespace-pre-line text-sm text-muted-foreground">
+                          {item.reason}
+                        </p>
+                      )}
+                    </div>
+                  ))
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={pgeNetOpen} onOpenChange={setPgeNetOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Processos vinculados ao PGE.net</DialogTitle>
+            <DialogDescription>
+              Adicione números de PGE.net e processos vinculados ao monitoramento
+              judicial.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-5">
+            <div className="space-y-2 rounded-xl border border-border p-4">
+              <Label className="text-xs">Adicionar PGE.net</Label>
+              <div className="flex flex-col gap-2 md:flex-row">
+                <Input
+                  value={newPgeNetNumber}
+                  onChange={(e) => setNewPgeNetNumber(e.target.value)}
+                  placeholder="Número do PGE.net"
+                />
+                <Button type="button" onClick={handleAddPgeNetNumber}>
+                  Adicionar PGE.net
+                </Button>
+              </div>
+
+              <div className="flex flex-wrap gap-2 pt-2">
+                {pgeNetNumbers.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    Nenhum PGE.net registrado.
+                  </p>
+                ) : (
+                  pgeNetNumbers.map((number) => (
+                    <Badge key={number} variant="secondary">
+                      {number}
+                    </Badge>
+                  ))
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-2 rounded-xl border border-border p-4">
+              <Label className="text-xs">Adicionar processo vinculado</Label>
+              <div className="flex flex-col gap-2 md:flex-row">
+                <Input
+                  value={newProcessNumber}
+                  onChange={(e) => setNewProcessNumber(e.target.value)}
+                  placeholder="Número do processo vinculado"
+                />
+                <Button type="button" onClick={handleAddProcessNumber}>
+                  Adicionar processo
+                </Button>
+              </div>
+
+              <div className="flex flex-wrap gap-2 pt-2">
+                {processNumbers.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    Nenhum processo vinculado.
+                  </p>
+                ) : (
+                  processNumbers.map((number) => (
+                    <Badge key={number} variant="outline">
+                      {number}
+                    </Badge>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={municipalityContactsOpen} onOpenChange={setMunicipalityContactsOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Contatos do município</DialogTitle>
+            <DialogDescription>
+              Dados de contato vinculados ao município envolvido no processo judicial.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <InfoField label="Município" value={caseItem.municipalityName} strong />
+            <InfoField
+              label="E-mails"
+              value={contacts?.emails.join(", ") || "Não informado"}
+            />
+            <InfoField
+              label="Telefones"
+              value={contacts?.phones.join(", ") || "Não informado"}
+            />
+            <InfoField
+              label="Responsáveis"
+              value={contacts?.contacts.join(", ") || "Não informado"}
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
       <Dialog open={procedureStatusOpen} onOpenChange={setProcedureStatusOpen}>
         <DialogContent>
           <DialogHeader>
@@ -2557,65 +3659,165 @@ export function JudicialCaseDetail({ caseId }: { caseId: string }) {
       </Dialog>
 
       <Dialog open={finalizeOpen} onOpenChange={setFinalizeOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Finalizar demanda</DialogTitle>
             <DialogDescription>
-              Defina o encerramento da demanda judicial com as justificativas
-              necessárias.
+              Escolha a situação da demanda judicial e preencha os campos obrigatórios.
             </DialogDescription>
           </DialogHeader>
+
           <div className="space-y-4">
             <div>
-              <Label className="mb-1 block text-xs">Status</Label>
-              <Input value={FINALIZATION_STATUS_LABELS[finalizeStatus]} readOnly />
+              <Label className="mb-2 block text-xs">Status da demanda</Label>
+              <div className="flex flex-wrap gap-2">
+                {(
+                  [
+                    "pendente",
+                    "resolvido",
+                    "cumprido",
+                    "bloqueio",
+                    "sequestro",
+                    "obito",
+                    "arquivado",
+                  ] as Array<keyof typeof FINALIZATION_STATUS_LABELS>
+                ).map((status) => (
+                  <Button
+                    key={status}
+                    type="button"
+                    variant={status === finalizeStatus ? "default" : "outline"}
+                    className={
+                      status === finalizeStatus
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "bg-background text-foreground hover:bg-muted"
+                    }
+                    onClick={() => {
+                      setFinalizeStatus(status)
+                      setFinalizeReason("")
+                      setFinalizeValorEstado("")
+                      setFinalizeValorMunicipio("")
+                    }}
+                  >
+                    {FINALIZATION_STATUS_LABELS[status].toUpperCase()}
+                  </Button>
+                ))}
+              </div>
             </div>
+
             {finalizeStatus === "pendente" && (
-              <div>
-                <Label className="mb-1 block text-xs">
-                  Onde está pendente?
-                </Label>
-                <select
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  value={finalizePendingLocation}
-                  onChange={(e) =>
-                    setFinalizePendingLocation(
-                      e.target.value as "ses" | "core" | "municipio",
-                    )
-                  }
-                >
-                  <option value="ses">Pendente SES</option>
-                  <option value="core">Pendente CORE</option>
-                  <option value="municipio">Pendente Município</option>
-                </select>
+              <div className="space-y-3">
+                <div>
+                  <Label className="mb-1 block text-xs">
+                    Onde está pendente?
+                  </Label>
+                  <select
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    value={finalizePendingLocation}
+                    onChange={(e) =>
+                      setFinalizePendingLocation(
+                        e.target.value as "ses" | "core" | "municipio",
+                      )
+                    }
+                  >
+                    <option value="ses">Pendente SES</option>
+                    <option value="core">Pendente CORE</option>
+                    <option value="municipio">Pendente Município</option>
+                  </select>
+                </div>
+
+                <div>
+                  <Label className="mb-1 block text-xs">
+                    Justificativa obrigatória
+                  </Label>
+                  <Textarea
+                    rows={4}
+                    value={finalizeReason}
+                    onChange={(e) => setFinalizeReason(e.target.value)}
+                    placeholder="Descreva por que a demanda está pendente."
+                  />
+                </div>
               </div>
             )}
-            {(finalizeStatus === "devolvida" || finalizeStatus === "pendente") && (
+
+            {(finalizeStatus === "resolvido" || finalizeStatus === "cumprido") && (
               <div>
-                <Label className="mb-1 block text-xs">Justificativa</Label>
+                <Label className="mb-1 block text-xs">
+                  Justificativa obrigatória
+                </Label>
                 <Textarea
                   rows={4}
                   value={finalizeReason}
                   onChange={(e) => setFinalizeReason(e.target.value)}
-                  placeholder={
-                    finalizeStatus === "devolvida"
-                      ? "Explique por que a demanda está sendo devolvida"
-                      : "Descreva a pendência"
-                  }
+                  placeholder={finalizeStatus === "cumprido" ? "Justifique o cumprimento da demanda." : "Justifique a resolução da demanda."}
                 />
               </div>
             )}
-            {!["devolvida", "pendente"].includes(finalizeStatus) && (
+
+            {(finalizeStatus === "bloqueio" || finalizeStatus === "sequestro") && (
+              <div className="grid gap-3 md:grid-cols-2">
+                <div>
+                  <Label className="mb-1 block text-xs">
+                    Valor para o Estado
+                  </Label>
+                  <Input
+                    value={finalizeValorEstado}
+                    onChange={(e) => setFinalizeValorEstado(e.target.value)}
+                    placeholder="0,00"
+                  />
+                </div>
+
+                <div>
+                  <Label className="mb-1 block text-xs">
+                    Valor para o Município
+                  </Label>
+                  <Input
+                    value={finalizeValorMunicipio}
+                    onChange={(e) => setFinalizeValorMunicipio(e.target.value)}
+                    placeholder="0,00"
+                  />
+                </div>
+              </div>
+            )}
+
+            {(finalizeStatus === "obito" || finalizeStatus === "arquivado") && (
               <div>
-                <Label className="mb-1 block text-xs">Observação</Label>
+                <Label className="mb-1 block text-xs">
+                  Justificativa obrigatória
+                </Label>
                 <Textarea
-                  rows={3}
+                  rows={4}
                   value={finalizeReason}
                   onChange={(e) => setFinalizeReason(e.target.value)}
-                  placeholder="Observação opcional"
+                  placeholder={finalizeStatus === "obito" ? "Justifique o encerramento por óbito." : "Justifique o arquivamento da demanda."}
                 />
               </div>
             )}
+
+            {caseItem.finalization && (
+              <div className="rounded-xl border border-border bg-muted/20 p-4 text-sm text-muted-foreground">
+                <p>
+                  <span className="font-semibold text-foreground">
+                    Última finalização:
+                  </span>{" "}
+                  {FINALIZATION_STATUS_LABELS[caseItem.finalization.status]}
+                </p>
+                <p>
+                  {new Date(caseItem.finalization.createdAt).toLocaleString("pt-BR")} •{" "}
+                  {caseItem.finalization.createdByName}
+                </p>
+                {caseItem.finalization.pendingLocation && (
+                  <p>
+                    Pendente em: {caseItem.finalization.pendingLocation.toUpperCase()}
+                  </p>
+                )}
+                {caseItem.finalization.reason && (
+                  <p className="whitespace-pre-line">
+                    Justificativa: {caseItem.finalization.reason}
+                  </p>
+                )}
+              </div>
+            )}
+
             <div className="flex flex-wrap justify-end gap-2">
               <Button
                 type="button"

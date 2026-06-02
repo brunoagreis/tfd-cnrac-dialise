@@ -1,29 +1,22 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
+import { BadgePlus, KeyRound, RefreshCw, Save, ShieldCheck } from "lucide-react"
 import { toast } from "sonner"
 
-import { useAuth } from "@/lib/auth-context"
-import { usePermissions } from "@/lib/permissions"
-import { useStore } from "@/lib/store-context"
-import {
-  ROLES,
-  ACCESS_MODULES,
-  ACTIONS,
-  ROLE_LABELS,
-  ACCESS_MODULE_LABELS,
-  ACTION_LABELS,
-  type Role,
-} from "@/lib/types"
-import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import {
   Select,
   SelectContent,
@@ -31,182 +24,610 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
-import { ShieldAlert } from "lucide-react"
+
+type Perfil = {
+  id: string
+  nome: string
+  codigo?: string | null
+  ativo?: boolean
+}
+
+type PermissaoItem = {
+  modulo: string
+  acao: string
+  permitido: boolean
+}
+
+type ApiPerfisResponse = {
+  ok?: boolean
+  perfis?: Perfil[]
+  profiles?: Perfil[]
+  error?: string
+}
+
+type ApiPerfilResponse = {
+  ok?: boolean
+  perfil?: Perfil
+  profile?: Perfil
+  error?: string
+}
+
+type ApiPermissoesResponse = {
+  ok?: boolean
+  permissoes?: PermissaoItem[]
+  permissions?: PermissaoItem[]
+  error?: string
+}
+
+const PERMISSION_CATALOG: Array<{ modulo: string; acoes: string[] }> = [
+  { modulo: "TFD", acoes: ["visualizar", "criar", "editar", "excluir", "imprimir", "interagir", "remover_doc"] },
+  { modulo: "PACIENTES", acoes: ["visualizar", "criar", "editar", "excluir", "imprimir", "interagir", "remover_doc"] },
+  { modulo: "PROTOCOLO", acoes: ["visualizar", "criar", "editar", "excluir", "imprimir"] },
+  { modulo: "RELATORIOS", acoes: ["visualizar", "imprimir", "exportar"] },
+  { modulo: "JUDICIAL", acoes: ["visualizar", "criar", "editar", "encerrar", "interagir", "notificar"] },
+  { modulo: "PRE_JUDICIAL", acoes: ["visualizar", "criar", "editar", "encerrar", "interagir", "notificar"] },
+  { modulo: "AGENDAMENTO", acoes: ["visualizar", "criar", "editar", "reservar", "imprimir"] },
+  { modulo: "CNRAC", acoes: ["visualizar", "criar", "editar", "imprimir"] },
+  { modulo: "HEMODIALISE", acoes: ["visualizar", "criar", "editar", "imprimir"] },
+  { modulo: "USUARIOS", acoes: ["visualizar", "criar", "editar", "ativar_inativar"] },
+  { modulo: "UNIDADES", acoes: ["visualizar", "criar", "editar", "ativar_inativar"] },
+  { modulo: "PERMISSOES", acoes: ["visualizar", "criar_perfil", "editar_permissoes"] },
+  { modulo: "ADMIN_JUDICIAL", acoes: ["visualizar", "editar_municipios", "editar_emails", "editar_prioridades"] },
+]
+
+function prettifyAction(value: string) {
+  return value
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase())
+}
+
+function normalizePerfil(item: any): Perfil {
+  return {
+    id: String(item?.id ?? ""),
+    nome: String(item?.nome ?? item?.name ?? ""),
+    codigo: item?.codigo ?? item?.code ?? null,
+    ativo: item?.ativo ?? item?.active ?? true,
+  }
+}
+
+function normalizePermissions(payload: any): PermissaoItem[] {
+  const raw = Array.isArray(payload?.permissoes)
+    ? payload.permissoes
+    : Array.isArray(payload?.permissions)
+      ? payload.permissions
+      : []
+
+  const normalized = raw
+    .map((item: any) => ({
+      modulo: String(item?.modulo ?? item?.module ?? "").toUpperCase(),
+      acao: String(item?.acao ?? item?.action ?? "").toLowerCase(),
+      permitido: Boolean(
+        item?.permitido ??
+          item?.allowed ??
+          item?.ativo ??
+          false,
+      ),
+    }))
+    .filter((item: PermissaoItem) => item.modulo && item.acao)
+
+  return normalized
+}
+
+function buildDefaultPermissions(): PermissaoItem[] {
+  return PERMISSION_CATALOG.flatMap((group) =>
+    group.acoes.map((acao) => ({
+      modulo: group.modulo,
+      acao,
+      permitido: false,
+    })),
+  )
+}
+
+function mergePermissions(apiPermissions: PermissaoItem[]) {
+  const defaults = buildDefaultPermissions()
+
+  return defaults.map((base) => {
+    const found = apiPermissions.find(
+      (item) => item.modulo === base.modulo && item.acao === base.acao,
+    )
+
+    return found ? found : base
+  })
+}
+
+function isProtectedProfile(perfil?: Perfil | null) {
+  if (!perfil) return false
+  const nome = (perfil.nome || "").trim().toLowerCase()
+  const codigo = (perfil.codigo || "").trim().toLowerCase()
+  return nome === "administrador" || codigo === "admin"
+}
 
 export default function PermissoesPage() {
-  const { user } = useAuth()
-  const { matrix, setPermission } = usePermissions()
-  const store = useStore()
-  const [selectedRole, setSelectedRole] = useState<Role>("ADMIN")
+  const [loadingPerfis, setLoadingPerfis] = useState(true)
+  const [loadingPermissoes, setLoadingPermissoes] = useState(false)
+  const [savingPerfil, setSavingPerfil] = useState(false)
+  const [savingPermissoes, setSavingPermissoes] = useState(false)
 
-  if (!user || user.role !== "ADMIN") {
-    return (
-      <div
-        role="alert"
-        className="flex flex-col items-center justify-center gap-4 rounded-lg border border-border bg-card p-16 text-center"
-      >
-        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-destructive/10">
-          <ShieldAlert className="h-7 w-7 text-destructive" aria-hidden="true" />
-        </div>
-        <div>
-          <h2 className="text-lg font-semibold text-card-foreground">Acesso restrito</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Somente administradores podem gerenciar permissoes.
-          </p>
-        </div>
-      </div>
+  const [perfis, setPerfis] = useState<Perfil[]>([])
+  const [perfilId, setPerfilId] = useState("")
+  const [permissoes, setPermissoes] = useState<PermissaoItem[]>(buildDefaultPermissions())
+
+  const [openCreateModal, setOpenCreateModal] = useState(false)
+  const [openPermissionsModal, setOpenPermissionsModal] = useState(false)
+
+  const [novoPerfilNome, setNovoPerfilNome] = useState("")
+  const [novoPerfilCodigo, setNovoPerfilCodigo] = useState("")
+
+  const perfilSelecionado = useMemo(
+    () => perfis.find((item) => item.id === perfilId) ?? null,
+    [perfis, perfilId],
+  )
+
+  const permissoesAgrupadas = useMemo(() => {
+    return PERMISSION_CATALOG.map((group) => ({
+      modulo: group.modulo,
+      items: group.acoes.map((acao) => {
+        const found = permissoes.find(
+          (item) => item.modulo === group.modulo && item.acao === acao,
+        )
+
+        return found ?? {
+          modulo: group.modulo,
+          acao,
+          permitido: false,
+        }
+      }),
+    }))
+  }, [permissoes])
+
+  const totalPermissoes = permissoes.length
+  const totalMarcadas = permissoes.filter((item) => item.permitido).length
+
+  async function loadPerfis() {
+    try {
+      setLoadingPerfis(true)
+
+      const response = await fetch("/api/admin/perfis", {
+        cache: "no-store",
+      })
+
+      const json: ApiPerfisResponse = await response.json()
+
+      if (!response.ok || json.ok === false) {
+        toast.error(json.error || "Erro ao carregar perfis.")
+        setPerfis([])
+        return
+      }
+
+      const lista = Array.isArray(json.perfis)
+        ? json.perfis.map(normalizePerfil)
+        : Array.isArray(json.profiles)
+          ? json.profiles.map(normalizePerfil)
+          : []
+
+      setPerfis(lista)
+
+      if (lista.length > 0) {
+        setPerfilId((prev) => prev || lista[0].id)
+      } else {
+        setPerfilId("")
+      }
+    } catch {
+      toast.error("Erro ao carregar perfis.")
+      setPerfis([])
+    } finally {
+      setLoadingPerfis(false)
+    }
+  }
+
+  async function loadPermissoes(currentPerfilId: string) {
+    if (!currentPerfilId) {
+      setPermissoes(buildDefaultPermissions())
+      return
+    }
+
+    try {
+      setLoadingPermissoes(true)
+
+      const response = await fetch(`/api/admin/perfis/${currentPerfilId}/permissoes`, {
+        cache: "no-store",
+      })
+
+      const json: ApiPermissoesResponse = await response.json()
+
+      if (!response.ok || json.ok === false) {
+        toast.error(json.error || "Erro ao carregar permissões.")
+        setPermissoes(buildDefaultPermissions())
+        return
+      }
+
+      const apiPermissions = normalizePermissions(json)
+      setPermissoes(mergePermissions(apiPermissions))
+    } catch {
+      toast.error("Erro ao carregar permissões.")
+      setPermissoes(buildDefaultPermissions())
+    } finally {
+      setLoadingPermissoes(false)
+    }
+  }
+
+  useEffect(() => {
+    void loadPerfis()
+  }, [])
+
+  useEffect(() => {
+    if (!perfilId) return
+    void loadPermissoes(perfilId)
+  }, [perfilId])
+
+  function togglePermission(modulo: string, acao: string) {
+    if (isProtectedProfile(perfilSelecionado)) return
+
+    setPermissoes((prev) =>
+      prev.map((item) =>
+        item.modulo === modulo && item.acao === acao
+          ? { ...item, permitido: !item.permitido }
+          : item,
+      ),
     )
+  }
+
+  async function handleCreateProfile() {
+    if (!novoPerfilNome.trim()) {
+      toast.error("Informe o nome do perfil.")
+      return
+    }
+
+    try {
+      setSavingPerfil(true)
+
+      const response = await fetch("/api/admin/perfis", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          nome: novoPerfilNome,
+          codigo: novoPerfilCodigo || undefined,
+        }),
+      })
+
+      const json: ApiPerfilResponse = await response.json()
+
+      if (!response.ok || json.ok === false) {
+        toast.error(json.error || "Erro ao criar perfil.")
+        return
+      }
+
+      const perfilCriado = normalizePerfil(json.perfil ?? json.profile)
+
+      setPerfis((prev) => [perfilCriado, ...prev])
+      setPerfilId(perfilCriado.id)
+      setOpenCreateModal(false)
+      setNovoPerfilNome("")
+      setNovoPerfilCodigo("")
+      setPermissoes(buildDefaultPermissions())
+      toast.success("Perfil criado com sucesso.")
+    } catch {
+      toast.error("Erro ao criar perfil.")
+    } finally {
+      setSavingPerfil(false)
+    }
+  }
+
+  async function handleSavePermissions() {
+    if (!perfilId) {
+      toast.error("Selecione um perfil.")
+      return
+    }
+
+    if (isProtectedProfile(perfilSelecionado)) {
+      toast.error("As permissões do Administrador não podem ser alteradas.")
+      return
+    }
+
+    try {
+      setSavingPermissoes(true)
+
+      const response = await fetch(`/api/admin/perfis/${perfilId}/permissoes`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          permissoes,
+        }),
+      })
+
+      const json = await response.json().catch(() => ({}))
+
+      if (!response.ok || json?.ok === false) {
+        toast.error(json?.error || "Erro ao salvar permissões.")
+        return
+      }
+
+      toast.success("Permissões salvas com sucesso.")
+      setOpenPermissionsModal(false)
+    } catch {
+      toast.error("Erro ao salvar permissões.")
+    } finally {
+      setSavingPermissoes(false)
+    }
   }
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">
-          Gerenciar Permissoes
-        </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Configure as permissoes de cada perfil por modulo e acao.
-        </p>
+      <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-foreground">
+              Gerenciar Permissões
+            </h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Crie perfis e configure as permissões por módulo e ação com persistência no banco.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => void loadPerfis()}>
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Atualizar
+            </Button>
+
+            <Button onClick={() => setOpenCreateModal(true)}>
+              <BadgePlus className="mr-2 h-4 w-4" />
+              Novo Perfil
+            </Button>
+
+            <Button
+              variant="default"
+              disabled={!perfilSelecionado}
+              onClick={() => setOpenPermissionsModal(true)}
+            >
+              <KeyRound className="mr-2 h-4 w-4" />
+              Editar Permissões
+            </Button>
+          </div>
+        </div>
       </div>
 
-      {/* Role selector */}
-      <Card className="border-border">
-        <CardHeader className="pb-4">
-          <CardTitle className="text-base text-card-foreground">Perfil</CardTitle>
-          <CardDescription>
-            Selecione o perfil para visualizar e editar suas permissoes.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-wrap items-center gap-3">
-            <Select
-              value={selectedRole}
-              onValueChange={(v) => setSelectedRole(v as Role)}
-            >
-              <SelectTrigger className="w-56" aria-label="Selecionar perfil">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {ROLES.map((r) => (
-                  <SelectItem key={r} value={r}>
-                    {ROLE_LABELS[r]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Badge variant="outline" className="text-xs">
-              {selectedRole}
-            </Badge>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Permission matrix */}
-      {ACCESS_MODULES.map((mod) => (
-        <Card key={mod} className="border-border">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base text-card-foreground">
-              {ACCESS_MODULE_LABELS[mod]}
-            </CardTitle>
+      <div className="grid gap-4 lg:grid-cols-3">
+        <Card className="border-border lg:col-span-2">
+          <CardHeader>
+            <CardTitle className="text-base">Perfil selecionado</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-40">Acao</TableHead>
-                    <TableHead className="w-24 text-center">Permitido</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {ACTIONS.map((action) => {
-                    const checked = !!matrix[selectedRole]?.[mod]?.[action]
-                    const id = `perm-${selectedRole}-${mod}-${action}`
-                    return (
-                      <TableRow key={action}>
-                        <TableCell>
-                          <label htmlFor={id} className="text-sm font-medium text-card-foreground cursor-pointer">
-                            {ACTION_LABELS[action]}
-                          </label>
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <Checkbox
-                            id={id}
-                            checked={checked}
-                            onCheckedChange={(v) => {
-                              setPermission(selectedRole, mod, action, v === true)
-                              toast.success(
-                                `${ACTION_LABELS[action]} ${v ? "habilitado" : "desabilitado"} para ${ROLE_LABELS[selectedRole]} em ${ACCESS_MODULE_LABELS[mod]}`,
-                              )
-                            }}
-                            disabled={selectedRole === "ADMIN"}
-                            aria-label={`${ACTION_LABELS[action]} - ${ACCESS_MODULE_LABELS[mod]}`}
-                          />
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })}
-                </TableBody>
-              </Table>
+          <CardContent className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div className="w-full max-w-md">
+              <Label className="mb-2 block">Perfil</Label>
+              <Select
+                value={perfilId}
+                onValueChange={setPerfilId}
+                disabled={loadingPerfis || perfis.length === 0}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione um perfil" />
+                </SelectTrigger>
+                <SelectContent>
+                  {perfis.map((perfil) => (
+                    <SelectItem key={perfil.id} value={perfil.id}>
+                      {perfil.nome}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-            {selectedRole === "ADMIN" && (
-              <p className="mt-3 text-xs text-muted-foreground">
-                Permissoes do Administrador nao podem ser alteradas.
-              </p>
-            )}
+
+            <div className="flex items-center gap-2">
+              {perfilSelecionado?.codigo ? (
+                <Badge variant="outline">{perfilSelecionado.codigo}</Badge>
+              ) : null}
+
+              <Badge variant={isProtectedProfile(perfilSelecionado) ? "default" : "secondary"}>
+                {isProtectedProfile(perfilSelecionado) ? "Protegido" : "Editável"}
+              </Badge>
+            </div>
           </CardContent>
         </Card>
-      ))}
 
-      {/* Users table - real data from store */}
+        <Card className="border-border">
+          <CardHeader>
+            <CardTitle className="text-base">Resumo</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-3">
+            <div className="rounded-lg border border-border bg-background p-3">
+              <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                Módulos
+              </div>
+              <div className="mt-1 text-2xl font-semibold text-foreground">
+                {PERMISSION_CATALOG.length}
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-border bg-background p-3">
+              <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                Permissões marcadas
+              </div>
+              <div className="mt-1 text-2xl font-semibold text-foreground">
+                {totalMarcadas}
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-border bg-background p-3">
+              <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                Total de ações
+              </div>
+              <div className="mt-1 text-2xl font-semibold text-foreground">
+                {totalPermissoes}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
       <Card className="border-border">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base text-card-foreground">Usuarios Cadastrados</CardTitle>
-          <CardDescription>Listagem de todos os usuarios do sistema ({store.users.length}).</CardDescription>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <ShieldCheck className="h-4 w-4" />
+            Visão geral das permissões
+          </CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Nome</TableHead>
-                  <TableHead>E-mail</TableHead>
-                  <TableHead>Perfil</TableHead>
-                  <TableHead>CPF</TableHead>
-                  <TableHead className="text-center">Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {store.users.map((u) => (
-                  <TableRow key={u.id}>
-                    <TableCell className="font-medium text-card-foreground">{u.nome}</TableCell>
-                    <TableCell className="text-muted-foreground">{u.email}</TableCell>
-                    <TableCell>
-                      <Badge variant="secondary" className="text-xs">
-                        {ROLE_LABELS[u.role]}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="font-mono text-sm text-muted-foreground">{u.cpf}</TableCell>
-                    <TableCell className="text-center">
-                      <Badge variant={u.ativo ? "default" : "destructive"} className="text-xs">
-                        {u.ativo ? "Ativo" : "Inativo"}
-                      </Badge>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+        <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {permissoesAgrupadas.map((group) => {
+            const enabledCount = group.items.filter((item) => item.permitido).length
+
+            return (
+              <div
+                key={group.modulo}
+                className="rounded-xl border border-border bg-background p-4"
+              >
+                <div className="flex items-center justify-between">
+                  <h3 className="font-semibold text-foreground">{group.modulo}</h3>
+                  <Badge variant="secondary">
+                    {enabledCount}/{group.items.length}
+                  </Badge>
+                </div>
+
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {group.items.map((item) => (
+                    <Badge
+                      key={`${item.modulo}_${item.acao}`}
+                      variant={item.permitido ? "default" : "outline"}
+                    >
+                      {prettifyAction(item.acao)}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )
+          })}
         </CardContent>
       </Card>
+
+      <Dialog open={openCreateModal} onOpenChange={setOpenCreateModal}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Criar novo perfil</DialogTitle>
+            <DialogDescription>
+              Cadastre um perfil para depois configurar as permissões dele.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-4">
+            <div className="grid gap-1.5">
+              <Label htmlFor="perfil-nome">Nome do perfil</Label>
+              <Input
+                id="perfil-nome"
+                value={novoPerfilNome}
+                onChange={(event) => setNovoPerfilNome(event.target.value)}
+                placeholder="Ex.: Auditor, Coordenador, Apoio"
+              />
+            </div>
+
+            <div className="grid gap-1.5">
+              <Label htmlFor="perfil-codigo">Código do perfil</Label>
+              <Input
+                id="perfil-codigo"
+                value={novoPerfilCodigo}
+                onChange={(event) => setNovoPerfilCodigo(event.target.value.toUpperCase())}
+                placeholder="Ex.: AUDITOR"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setOpenCreateModal(false)
+                setNovoPerfilNome("")
+                setNovoPerfilCodigo("")
+              }}
+            >
+              Cancelar
+            </Button>
+
+            <Button onClick={() => void handleCreateProfile()} disabled={savingPerfil}>
+              {savingPerfil ? "Salvando..." : "Criar perfil"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={openPermissionsModal} onOpenChange={setOpenPermissionsModal}>
+        <DialogContent className="max-h-[90vh] overflow-hidden sm:max-w-5xl">
+          <DialogHeader>
+            <DialogTitle>
+              Editar permissões {perfilSelecionado ? `- ${perfilSelecionado.nome}` : ""}
+            </DialogTitle>
+            <DialogDescription>
+              Marque ou desmarque as permissões por módulo e ação.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="max-h-[65vh] overflow-y-auto pr-2">
+            <div className="grid gap-4">
+              {permissoesAgrupadas.map((group) => (
+                <div
+                  key={group.modulo}
+                  className="rounded-xl border border-border bg-background p-4"
+                >
+                  <div className="mb-4 flex items-center justify-between">
+                    <h3 className="font-semibold text-foreground">{group.modulo}</h3>
+                    <Badge variant="secondary">
+                      {group.items.filter((item) => item.permitido).length}/{group.items.length}
+                    </Badge>
+                  </div>
+
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {group.items.map((item) => (
+                      <label
+                        key={`${item.modulo}_${item.acao}`}
+                        className="flex items-center justify-between rounded-lg border border-border px-3 py-2"
+                      >
+                        <span className="text-sm text-foreground">
+                          {prettifyAction(item.acao)}
+                        </span>
+
+                        <input
+                          type="checkbox"
+                          checked={item.permitido}
+                          disabled={isProtectedProfile(perfilSelecionado)}
+                          onChange={() => togglePermission(item.modulo, item.acao)}
+                          className="h-4 w-4"
+                        />
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <DialogFooter>
+            {isProtectedProfile(perfilSelecionado) ? (
+              <p className="mr-auto text-sm text-muted-foreground">
+                As permissões do Administrador não podem ser alteradas.
+              </p>
+            ) : null}
+
+            <Button variant="outline" onClick={() => setOpenPermissionsModal(false)}>
+              Fechar
+            </Button>
+
+            <Button
+              onClick={() => void handleSavePermissions()}
+              disabled={savingPermissoes || isProtectedProfile(perfilSelecionado)}
+            >
+              <Save className="mr-2 h-4 w-4" />
+              {savingPermissoes ? "Salvando..." : "Salvar permissões"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {loadingPermissoes ? (
+        <div className="text-sm text-muted-foreground">Carregando permissões...</div>
+      ) : null}
     </div>
   )
 }

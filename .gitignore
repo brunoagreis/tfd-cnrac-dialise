@@ -9,3 +9,14 @@ node_modules/
 .env*.local
 .DS_Store
 /lib/generated/prisma
+.env
+.env.*
+!.env.example
+backups/
+*.bak
+*.bak*
+*.cjs
+*.ps1
+pre-judicial-mapeamento.txt
+public/uploads/
+storage/

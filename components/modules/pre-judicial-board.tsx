@@ -1,11 +1,9 @@
 "use client"
 
 import Link from "next/link"
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { ArrowRight, Search } from "lucide-react"
 
-import { useAuth } from "@/lib/auth-context"
-import { usePreJudicial } from "@/lib/pre-judicial-context"
 import {
   PREJUDICIAL_QUEUE_REASON_LABELS,
   PREJUDICIAL_STATUS_LABELS,
@@ -29,37 +27,149 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 
+type PreJudicialBoardItem = {
+  id: string
+  patientId: string
+  patientName: string
+  cpf: string
+  municipalityName: string
+  originModule: string
+  originProtocol: string
+  protocolNumber: string
+  active: boolean
+  status: keyof typeof PREJUDICIAL_STATUS_LABELS
+  priority: number
+  createdAt: string
+  updatedAt: string
+  deadlineAt: string
+  deadlineWarningLevel: "ok" | "warning" | "critical" | "overdue"
+  schedulingStatus: "fora_fila" | "pendente" | "reservado"
+  schedulingRequestedAt?: string
+  schedulingReservedAt?: string
+  schedulingResponseDeadlineAt?: string
+  appointmentDate?: string
+  procedureCode: string
+  procedureDescription: string
+  cidCode: string
+  cidDescription: string
+  queueReason: keyof typeof PREJUDICIAL_QUEUE_REASON_LABELS
+  queuePriorityScore: number
+  queueDueLabel: string
+}
+
+function normalizeText(value: unknown) {
+  return String(value ?? "").trim()
+}
+
+function getStatusLabel(status: string) {
+  const key = status as keyof typeof PREJUDICIAL_STATUS_LABELS
+  return PREJUDICIAL_STATUS_LABELS[key] ?? status
+}
+
+function getReasonLabel(reason: string) {
+  const key = reason as keyof typeof PREJUDICIAL_QUEUE_REASON_LABELS
+  return PREJUDICIAL_QUEUE_REASON_LABELS[key] ?? reason
+}
+
+function getDeadlineLabel(level: string) {
+  if (level === "overdue") return "Vencido"
+  if (level === "critical") return "Crítico"
+  if (level === "warning") return "Atenção"
+  return "Regular"
+}
+
+function getSchedulingLabel(status: string) {
+  if (status === "reservado") return "Reserva"
+  if (status === "pendente") return "Agendamento"
+  return "Fila interna"
+}
+
 export function PreJudicialBoard() {
-  const { user } = useAuth()
-  const pre = usePreJudicial()
+  const [items, setItems] = useState<PreJudicialBoardItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState("")
+
   const [search, setSearch] = useState("")
   const [reason, setReason] = useState("todos")
   const [status, setStatus] = useState("todos")
 
-  const all = pre.getDailyQueueForUser(user, 30)
+  useEffect(() => {
+    let active = true
 
-  const filtered = useMemo(
-    () =>
-      all.filter((item) => {
-        if (reason !== "todos" && item.queueReason !== reason) return false
-        if (status !== "todos" && item.status !== status) return false
+    async function loadItems() {
+      try {
+        setLoading(true)
+        setError("")
 
-        if (search.trim()) {
-          const q = search.toLowerCase()
-          const hay =
-            `${item.patientName} ${item.cpf} ${item.protocolNumber} ${item.originProtocol} ${item.municipalityName}`.toLowerCase()
+        const response = await fetch("/api/pre-judicial/casos", {
+          cache: "no-store",
+        })
 
-          if (!hay.includes(q)) return false
+        const data = await response.json()
+
+        if (!response.ok || !data?.ok) {
+          throw new Error(data?.error || "Erro ao carregar Pré Judicial.")
         }
 
-        return true
-      }),
-    [all, reason, search, status],
-  )
+        if (!active) return
+
+        setItems((data.items ?? []) as PreJudicialBoardItem[])
+      } catch (err) {
+        if (!active) return
+
+        console.error("[PreJudicialBoard] erro ao carregar:", err)
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Erro ao carregar casos do Pré Judicial.",
+        )
+      } finally {
+        if (active) {
+          setLoading(false)
+        }
+      }
+    }
+
+    loadItems()
+
+    return () => {
+      active = false
+    }
+  }, [])
+
+  const filtered = useMemo(() => {
+    return items.filter((item) => {
+      if (reason !== "todos" && item.queueReason !== reason) return false
+      if (status !== "todos" && item.status !== status) return false
+
+      if (search.trim()) {
+        const q = search.toLowerCase()
+
+        const hay = [
+          item.patientName,
+          item.cpf,
+          item.protocolNumber,
+          item.originProtocol,
+          item.municipalityName,
+          item.procedureCode,
+          item.procedureDescription,
+          item.cidCode,
+          item.cidDescription,
+        ]
+          .map(normalizeText)
+          .join(" ")
+          .toLowerCase()
+
+        if (!hay.includes(q)) return false
+      }
+
+      return true
+    })
+  }, [items, reason, search, status])
 
   const stats = {
-    total: all.length,
-    criticos: all.filter((item) =>
+    total: items.length,
+    criticos: items.filter((item) =>
       [
         "prazo_critico",
         "prazo_hoje",
@@ -67,8 +177,9 @@ export function PreJudicialBoard() {
         "retorno_automatico",
       ].includes(item.queueReason),
     ).length,
-    scheduling: pre.getSchedulingQueue().length,
-    resolvidos: pre.cases.filter((item) => item.status === "resolvido").length,
+    scheduling: items.filter((item) => item.schedulingStatus !== "fora_fila")
+      .length,
+    resolvidos: items.filter((item) => item.status === "resolvido").length,
   }
 
   return (
@@ -124,13 +235,15 @@ export function PreJudicialBoard() {
               <Label className="text-xs font-medium text-muted-foreground">
                 Buscar
               </Label>
+
               <div className="relative">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+
                 <Input
                   value={search}
-                  onChange={(e) => setSearch(e.target.value)}
+                  onChange={(event) => setSearch(event.target.value)}
                   className="h-10 pl-9"
-                  placeholder="Buscar por paciente, CPF, protocolo ou município..."
+                  placeholder="Buscar por paciente, CPF, protocolo, município, SIGTAP ou CID..."
                 />
               </div>
             </div>
@@ -139,12 +252,15 @@ export function PreJudicialBoard() {
               <Label className="text-xs font-medium text-muted-foreground">
                 Motivo da fila
               </Label>
+
               <Select value={reason} onValueChange={setReason}>
                 <SelectTrigger className="h-10 w-full">
                   <SelectValue />
                 </SelectTrigger>
+
                 <SelectContent>
                   <SelectItem value="todos">Todos</SelectItem>
+
                   {Object.entries(PREJUDICIAL_QUEUE_REASON_LABELS).map(
                     ([value, label]) => (
                       <SelectItem key={value} value={value}>
@@ -160,12 +276,15 @@ export function PreJudicialBoard() {
               <Label className="text-xs font-medium text-muted-foreground">
                 Status
               </Label>
+
               <Select value={status} onValueChange={setStatus}>
                 <SelectTrigger className="h-10 w-full">
                   <SelectValue />
                 </SelectTrigger>
+
                 <SelectContent>
                   <SelectItem value="todos">Todos</SelectItem>
+
                   {Object.entries(PREJUDICIAL_STATUS_LABELS).map(
                     ([value, label]) => (
                       <SelectItem key={value} value={value}>
@@ -178,29 +297,21 @@ export function PreJudicialBoard() {
             </div>
           </div>
 
-          {filtered.length === 0 ? (
+          {loading ? (
+            <div className="rounded-lg border border-dashed border-border p-10 text-center text-sm text-muted-foreground">
+              Carregando demandas do Pré Judicial...
+            </div>
+          ) : error ? (
+            <div className="rounded-lg border border-dashed border-destructive/40 p-10 text-center text-sm text-destructive">
+              {error}
+            </div>
+          ) : filtered.length === 0 ? (
             <div className="rounded-lg border border-dashed border-border p-10 text-center text-sm text-muted-foreground">
               Nenhuma demanda encontrada com os filtros atuais.
             </div>
           ) : (
             <div className="flex flex-col gap-2">
               {filtered.map((item) => {
-                const resposta =
-                  item.schedulingStatus === "fora_fila"
-                    ? "Fila interna"
-                    : item.schedulingStatus === "reservado"
-                      ? "Reserva"
-                      : "Agendamento"
-
-                const criticidade =
-                  item.deadlineWarningLevel === "overdue"
-                    ? "Vencido"
-                    : item.deadlineWarningLevel === "critical"
-                      ? "Crítico"
-                      : item.deadlineWarningLevel === "warning"
-                        ? "Atenção"
-                        : "Regular"
-
                 return (
                   <Link
                     key={item.id}
@@ -224,11 +335,11 @@ export function PreJudicialBoard() {
                             }
                             className="text-xs"
                           >
-                            {PREJUDICIAL_QUEUE_REASON_LABELS[item.queueReason]}
+                            {getReasonLabel(item.queueReason)}
                           </Badge>
 
                           <Badge variant="outline" className="text-xs">
-                            {PREJUDICIAL_STATUS_LABELS[item.status]}
+                            {getStatusLabel(item.status)}
                           </Badge>
 
                           <Badge variant="outline" className="text-xs">
@@ -241,8 +352,10 @@ export function PreJudicialBoard() {
                         </p>
 
                         <p className="mt-1 text-sm text-muted-foreground">
-                          <span className="font-medium text-foreground">CPF:</span>{" "}
-                          {item.cpf}
+                          <span className="font-medium text-foreground">
+                            CPF:
+                          </span>{" "}
+                          {item.cpf || "Não informado"}
                           {" | "}
                           <span className="font-medium text-foreground">
                             Protocolo:
@@ -252,15 +365,41 @@ export function PreJudicialBoard() {
                           <span className="font-medium text-foreground">
                             Origem:
                           </span>{" "}
-                          {item.originProtocol}
+                          {item.originProtocol || "Não informado"}
                         </p>
 
                         <p className="mt-1 text-sm text-muted-foreground">
                           <span className="font-medium text-foreground">
                             Município:
                           </span>{" "}
-                          {item.municipalityName}
+                          {item.municipalityName || "Não informado"}
                         </p>
+
+                        {(item.procedureCode || item.cidCode) && (
+                          <p className="mt-1 text-sm text-muted-foreground">
+                            {item.procedureCode && (
+                              <>
+                                <span className="font-medium text-foreground">
+                                  SIGTAP:
+                                </span>{" "}
+                                {item.procedureCode} -{" "}
+                                {item.procedureDescription || "Não informado"}
+                              </>
+                            )}
+
+                            {item.procedureCode && item.cidCode ? " | " : ""}
+
+                            {item.cidCode && (
+                              <>
+                                <span className="font-medium text-foreground">
+                                  CID:
+                                </span>{" "}
+                                {item.cidCode} -{" "}
+                                {item.cidDescription || "Não informado"}
+                              </>
+                            )}
+                          </p>
+                        )}
 
                         <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
                           <span>
@@ -274,14 +413,14 @@ export function PreJudicialBoard() {
                             <span className="font-medium text-foreground">
                               Resposta:
                             </span>{" "}
-                            {resposta}
+                            {getSchedulingLabel(item.schedulingStatus)}
                           </span>
 
                           <span>
                             <span className="font-medium text-foreground">
                               Criticidade:
                             </span>{" "}
-                            {criticidade}
+                            {getDeadlineLabel(item.deadlineWarningLevel)}
                           </span>
                         </div>
                       </div>

@@ -1,5 +1,6 @@
 "use client"
 
+import Image from "next/image"
 import React from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
@@ -25,13 +26,11 @@ import {
 } from "lucide-react"
 
 import { useAuth } from "@/lib/auth-context"
-import { usePermissions } from "@/lib/permissions"
 import {
-  canAccessJudicialAdmin,
-  canAccessJudicialModule,
-  canAccessSchedulingModule,
-} from "@/lib/judicial-access"
-import type { Module } from "@/lib/types"
+  getUserPerfilCodigo,
+  hasUserPermission,
+  isAdminUser,
+} from "@/lib/access-control"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 
@@ -39,16 +38,28 @@ interface NavItem {
   label: string
   href: string
   icon: React.ComponentType<{ className?: string }>
-  module?: Module
-  adminOnly?: boolean
   section?: string
   hideForUnit?: boolean
-  predicate?: () => boolean
+  adminOnly?: boolean
+  permissionModule?: string
+  permissionAction?: string
 }
 
 interface AppSidebarProps {
   collapsed?: boolean
   onToggleCollapse?: () => void
+}
+
+function isUnitUser(user: any) {
+  const perfilCodigo = getUserPerfilCodigo(user)
+  const role = String(user?.role ?? "").trim().toUpperCase()
+
+  return (
+    perfilCodigo === "UNIDADE" ||
+    perfilCodigo === "UNIDADE_HOSPITALAR" ||
+    role === "UNIDADE" ||
+    role === "UNIDADE_HOSPITALAR"
+  )
 }
 
 export function AppSidebar({
@@ -58,11 +69,12 @@ export function AppSidebar({
   const pathname = usePathname()
   const router = useRouter()
   const { user, logout } = useAuth()
-  const { hasPermission } = usePermissions()
 
   if (!user) return null
 
-  const isUnit = user.role === "UNIDADE_HOSPITALAR"
+  const currentUser = user as any
+  const isAdmin = isAdminUser(currentUser)
+  const isUnit = isUnitUser(currentUser)
 
   const NAV_ITEMS: NavItem[] = [
     {
@@ -77,55 +89,64 @@ export function AppSidebar({
       icon: Users,
       section: "principal",
       hideForUnit: true,
+      permissionModule: "PACIENTES",
+      permissionAction: "visualizar",
     },
     {
       label: "TFD",
       href: "/tfd",
       icon: FileText,
-      module: "tfd",
       section: "modulos",
+      permissionModule: "TFD",
+      permissionAction: "visualizar",
     },
     {
       label: "CNRAC",
       href: "/cnrac",
       icon: ClipboardList,
-      module: "cnrac",
       section: "modulos",
+      permissionModule: "CNRAC",
+      permissionAction: "visualizar",
     },
     {
       label: "Hemodiálise",
       href: "/hemodialise",
       icon: Stethoscope,
-      module: "hemodialise",
       section: "modulos",
+      permissionModule: "HEMODIALISE",
+      permissionAction: "visualizar",
     },
     {
       label: "Judicial",
       href: "/judicial",
       icon: Scale,
       section: "modulos",
-      predicate: () => canAccessJudicialModule(user) || user.role === "ADMIN",
+      permissionModule: "JUDICIAL",
+      permissionAction: "visualizar",
     },
     {
       label: "Pré Judicial",
       href: "/pre-judicial",
       icon: Gavel,
       section: "modulos",
-      predicate: () => canAccessJudicialModule(user) || user.role === "ADMIN",
+      permissionModule: "PRE_JUDICIAL",
+      permissionAction: "visualizar",
     },
     {
       label: "Agendamento da Demanda",
       href: "/agendamento-demanda",
       icon: CalendarRange,
       section: "modulos",
-      predicate: () => canAccessSchedulingModule(user) || user.role === "ADMIN",
+      permissionModule: "AGENDAMENTO",
+      permissionAction: "visualizar",
     },
     {
       label: "Relatórios",
       href: "/relatorios",
       icon: BarChart3,
       section: "modulos",
-      predicate: () => true,
+      permissionModule: "RELATORIOS",
+      permissionAction: "visualizar",
     },
     {
       label: "Usuários",
@@ -153,7 +174,8 @@ export function AppSidebar({
       href: "/admin/judicial",
       icon: Settings,
       section: "admin",
-      predicate: () => canAccessJudicialAdmin(user),
+      permissionModule: "ADMIN_JUDICIAL",
+      permissionAction: "visualizar",
     },
     {
       label: "Meu Perfil",
@@ -165,11 +187,16 @@ export function AppSidebar({
 
   const visibleItems = NAV_ITEMS.filter((item) => {
     if (item.hideForUnit && isUnit) return false
-    if (item.adminOnly && user.role !== "ADMIN") return false
-    if (item.module && !hasPermission(user.role, item.module, "visualizar")) {
-      return false
+    if (item.adminOnly && !isAdmin) return false
+
+    if (item.permissionModule) {
+      return hasUserPermission(
+        currentUser,
+        item.permissionModule,
+        item.permissionAction || "visualizar",
+      )
     }
-    if (item.predicate && !item.predicate()) return false
+
     return true
   })
 
@@ -205,20 +232,28 @@ export function AppSidebar({
           collapsed ? "justify-center px-2" : "justify-between gap-3 px-4",
         )}
       >
-        <div className="flex min-w-0 items-center gap-3">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-sidebar-primary">
-            <ShieldCheck className="h-4 w-4 text-sidebar-primary-foreground" />
-          </div>
+        <div
+          className={cn(
+            "flex min-w-0 flex-col items-start justify-center",
+            collapsed && "items-center",
+          )}
+        >
+          <Image
+            src="/larga-sigajus-branca.png"
+            alt="SIGAJUS"
+            width={collapsed ? 66 : 200}
+            height={collapsed ? 28 : 60}
+            className={cn(
+              "h-auto object-contain",
+              collapsed ? "h-auto w-auto max-w-[66px]" : "h-auto w-auto max-w-[200px]",
+            )}
+            priority
+          />
 
           {!collapsed && (
-            <div className="min-w-0">
-              <p className="truncate text-sm font-bold tracking-wide text-sidebar-primary-foreground">
-                SIS Regulação
-              </p>
-              <p className="text-[11px] text-sidebar-foreground/60">
-                Painel interno
-              </p>
-            </div>
+            <p className="mt-1 text-[11px] text-sidebar-foreground/60">
+              Painel interno
+            </p>
           )}
         </div>
 
@@ -238,14 +273,14 @@ export function AppSidebar({
         </Button>
       </div>
 
-      {isUnit && user.unidadeNome && (
+      {isUnit && currentUser.unidadeNome && (
         <div className={cn("mt-3", collapsed ? "px-2" : "px-3")}>
           <div
             className={cn(
               "rounded-lg bg-sidebar-accent",
               collapsed ? "px-2 py-3 text-center" : "px-3 py-2",
             )}
-            title={user.unidadeNome}
+            title={currentUser.unidadeNome}
           >
             {!collapsed && (
               <p className="text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/40">
@@ -260,8 +295,8 @@ export function AppSidebar({
               )}
             >
               {collapsed
-                ? user.unidadeNome.slice(0, 2).toUpperCase()
-                : user.unidadeNome}
+                ? String(currentUser.unidadeNome).slice(0, 2).toUpperCase()
+                : currentUser.unidadeNome}
             </p>
           </div>
         </div>

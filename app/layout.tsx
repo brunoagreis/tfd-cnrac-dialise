@@ -17,9 +17,14 @@ const jetbrainsMono = JetBrains_Mono({
 })
 
 export const metadata: Metadata = {
-  title: "SIS Regulacao - Painel Administrativo",
+  title: "SIGAJUS - Painel Administrativo",
   description:
-    "Sistema de regulacao em saude - TFD, CNRAC e Hemodialise",
+    "Sistema de gestão judicial e regulação em saúde - TFD, CNRAC, Hemodiálise, Judicial e Pré Judicial",
+  icons: {
+    icon: "/icon-sigajus.png",
+    shortcut: "/icon-sigajus.png",
+    apple: "/icon-sigajus.png",
+  },
 }
 
 export const viewport: Viewport = {

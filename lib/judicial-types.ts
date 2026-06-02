@@ -55,7 +55,11 @@ export type MonitoringMode = (typeof MONITORING_MODES)[number]
 export const SCHEDULING_STATUSES = ["fora_fila", "pendente", "reservado"] as const
 export type SchedulingStatus = (typeof SCHEDULING_STATUSES)[number]
 
-export const CORE_TABLES = ["core_ambulatorial", "core_leito", "core_urgencia"] as const
+export const CORE_TABLES = [
+  "core_ambulatorial_finalizados",
+  "core_ambulatorial_em_atendimento",
+  "core_leitos",
+] as const
 export type CoreTable = (typeof CORE_TABLES)[number]
 
 export interface JudicialAttachment {
@@ -133,7 +137,6 @@ export interface JudicialMovement {
   schedulingReason?: string
   attachments: JudicialAttachment[]
 }
-
 
 export interface JudicialProcessStatusEntry {
   id: string
@@ -336,6 +339,9 @@ export const MOVEMENT_TYPE_LABELS: Record<MovementType, string> = {
   reserva_agendamento: "Reserva de Agendamento",
   nao_agendado: "Não Agendado",
   cumprimento: "Cumprimento",
+  cumprido: "Cumprido",
+  resolvido: "Resolvido",
+  arquivado: "Arquivado",
   falta_paciente: "Falta do Paciente",
   obito: "Óbito",
   encerramento_inercia: "Encerramento por Inércia do Município",
@@ -366,9 +372,9 @@ export const SYSTEM_LABELS: Record<JudicialSystem, string> = {
 }
 
 export const CORE_TABLE_LABELS: Record<CoreTable, string> = {
-  core_ambulatorial: "CORE Ambulatorial",
-  core_leito: "CORE Leito",
-  core_urgencia: "CORE Urgência",
+  core_ambulatorial_finalizados: "CORE Ambulatorial Finalizados",
+  core_ambulatorial_em_atendimento: "CORE Ambulatorial Em Atendimento",
+  core_leitos: "CORE Leitos",
 }
 
 export const SCHEDULING_STATUS_LABELS: Record<SchedulingStatus, string> = {

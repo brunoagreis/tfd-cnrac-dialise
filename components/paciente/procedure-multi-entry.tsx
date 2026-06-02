@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useMemo, useState } from "react"
@@ -7,8 +6,15 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
-import type { ProcedureCatalogItem, ProcedureSituation } from "@/lib/paciente-demand-catalogs"
-import { getSubSpecialties } from "@/lib/paciente-demand-catalogs"
+
+export type ProcedureSituation = "determinado" | "cumprido" | "encerrado"
+
+export type ProcedureCatalogItem = {
+  sigtapCode: string
+  description: string
+  specialty: string
+  subSpecialty: string
+}
 
 export type ProcedureEntry = {
   sigtapCode: string
@@ -43,7 +49,22 @@ export function ProcedureMultiEntry({
       .slice(0, 8)
   }, [catalog, query])
 
-  const subSpecialties = getSubSpecialties(specialty)
+  const specialtyOptions = useMemo(() => {
+    return Array.from(new Set(catalog.map((item) => item.specialty))).sort((a, b) =>
+      a.localeCompare(b, "pt-BR"),
+    )
+  }, [catalog])
+
+  const subSpecialties = useMemo(() => {
+    if (!specialty) return []
+    return Array.from(
+      new Set(
+        catalog
+          .filter((item) => item.specialty === specialty)
+          .map((item) => item.subSpecialty),
+      ),
+    ).sort((a, b) => a.localeCompare(b, "pt-BR"))
+  }, [catalog, specialty])
 
   function selectItem(item: ProcedureCatalogItem) {
     setSelectedCode(item.sigtapCode)
@@ -53,7 +74,7 @@ export function ProcedureMultiEntry({
   }
 
   function handleAdd() {
-    if (!selectedItem || !specialty) return
+    if (!selectedItem || !specialty || !subSpecialty) return
 
     onChange([
       ...value,
@@ -95,7 +116,7 @@ export function ProcedureMultiEntry({
               <div className="mt-2 max-h-52 overflow-auto rounded-xl border border-border bg-background p-1">
                 {filtered.map((item) => (
                   <button
-                    key={item.sigtapCode}
+                    key={`${item.sigtapCode}-${item.description}`}
                     type="button"
                     className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-muted"
                     onClick={() => selectItem(item)}
@@ -118,8 +139,10 @@ export function ProcedureMultiEntry({
               }}
             >
               <option value="">Selecione</option>
-              {[...new Set(catalog.map((item) => item.specialty))].map((item) => (
-                <option key={item} value={item}>{item}</option>
+              {specialtyOptions.map((item) => (
+                <option key={item} value={item}>
+                  {item}
+                </option>
               ))}
             </select>
           </div>
@@ -133,7 +156,9 @@ export function ProcedureMultiEntry({
             >
               <option value="">Selecione</option>
               {subSpecialties.map((item) => (
-                <option key={item} value={item}>{item}</option>
+                <option key={item} value={item}>
+                  {item}
+                </option>
               ))}
             </select>
           </div>
@@ -168,8 +193,13 @@ export function ProcedureMultiEntry({
             <div key={`${item.sigtapCode}-${index}`} className="rounded-xl border border-border p-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <p className="text-sm font-medium">{item.sigtapCode} - {item.description}</p>
-                  <p className="text-xs text-muted-foreground">{item.specialty}{item.subSpecialty ? ` • ${item.subSpecialty}` : ""}</p>
+                  <p className="text-sm font-medium">
+                    {item.sigtapCode} - {item.description}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {item.specialty}
+                    {item.subSpecialty ? ` • ${item.subSpecialty}` : ""}
+                  </p>
                 </div>
                 <div className="flex items-center gap-2">
                   <Badge variant="outline">{item.situation}</Badge>

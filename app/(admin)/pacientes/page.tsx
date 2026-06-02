@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
+import { toast } from "sonner"
 import {
   ChevronLeft,
   ChevronRight,
@@ -12,8 +13,6 @@ import {
 } from "lucide-react"
 
 import { useStore } from "@/lib/store-context"
-import { useJudicial } from "@/lib/judicial-context"
-import { usePreJudicial } from "@/lib/pre-judicial-context"
 import { ModuleChooser, type DemandModuleChoice } from "@/components/paciente/module-chooser"
 import { StandardDemandForm } from "@/components/paciente/standard-demand-form"
 import { JudicialDemandForm } from "@/components/paciente/judicial-demand-form"
@@ -62,24 +61,11 @@ type NewPatientFormState = {
   cidade: string
 }
 
-const PAGE_SIZE = 8
-
-function moduleLabel(value: string) {
-  switch (value) {
-    case "tfd":
-      return "TFD"
-    case "cnrac":
-      return "CNRAC"
-    case "hemodialise":
-      return "Hemodiálise"
-    case "judicial":
-      return "Judicial"
-    case "pre_judicial":
-      return "Pré Judicial"
-    default:
-      return value
-  }
+type ApiPatientItem = Paciente & {
+  totalDemandas?: number
 }
+
+const PAGE_SIZE = 8
 
 function onlyDigits(value: string) {
   return value.replace(/\D/g, "")
@@ -122,19 +108,6 @@ function normalizeSearchInput(value: string) {
   return value
 }
 
-function buildEnderecoCompleto(form: NewPatientFormState) {
-  const parts = [
-    form.endereco?.trim(),
-    form.numero?.trim() ? `Nº ${form.numero.trim()}` : "",
-    form.complemento?.trim() ? `Compl. ${form.complemento.trim()}` : "",
-    form.bairro?.trim() ? `Bairro ${form.bairro.trim()}` : "",
-    form.cidade?.trim(),
-    form.cep?.trim() ? `CEP ${form.cep.trim()}` : "",
-  ].filter(Boolean)
-
-  return parts.join(", ")
-}
-
 function initialNewPatientForm(prefill = ""): NewPatientFormState {
   const cpfPrefill = looksLikeCpfSearch(prefill) ? formatCpf(prefill) : ""
 
@@ -154,15 +127,33 @@ function initialNewPatientForm(prefill = ""): NewPatientFormState {
   }
 }
 
+function normalizeApiPatient(item: any): ApiPatientItem {
+  return {
+    id: String(item?.id ?? ""),
+    cpf: String(item?.cpf ?? ""),
+    cartaoSus: String(item?.cartaoSus ?? item?.cns ?? ""),
+    nome: String(item?.nome ?? ""),
+    dataNascimento: String(item?.dataNascimento ?? ""),
+    telefones: [],
+    email: String(item?.email ?? ""),
+    municipio: String(item?.municipio ?? ""),
+    endereco: String(item?.endereco ?? ""),
+    criadoEm: String(item?.criadoEm ?? ""),
+    atualizadoEm: String(item?.atualizadoEm ?? ""),
+    totalDemandas: Number(item?.totalDemandas ?? 0),
+  }
+}
+
 export default function PacientesPage() {
   const store = useStore() as any
-  const judicial = useJudicial() as any
-  const preJudicial = usePreJudicial() as any
 
   const [search, setSearch] = useState("")
   const [page, setPage] = useState(1)
 
   const [historyPatient, setHistoryPatient] = useState<Paciente | null>(null)
+  const [historyItems, setHistoryItems] = useState<PatientHistoryItem[]>([])
+  const [loadingHistory, setLoadingHistory] = useState(false)
+
   const [demandPatient, setDemandPatient] = useState<Paciente | null>(null)
   const [selectedModule, setSelectedModule] = useState<DemandModuleChoice | null>(null)
 
@@ -170,21 +161,91 @@ export default function PacientesPage() {
   const [createPatientForm, setCreatePatientForm] = useState<NewPatientFormState>(initialNewPatientForm())
   const [savingPatient, setSavingPatient] = useState(false)
 
-  const pacientes = useMemo(() => {
-    return Array.isArray(store?.pacientes) ? (store.pacientes as Paciente[]) : []
-  }, [store])
+  const [apiPatients, setApiPatients] = useState<ApiPatientItem[]>([])
+  const [loadingPatients, setLoadingPatients] = useState(false)
 
-  const demandas = useMemo(() => {
-    return Array.isArray(store?.demandas) ? store.demandas : []
-  }, [store])
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      void fetchPatients(search)
+    }, 250)
 
-  const judicialCases = useMemo(() => {
-    return Array.isArray(judicial?.cases) ? judicial.cases : []
-  }, [judicial])
+    return () => clearTimeout(timer)
+  }, [search])
 
-  const preJudicialCases = useMemo(() => {
-    return Array.isArray(preJudicial?.cases) ? preJudicial.cases : []
-  }, [preJudicial])
+  useEffect(() => {
+    if (!historyPatient?.id) {
+      setHistoryItems([])
+      return
+    }
+
+    void fetchHistory(historyPatient.id)
+  }, [historyPatient?.id])
+
+  async function fetchPatients(query: string) {
+    try {
+      setLoadingPatients(true)
+
+      const params = new URLSearchParams()
+      if (query.trim()) {
+        params.set("q", query.trim())
+      }
+
+      const response = await fetch(
+        `/api/pacientes${params.toString() ? `?${params.toString()}` : ""}`,
+        {
+          method: "GET",
+          cache: "no-store",
+        },
+      )
+
+      const json = await response.json().catch(() => ({}))
+
+      if (!response.ok || !json?.ok) {
+        toast.error(json?.error || "Erro ao carregar pacientes.")
+        return
+      }
+
+      const items = Array.isArray(json?.items) ? json.items : []
+      setApiPatients(items.map(normalizeApiPatient))
+    } catch (error) {
+      console.error("LOAD_PACIENTES_DB_ERROR", error)
+      toast.error("Erro ao carregar pacientes.")
+    } finally {
+      setLoadingPatients(false)
+    }
+  }
+
+  async function fetchHistory(patientId: string) {
+    try {
+      setLoadingHistory(true)
+
+      const response = await fetch(
+        `/api/pacientes/${encodeURIComponent(patientId)}/historico`,
+        {
+          method: "GET",
+          cache: "no-store",
+        },
+      )
+
+      const json = await response.json().catch(() => ({}))
+
+      if (!response.ok || !json?.ok) {
+        toast.error(json?.error || "Erro ao carregar histórico do paciente.")
+        setHistoryItems([])
+        return
+      }
+
+      setHistoryItems(Array.isArray(json?.items) ? json.items : [])
+    } catch (error) {
+      console.error("LOAD_PATIENT_HISTORY_ERROR", error)
+      toast.error("Erro ao carregar histórico do paciente.")
+      setHistoryItems([])
+    } finally {
+      setLoadingHistory(false)
+    }
+  }
+
+  const pacientes = useMemo(() => apiPatients, [apiPatients])
 
   const filteredPatients = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -214,56 +275,11 @@ export default function PacientesPage() {
     return filteredPatients.slice(start, start + PAGE_SIZE)
   }, [filteredPatients, page])
 
-  const historyItems = useMemo(() => {
-    if (!historyPatient) return [] as PatientHistoryItem[]
-
-    const patientId = (historyPatient as any).id
-
-    const standard: PatientHistoryItem[] = demandas
-      .filter((d: any) => d.pacienteId === patientId)
-      .map((d: any) => ({
-        id: `std-${d.id}`,
-        label: d.protocolo,
-        href: `/protocolo/${d.protocolo}`,
-        moduleLabel: moduleLabel(d.modulo),
-        createdAt: d.criadoEm,
-        status: d.status,
-      }))
-
-    const judicialItems: PatientHistoryItem[] = judicialCases
-      .filter((item: any) => item.patientId === patientId)
-      .map((item: any) => ({
-        id: `jud-${item.id}`,
-        label: item.registration?.pgeNetNumber || item.processNumber || item.originProtocol || item.id,
-        href: `/judicial/${item.id}`,
-        moduleLabel: "Judicial",
-        createdAt: item.createdAt,
-        status: item.status,
-      }))
-
-    const preItems: PatientHistoryItem[] = preJudicialCases
-      .filter((item: any) => item.patientId === patientId)
-      .map((item: any) => ({
-        id: `pre-${item.id}`,
-        label: item.protocolNumber || item.originProtocol || item.id,
-        href: `/pre-judicial/${item.id}`,
-        moduleLabel: "Pré Judicial",
-        createdAt: item.createdAt,
-        status: item.status,
-      }))
-
-    return [...standard, ...judicialItems, ...preItems].sort((a, b) => {
-      const da = a.createdAt ? new Date(a.createdAt).getTime() : 0
-      const db = b.createdAt ? new Date(b.createdAt).getTime() : 0
-      return db - da
-    })
-  }, [historyPatient, demandas, judicialCases, preJudicialCases])
-
-  function patientDemandCount(patientId: string) {
-    const countStandard = demandas.filter((d: any) => d.pacienteId === patientId).length
-    const countJudicial = judicialCases.filter((item: any) => item.patientId === patientId).length
-    const countPre = preJudicialCases.filter((item: any) => item.patientId === patientId).length
-    return countStandard + countJudicial + countPre
+  function patientDemandCount(patient: ApiPatientItem) {
+    if (typeof patient.totalDemandas === "number") {
+      return patient.totalDemandas
+    }
+    return 0
   }
 
   function openDemand(patient: Paciente) {
@@ -345,47 +361,7 @@ export default function PacientesPage() {
     if (savingPatient) return
     if (!validateNewPatientForm()) return
 
-    const existingByCpf = pacientes.find(
-      (p) => onlyDigits((p as any).cpf ?? "") === onlyDigits(createPatientForm.cpf),
-    )
-
-    if (existingByCpf) {
-      window.alert("Já existe um paciente cadastrado com este CPF.")
-      return
-    }
-
-    if (typeof store?.addPaciente !== "function") {
-      window.alert("A função de salvar paciente não está disponível no store.")
-      return
-    }
-
-    try {
-      setSavingPatient(true)
-
-      const savedPatient = store.addPaciente({
-        cpf: formatCpf(createPatientForm.cpf),
-        cartaoSus: onlyDigits(createPatientForm.cns || "").slice(0, 15).padEnd(15, "0"),
-        nome: createPatientForm.nome.trim(),
-        dataNascimento: createPatientForm.dataNascimento,
-        telefones: [formatPhone(createPatientForm.telefone)],
-        email: createPatientForm.email.trim(),
-        municipio: createPatientForm.cidade.trim(),
-        endereco: buildEnderecoCompleto(createPatientForm),
-      }) as Paciente
-
-      setCreatePatientOpen(false)
-      setCreatePatientForm(initialNewPatientForm())
-      setSearch(savedPatient?.nome ?? "")
-      setDemandPatient(savedPatient)
-      setSelectedModule(null)
-
-      window.alert("Paciente salvo com sucesso.")
-    } catch (error) {
-      console.error("Erro ao salvar paciente:", error)
-      window.alert("Ocorreu um erro ao salvar o paciente.")
-    } finally {
-      setSavingPatient(false)
-    }
+    window.alert("O cadastro de novo paciente ainda não foi ligado ao banco de dados.")
   }
 
   function renderDemandForm() {
@@ -448,7 +424,7 @@ export default function PacientesPage() {
             />
           </div>
 
-          {search.trim() && filteredPatients.length === 0 ? (
+          {search.trim() && !loadingPatients && filteredPatients.length === 0 ? (
             <div className="rounded-xl border border-dashed border-border p-4">
               <p className="text-sm text-muted-foreground">
                 Nenhum paciente localizado para a busca informada.
@@ -472,13 +448,17 @@ export default function PacientesPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          {paginatedPatients.length === 0 ? (
+          {loadingPatients ? (
+            <div className="rounded-xl border border-dashed border-border p-10 text-center text-sm text-muted-foreground">
+              Carregando pacientes do banco...
+            </div>
+          ) : paginatedPatients.length === 0 ? (
             <div className="rounded-xl border border-dashed border-border p-10 text-center text-sm text-muted-foreground">
               Nenhum paciente localizado com os filtros atuais.
             </div>
           ) : (
             paginatedPatients.map((patient) => {
-              const count = patientDemandCount((patient as any).id)
+              const count = patientDemandCount(patient)
               const cns = (patient as any).cns ?? (patient as any).cartaoSus ?? "Não informado"
               const city = (patient as any).municipio ?? "Não informado"
 
@@ -567,7 +547,11 @@ export default function PacientesPage() {
           </DialogHeader>
 
           <div className="space-y-3">
-            {historyItems.length === 0 ? (
+            {loadingHistory ? (
+              <div className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
+                Carregando histórico...
+              </div>
+            ) : historyItems.length === 0 ? (
               <div className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
                 Nenhum protocolo encontrado para este paciente.
               </div>
