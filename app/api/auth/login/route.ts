@@ -22,6 +22,16 @@ type UsuarioLoginRow = {
   deveTrocarSenha: boolean | null
 }
 
+type MonitoringSessionRow = {
+  sessaoOnlineId: string | null
+}
+
+type MonitoringAssignmentRow = {
+  atribuicaoId: string | null
+  monitoramentoId: string | null
+  status: string | null
+}
+
 function normalizeText(value: unknown) {
   return String(value ?? "").trim()
 }
@@ -74,6 +84,25 @@ function normalizeUiRole(role: string | null | undefined) {
   return normalized.toUpperCase()
 }
 
+function isMonitoringProfile(role: string, cargo: string | null | undefined) {
+  const normalizedRole = normalizeText(role).toUpperCase()
+  const normalizedCargo = normalizeText(cargo).toUpperCase()
+
+  const monitoringRoles = new Set([
+    "MONITORAMENTO",
+    "MONITOR",
+    "MONITOR_JUDICIAL",
+    "MONITORAMENTO_JUDICIAL",
+    "JUDICIAL_MONITORAMENTO",
+    "OPERADOR_JUDICIAL",
+    "OPERADOR_MONITORAMENTO",
+  ])
+
+  if (monitoringRoles.has(normalizedRole)) return true
+
+  return normalizedCargo.includes("MONITOR")
+}
+
 async function getUsuariosColumns() {
   const rows = await prisma.$queryRawUnsafe<ColumnRow[]>(`
     SELECT column_name
@@ -103,6 +132,61 @@ async function getUnidadeNome(unidadeId: string | null) {
     return rows[0]?.nome ?? null
   } catch {
     return null
+  }
+}
+
+async function assignJudicialMonitoringOnLogin(user: UsuarioLoginRow) {
+  try {
+    const sessionRows = await prisma.$queryRawUnsafe<MonitoringSessionRow[]>(
+      `
+        SELECT public.judicial_registrar_login(
+          $1,
+          $2,
+          $3,
+          'JUDICIAL',
+          NULL,
+          NULL
+        )::text AS "sessaoOnlineId"
+      `,
+      user.id,
+      user.nome,
+      user.email,
+    )
+
+    const sessaoOnlineId = sessionRows[0]?.sessaoOnlineId ?? null
+
+    const assignmentRows = await prisma.$queryRawUnsafe<MonitoringAssignmentRow[]>(
+      `
+        SELECT
+          atribuicao_id::text AS "atribuicaoId",
+          monitoramento_id::text AS "monitoramentoId",
+          status::text AS status
+        FROM public.judicial_atribuir_monitoramento(
+          $1,
+          $2,
+          $3,
+          $4::bigint
+        )
+      `,
+      user.id,
+      user.nome,
+      user.email,
+      sessaoOnlineId,
+    )
+
+    return {
+      ok: true,
+      sessaoOnlineId,
+      quantidade: assignmentRows.length,
+    }
+  } catch (error) {
+    console.error("MONITORING_ASSIGNMENT_ON_LOGIN_ERROR", error)
+
+    return {
+      ok: false,
+      sessaoOnlineId: null,
+      quantidade: 0,
+    }
   }
 }
 
@@ -223,6 +307,10 @@ export async function POST(req: Request) {
     const unidadeNome = await getUnidadeNome(user.unidadeId)
     const uiRole = normalizeUiRole(user.role)
 
+    const monitoramento = isMonitoringProfile(uiRole, user.cargo)
+      ? await assignJudicialMonitoringOnLogin(user)
+      : null
+
     return NextResponse.json({
       ok: true,
       user: {
@@ -237,6 +325,7 @@ export async function POST(req: Request) {
         cargo: user.cargo,
         deveTrocarSenha: user.deveTrocarSenha ?? false,
       },
+      monitoramento,
     })
   } catch (error) {
     console.error("LOGIN_ERROR", error)
