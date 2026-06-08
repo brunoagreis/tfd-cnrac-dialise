@@ -15,6 +15,7 @@ type UsuarioLoginRow = {
   email: string
   senhaHash: string
   role: string | null
+  perfilCodigo: string | null
   ativo: boolean | null
   unidadeId: string | null
   telefone: string | null
@@ -84,11 +85,16 @@ function normalizeUiRole(role: string | null | undefined) {
   return normalized.toUpperCase()
 }
 
-function isMonitoringProfile(role: string, cargo: string | null | undefined) {
+function isMonitoringProfile(
+  role: string,
+  perfilCodigo: string | null | undefined,
+  cargo: string | null | undefined,
+) {
   const normalizedRole = normalizeText(role).toUpperCase()
+  const normalizedPerfilCodigo = normalizeText(perfilCodigo).toUpperCase()
   const normalizedCargo = normalizeText(cargo).toUpperCase()
 
-  const monitoringRoles = new Set([
+  const monitoringMarkers = new Set([
     "MONITORAMENTO",
     "MONITOR",
     "MONITOR_JUDICIAL",
@@ -98,7 +104,8 @@ function isMonitoringProfile(role: string, cargo: string | null | undefined) {
     "OPERADOR_MONITORAMENTO",
   ])
 
-  if (monitoringRoles.has(normalizedRole)) return true
+  if (monitoringMarkers.has(normalizedRole)) return true
+  if (monitoringMarkers.has(normalizedPerfilCodigo)) return true
 
   return normalizedCargo.includes("MONITOR")
 }
@@ -215,6 +222,18 @@ export async function POST(req: Request) {
       columns,
     )
 
+    const perfilCodigoCol = pickFirstExisting(
+      [
+        "perfilCodigo",
+        "perfil_codigo",
+        "codigoPerfil",
+        "codigo_perfil",
+        "profileCode",
+        "profile_code",
+      ],
+      columns,
+    )
+
     const ativoCol = pickFirstExisting(["ativo"], columns)
 
     const unidadeIdCol = pickFirstExisting(
@@ -250,6 +269,7 @@ export async function POST(req: Request) {
         ${quoteIdent(emailCol)} AS email,
         ${quoteIdent(senhaCol)} AS "senhaHash",
         ${roleCol ? `${quoteIdent(roleCol)}::text` : `NULL::text`} AS role,
+        ${perfilCodigoCol ? `${quoteIdent(perfilCodigoCol)}::text` : `NULL::text`} AS "perfilCodigo",
         ${ativoCol ? quoteIdent(ativoCol) : `TRUE`} AS ativo,
         ${unidadeIdCol ? `${quoteIdent(unidadeIdCol)}::text` : `NULL::text`} AS "unidadeId",
         ${telefoneCol ? `${quoteIdent(telefoneCol)}::text` : `NULL::text`} AS telefone,
@@ -307,7 +327,7 @@ export async function POST(req: Request) {
     const unidadeNome = await getUnidadeNome(user.unidadeId)
     const uiRole = normalizeUiRole(user.role)
 
-    const monitoramento = isMonitoringProfile(uiRole, user.cargo)
+    const monitoramento = isMonitoringProfile(uiRole, user.perfilCodigo, user.cargo)
       ? await assignJudicialMonitoringOnLogin(user)
       : null
 
@@ -318,6 +338,7 @@ export async function POST(req: Request) {
         nome: user.nome,
         email: user.email,
         role: uiRole,
+        perfilCodigo: user.perfilCodigo,
         ativo: user.ativo ?? true,
         unidadeId: user.unidadeId,
         unidadeNome,
