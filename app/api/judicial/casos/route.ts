@@ -6,6 +6,8 @@ export const dynamic = "force-dynamic"
 
 type JudicialCaseListRow = {
   id: string
+  monitoramentoId: string | null
+  atribuicaoId: string | null
   demandaId: string | null
   pacienteId: string | null
   protocolo: string | null
@@ -42,6 +44,10 @@ function toUpperSafe(value: unknown) {
   return normalizeText(value).toUpperCase()
 }
 
+function isTruthyParam(value: string) {
+  return ["1", "true", "sim", "yes"].includes(value)
+}
+
 function formatStatus(value: unknown) {
   const raw = normalizeText(value)
   if (!raw) return "Pendente"
@@ -58,12 +64,30 @@ export async function GET(req: NextRequest) {
     const q = normalizeText(req.nextUrl.searchParams.get("q")).toLowerCase()
     const status = normalizeText(req.nextUrl.searchParams.get("status")).toLowerCase()
     const somenteAtivos = normalizeText(req.nextUrl.searchParams.get("somenteAtivos")).toLowerCase()
+    const somenteAtribuidos = isTruthyParam(
+      normalizeText(req.nextUrl.searchParams.get("somenteAtribuidos")).toLowerCase(),
+    )
+    const usuarioId = normalizeText(req.nextUrl.searchParams.get("usuarioId"))
+    const usuarioEmail = normalizeText(req.nextUrl.searchParams.get("usuarioEmail")).toLowerCase()
 
     const params: unknown[] = []
     const whereParts: string[] = [`UPPER(COALESCE(b.origem_modulo, '')) = 'JUDICIAL'`]
+    const atribuicaoHojeWhereParts: string[] = [`a.data_referencia = CURRENT_DATE`]
+
+    if (usuarioId) {
+      params.push(usuarioId)
+      atribuicaoHojeWhereParts.push(`a.usuario_id = $${params.length}`)
+    } else if (usuarioEmail) {
+      params.push(usuarioEmail)
+      atribuicaoHojeWhereParts.push(`LOWER(COALESCE(a.usuario_email, '')) = $${params.length}`)
+    }
 
     if (somenteAtivos !== "false") {
       whereParts.push(`COALESCE(b.ativo_monitoramento, TRUE) = TRUE`)
+    }
+
+    if (somenteAtribuidos) {
+      whereParts.push(`ah.monitoramento_id IS NOT NULL`)
     }
 
     if (status && status !== "todos") {
@@ -96,11 +120,39 @@ export async function GET(req: NextRequest) {
     }
 
     const whereSql = whereParts.length > 0 ? `WHERE ${whereParts.join(" AND ")}` : ""
+    const atribuicaoHojeWhereSql = `WHERE ${atribuicaoHojeWhereParts.join(" AND ")}`
+    const orderSql = somenteAtribuidos
+      ? `
+        ORDER BY
+          ah.bloco_numero NULLS LAST,
+          ah.ordem_no_bloco NULLS LAST,
+          ah.atribuida_em NULLS LAST,
+          b.id DESC
+      `
+      : `
+        ORDER BY
+          COALESCE(b.data_ultimo_monitoramento, b.updated_at, b.created_at) DESC,
+          b.id DESC
+      `
 
     const rows = await prisma.$queryRawUnsafe<JudicialCaseListRow[]>(
       `
-        WITH ultima_atribuicao AS (
+        WITH atribuicao_hoje AS (
           SELECT DISTINCT ON (a.monitoramento_id)
+            a.id::text AS atribuicao_id,
+            a.monitoramento_id::text AS monitoramento_id,
+            a.status,
+            a.atribuida_em,
+            a.usuario_nome,
+            a.bloco_numero,
+            a.ordem_no_bloco
+          FROM public.judicial_monitoramento_atribuicoes a
+          ${atribuicaoHojeWhereSql}
+          ORDER BY a.monitoramento_id, a.created_at DESC, a.id DESC
+        ),
+        ultima_atribuicao AS (
+          SELECT DISTINCT ON (a.monitoramento_id)
+            a.id::text AS atribuicao_id,
             a.monitoramento_id::text AS monitoramento_id,
             a.status,
             a.atribuida_em,
@@ -110,6 +162,8 @@ export async function GET(req: NextRequest) {
         )
         SELECT
           b.id::text AS id,
+          b.id::text AS "monitoramentoId",
+          COALESCE(ah.atribuicao_id, ua.atribuicao_id) AS "atribuicaoId",
           b.demanda_id AS "demandaId",
           b.paciente_id AS "pacienteId",
           d.protocolo,
@@ -133,27 +187,28 @@ export async function GET(req: NextRequest) {
           b.origem_tabela AS "origemTabela",
           b.origem_registro_id AS "origemRegistroId",
           b.ativo_monitoramento AS "ativoMonitoramento",
-          ua.status AS "atribuicaoStatus",
-          ua.atribuida_em::text AS "atribuidaEm",
-          ua.usuario_nome AS "usuarioAtribuidoNome"
+          COALESCE(ah.status, ua.status) AS "atribuicaoStatus",
+          COALESCE(ah.atribuida_em, ua.atribuida_em)::text AS "atribuidaEm",
+          COALESCE(ah.usuario_nome, ua.usuario_nome) AS "usuarioAtribuidoNome"
         FROM public.judicial_monitoramento_base b
         LEFT JOIN public.demandas d
           ON d.id = b.demanda_id
         LEFT JOIN public.pacientes p
           ON p.id = b.paciente_id
+        LEFT JOIN atribuicao_hoje ah
+          ON ah.monitoramento_id = b.id::text
         LEFT JOIN ultima_atribuicao ua
           ON ua.monitoramento_id = b.id::text
         ${whereSql}
-        ORDER BY
-          COALESCE(b.data_ultimo_monitoramento, b.updated_at, b.created_at) DESC,
-          b.id DESC
+        ${orderSql}
       `,
       ...params,
     )
 
     const items = rows.map((row) => ({
       id: row.id,
-      monitoramentoId: row.id,
+      monitoramentoId: row.monitoramentoId ?? row.id,
+      atribuicaoId: row.atribuicaoId ?? "",
       demandaId: row.demandaId ?? "",
       pacienteId: row.pacienteId ?? "",
       protocolo: row.protocolo ?? row.demandaId ?? `MON-${row.id}`,
