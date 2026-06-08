@@ -28,9 +28,9 @@ type MonitoringSessionRow = {
 }
 
 type MonitoringAssignmentRow = {
-  atribuicaoId: string | null
-  monitoramentoId: string | null
-  status: string | null
+  retAtribuicaoId: string | null
+  retMonitoramentoId: string | null
+  retStatus: string | null
 }
 
 function normalizeText(value: unknown) {
@@ -165,20 +165,19 @@ async function assignJudicialMonitoringOnLogin(user: UsuarioLoginRow) {
     const assignmentRows = await prisma.$queryRawUnsafe<MonitoringAssignmentRow[]>(
       `
         SELECT
-          atribuicao_id::text AS "atribuicaoId",
-          monitoramento_id::text AS "monitoramentoId",
-          status::text AS status
-        FROM public.judicial_atribuir_monitoramento(
+          ret_atribuicao_id::text AS "retAtribuicaoId",
+          ret_monitoramento_id::text AS "retMonitoramentoId",
+          ret_status::text AS "retStatus"
+        FROM public.judicial_atribuir_proximo_lote(
+          CURRENT_DATE,
           $1,
           $2,
-          $3,
-          $4::bigint
+          $3
         )
       `,
       user.id,
       user.nome,
       user.email,
-      sessaoOnlineId,
     )
 
     return {
