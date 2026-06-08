@@ -1,8 +1,8 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
-import { Ban, CheckCheck, Download, Edit3, Eye, Plus, Upload } from "lucide-react"
+import { Download, Eye, Plus, Upload } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -19,11 +19,10 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { useAuth } from "@/lib/auth-context"
-import { useJudicial } from "@/lib/judicial-context"
 import {
   JUDICIAL_FICHA_STATUS_LABELS,
   SYSTEM_LABELS,
-  type JudicialFicha,
+  type JudicialCase,
 } from "@/lib/judicial-types"
 
 type UploadedFileMeta = {
@@ -34,10 +33,6 @@ type UploadedFileMeta = {
   size: number
   mimeType: string
 }
-
-type JudicialFichaStatus = keyof typeof JUDICIAL_FICHA_STATUS_LABELS
-
-const FICHA_STATUS_OPTIONS: JudicialFichaStatus[] = ["atendido", "falta", "obito", "inativa"]
 
 function formatFileSize(size: number) {
   if (!Number.isFinite(size)) return "-"
@@ -75,13 +70,35 @@ function AttachmentActions({ attachment }: { attachment: { name: string; url?: s
   )
 }
 
+function getLinkedValue(notes: string, label: string) {
+  return (
+    notes
+      .split("\n")
+      .map((line) => line.trim())
+      .find((line) => line.startsWith(label))
+      ?.replace(label, "")
+      .trim() || "-"
+  )
+}
+
+function getPlainNotes(notes: string) {
+  return (
+    notes
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .filter((line) => !line.startsWith("Procedimento vinculado:"))
+      .filter((line) => !line.startsWith("CID vinculado:"))
+      .join(" ") || "-"
+  )
+}
+
 export function JudicialFichasPanel({ caseId }: { caseId: string }) {
   const { user } = useAuth()
-  const judicial = useJudicial()
-  const caseItem = judicial.getCaseById(caseId)
 
+  const [caseItem, setCaseItem] = useState<JudicialCase | null>(null)
+  const [loading, setLoading] = useState(true)
   const [modalOpen, setModalOpen] = useState(false)
-  const [editingFichaId, setEditingFichaId] = useState<string | null>(null)
   const [fichaSystem, setFichaSystem] = useState<"CORE" | "SISREG" | "OUTRO">("CORE")
   const [fichaNumber, setFichaNumber] = useState("")
   const [fichaAttachment, setFichaAttachment] = useState("")
@@ -93,26 +110,45 @@ export function JudicialFichasPanel({ caseId }: { caseId: string }) {
   const [selectedFichaFiles, setSelectedFichaFiles] = useState<FileList | null>(null)
   const [uploadedFichaFiles, setUploadedFichaFiles] = useState<UploadedFileMeta[]>([])
   const [uploadingFicha, setUploadingFicha] = useState(false)
+  const [savingFicha, setSavingFicha] = useState(false)
 
-  const [statusModalOpen, setStatusModalOpen] = useState(false)
-  const [selectedFichaId, setSelectedFichaId] = useState<string | null>(null)
-  const [fichaStatus, setFichaStatus] = useState<JudicialFichaStatus>("atendido")
-  const [fichaStatusReason, setFichaStatusReason] = useState("")
+  async function loadCase() {
+    try {
+      setLoading(true)
+      const response = await fetch(`/api/judicial/casos/${encodeURIComponent(caseId)}`, {
+        cache: "no-store",
+      })
+      const data = await response.json().catch(() => ({}))
+
+      if (!response.ok || !data?.ok || !data?.item) {
+        throw new Error(data?.error || "Processo judicial não encontrado.")
+      }
+
+      setCaseItem(data.item as JudicialCase)
+    } catch (error) {
+      console.error("LOAD_JUDICIAL_FICHAS_CASE_ERROR", error)
+      toast.error(error instanceof Error ? error.message : "Erro ao carregar fichas.")
+      setCaseItem(null)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    void loadCase()
+  }, [caseId])
 
   const activeProcedures = useMemo(
     () => caseItem?.procedures.filter((item) => item.active !== false) ?? [],
-    [caseItem?.procedures],
+    [caseItem],
   )
 
   const activeCids = useMemo(
     () => caseItem?.cids.filter((item) => item.active !== false) ?? [],
-    [caseItem?.cids],
+    [caseItem],
   )
 
-  if (!caseItem) return null
-
   function resetFichaForm() {
-    setEditingFichaId(null)
     setFichaSystem("CORE")
     setFichaNumber("")
     setFichaAttachment("")
@@ -130,22 +166,9 @@ export function JudicialFichasPanel({ caseId }: { caseId: string }) {
     setModalOpen(true)
   }
 
-  function handleEditFicha(item: JudicialFicha) {
-    setEditingFichaId(item.id)
-    setFichaSystem(item.system)
-    setFichaNumber(item.number || "")
-    setFichaAttachment(item.attachmentName || "")
-    setFichaNotes(item.notes || "")
-    setFichaProcedureCode(item.notes.includes("Procedimento vinculado:") ? item.notes.split("\n")[0].replace("Procedimento vinculado:", "").trim() : "")
-    setFichaCidCode(item.notes.includes("CID vinculado:") ? item.notes.split("\n").find((line) => line.startsWith("CID vinculado:"))?.replace("CID vinculado:", "").trim() || "" : "")
-    setRequestedInclusion(item.requestedInclusion)
-    setHasJudicialMark(item.hasJudicialMark)
-    setSelectedFichaFiles(null)
-    setUploadedFichaFiles([])
-    setModalOpen(true)
-  }
-
   async function handleUploadFicha() {
+    if (!caseItem) return
+
     if (!selectedFichaFiles || selectedFichaFiles.length === 0) {
       toast.error("Selecione ao menos um arquivo.")
       return
@@ -181,80 +204,63 @@ export function JudicialFichasPanel({ caseId }: { caseId: string }) {
     }
   }
 
-  function handleSaveFicha() {
+  async function handleSaveFicha() {
     if (!user) return
-    if (!fichaNotes.trim()) {
-      toast.error("Preencha as observações da ficha.")
+
+    if (!fichaNumber.trim()) {
+      toast.error("Informe o número da ficha.")
       return
     }
 
-    const noteLines = [
-      fichaProcedureCode ? `Procedimento vinculado: ${fichaProcedureCode}` : "",
-      fichaCidCode ? `CID vinculado: ${fichaCidCode}` : "",
-      fichaNotes.trim(),
-    ].filter(Boolean)
-    const currentFicha = editingFichaId
-      ? caseItem.fichas.find((item) => item.id === editingFichaId)
-      : undefined
+    try {
+      setSavingFicha(true)
 
-    const payload = {
-      system: fichaSystem,
-      number: fichaNumber || undefined,
-      requestedInclusion,
-      hasJudicialMark,
-      attachmentName: fichaAttachment || undefined,
-      attachmentUrl: uploadedFichaFiles[0]?.url ?? currentFicha?.attachmentUrl,
-      attachmentRelativePath: uploadedFichaFiles[0]?.relativePath ?? currentFicha?.attachmentRelativePath,
-      notes: noteLines.join("\n"),
-      user,
+      const noteLines = [
+        fichaProcedureCode ? `Procedimento vinculado: ${fichaProcedureCode}` : "",
+        fichaCidCode ? `CID vinculado: ${fichaCidCode}` : "",
+        fichaNotes.trim(),
+      ].filter(Boolean)
+
+      const response = await fetch(`/api/judicial/casos/${encodeURIComponent(caseId)}/fichas`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          system: fichaSystem,
+          number: fichaNumber.trim(),
+          requestedInclusion,
+          hasJudicialMark,
+          attachmentName: fichaAttachment || undefined,
+          attachmentUrl: uploadedFichaFiles[0]?.url,
+          attachmentRelativePath: uploadedFichaFiles[0]?.relativePath,
+          notes: noteLines.join("\n"),
+          user,
+        }),
+      })
+
+      const data = await response.json().catch(() => ({}))
+
+      if (!response.ok || !data?.ok) {
+        throw new Error(data?.error || "Erro ao cadastrar ficha.")
+      }
+
+      toast.success("Ficha cadastrada no banco.")
+      setModalOpen(false)
+      resetFichaForm()
+      await loadCase()
+    } catch (error) {
+      console.error("SAVE_JUDICIAL_FICHA_ERROR", error)
+      toast.error(error instanceof Error ? error.message : "Erro ao cadastrar ficha.")
+    } finally {
+      setSavingFicha(false)
     }
-
-    if (editingFichaId) {
-      judicial.updateFicha(caseItem.id, editingFichaId, payload)
-      toast.success("Ficha atualizada.")
-    } else {
-      judicial.addFicha(caseItem.id, payload)
-      toast.success("Ficha cadastrada.")
-    }
-
-    setModalOpen(false)
-    resetFichaForm()
   }
 
-  function handleToggleFicha(item: JudicialFicha) {
-    if (!user) return
-    const reason = item.active === false
-      ? undefined
-      : window.prompt("Informe o motivo da inativação da ficha:", item.inactiveReason || "Cadastro incorreto") || undefined
-    judicial.toggleFicha(caseItem.id, item.id, user, reason)
-    toast.success(item.active === false ? "Ficha reativada." : "Ficha inativada.")
+  if (loading) {
+    return <p className="py-8 text-center text-sm text-muted-foreground">Carregando fichas...</p>
   }
 
-  function handleOpenStatus(item: JudicialFicha) {
-    setSelectedFichaId(item.id)
-    setFichaStatus(item.status ?? "atendido")
-    setFichaStatusReason(item.statusReason ?? "")
-    setStatusModalOpen(true)
-  }
-
-  function handleSaveStatus() {
-    if (!user || !selectedFichaId) return
-    if (!fichaStatusReason.trim()) {
-      toast.error("Justifique a alteração do status da ficha.")
-      return
-    }
-
-    judicial.updateFichaStatus(caseItem.id, {
-      fichaId: selectedFichaId,
-      status: fichaStatus,
-      reason: fichaStatusReason.trim(),
-      user,
-    })
-
-    setStatusModalOpen(false)
-    setSelectedFichaId(null)
-    setFichaStatusReason("")
-    toast.success("Status da ficha atualizado.")
+  if (!caseItem) {
+    return <p className="py-8 text-center text-sm text-muted-foreground">Processo judicial não encontrado.</p>
   }
 
   return (
@@ -269,7 +275,7 @@ export function JudicialFichasPanel({ caseId }: { caseId: string }) {
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1120px] border-collapse text-sm">
+            <table className="w-full min-w-[980px] border-collapse text-sm">
               <thead>
                 <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
                   <th className="px-3 py-2">Sistema</th>
@@ -279,23 +285,18 @@ export function JudicialFichasPanel({ caseId }: { caseId: string }) {
                   <th className="px-3 py-2">CID vinculado</th>
                   <th className="px-3 py-2">Observações</th>
                   <th className="px-3 py-2">Judicial marcada?</th>
-                  <th className="px-3 py-2 text-center">Ações</th>
                 </tr>
               </thead>
               <tbody>
                 {caseItem.fichas.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-3 py-6 text-center text-sm text-muted-foreground">
+                    <td colSpan={7} className="px-3 py-6 text-center text-sm text-muted-foreground">
                       Nenhuma ficha cadastrada.
                     </td>
                   </tr>
                 ) : (
                   caseItem.fichas.map((item) => {
-                    const lines = (item.notes || "").split("\n").map((line) => line.trim()).filter(Boolean)
-                    const linkedProcedure = lines.find((line) => line.startsWith("Procedimento vinculado:"))?.replace("Procedimento vinculado:", "").trim() || "-"
-                    const linkedCid = lines.find((line) => line.startsWith("CID vinculado:"))?.replace("CID vinculado:", "").trim() || "-"
-                    const notes = lines.filter((line) => !line.startsWith("Procedimento vinculado:") && !line.startsWith("CID vinculado:")).join(" ") || "-"
-
+                    const notes = item.notes || ""
                     return (
                       <tr key={item.id} className="border-b border-border align-top">
                         <td className="px-3 py-3">{SYSTEM_LABELS[item.system]}</td>
@@ -328,63 +329,15 @@ export function JudicialFichasPanel({ caseId }: { caseId: string }) {
                             "-"
                           )}
                         </td>
-                        <td className="px-3 py-3">{linkedProcedure}</td>
-                        <td className="px-3 py-3">{linkedCid}</td>
+                        <td className="px-3 py-3">{getLinkedValue(notes, "Procedimento vinculado:")}</td>
+                        <td className="px-3 py-3">{getLinkedValue(notes, "CID vinculado:")}</td>
                         <td className="px-3 py-3">
-                          <p className="max-w-[280px] whitespace-pre-wrap text-muted-foreground">{notes}</p>
-                          {item.inactiveReason && (
-                            <p className="mt-1 text-xs text-destructive">Inativação: {item.inactiveReason}</p>
-                          )}
+                          <p className="max-w-[280px] whitespace-pre-wrap text-muted-foreground">{getPlainNotes(notes)}</p>
                           {item.statusReason && (
                             <p className="mt-1 text-xs text-muted-foreground">Status: {item.statusReason}</p>
                           )}
                         </td>
                         <td className="px-3 py-3">{item.hasJudicialMark ? "Sim" : "Não"}</td>
-                        <td className="px-3 py-3">
-                          <div className="flex items-center justify-center gap-2">
-                            <Button
-                              variant="outline"
-                              size="icon"
-                              className="bg-transparent"
-                              title="Editar ficha"
-                              onClick={() => handleEditFicha(item)}
-                            >
-                              <Edit3 className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="icon"
-                              className="bg-transparent"
-                              title="Alterar status da ficha"
-                              onClick={() => handleOpenStatus(item)}
-                            >
-                              <CheckCheck className="h-4 w-4" />
-                            </Button>
-                            {item.attachmentUrl && (
-                              <Button asChild variant="outline" size="icon" className="bg-transparent" title="Visualizar ficha">
-                                <a href={item.attachmentUrl} target="_blank" rel="noreferrer">
-                                  <Eye className="h-4 w-4" />
-                                </a>
-                              </Button>
-                            )}
-                            {item.attachmentUrl && (
-                              <Button asChild variant="outline" size="icon" className="bg-transparent" title="Baixar ficha">
-                                <a href={item.attachmentRelativePath ? `/api/files/${item.attachmentRelativePath}?download=1` : `${item.attachmentUrl}${item.attachmentUrl.includes("?") ? "&" : "?"}download=1`}>
-                                  <Download className="h-4 w-4" />
-                                </a>
-                              </Button>
-                            )}
-                            <Button
-                              variant="outline"
-                              size="icon"
-                              className="bg-transparent"
-                              title={item.active === false ? "Reativar ficha" : "Inativar ficha"}
-                              onClick={() => handleToggleFicha(item)}
-                            >
-                              <Ban className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </td>
                       </tr>
                     )
                   })
@@ -398,7 +351,7 @@ export function JudicialFichasPanel({ caseId }: { caseId: string }) {
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
         <DialogContent className="max-w-3xl">
           <DialogHeader>
-            <DialogTitle>{editingFichaId ? "Editar ficha" : "Cadastrar nova ficha"}</DialogTitle>
+            <DialogTitle>Cadastrar nova ficha</DialogTitle>
             <DialogDescription>
               Informe os dados principais da ficha e os vínculos necessários.
             </DialogDescription>
@@ -420,7 +373,7 @@ export function JudicialFichasPanel({ caseId }: { caseId: string }) {
               </div>
               <div>
                 <Label className="mb-1 block text-xs">Número da ficha</Label>
-                <Input value={fichaNumber} onChange={(e) => setFichaNumber(e.target.value)} placeholder="CORE-202600001" />
+                <Input value={fichaNumber} onChange={(e) => setFichaNumber(e.target.value)} placeholder="Número da ficha" />
               </div>
             </div>
 
@@ -482,12 +435,10 @@ export function JudicialFichasPanel({ caseId }: { caseId: string }) {
                 </div>
               )}
 
-              <div className="flex flex-wrap gap-2">
-                <Button type="button" variant="outline" className="bg-transparent" disabled={uploadingFicha} onClick={handleUploadFicha}>
-                  <Upload className="mr-2 h-4 w-4" />
-                  {uploadingFicha ? "Enviando..." : "Enviar arquivo(s)"}
-                </Button>
-              </div>
+              <Button type="button" variant="outline" className="bg-transparent" disabled={uploadingFicha} onClick={handleUploadFicha}>
+                <Upload className="mr-2 h-4 w-4" />
+                {uploadingFicha ? "Enviando..." : "Enviar arquivo(s)"}
+              </Button>
 
               <Input value={fichaAttachment} onChange={(e) => setFichaAttachment(e.target.value)} placeholder="Arquivos enviados" />
 
@@ -509,49 +460,12 @@ export function JudicialFichasPanel({ caseId }: { caseId: string }) {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" className="bg-transparent" onClick={() => setModalOpen(false)}>
+            <Button variant="outline" className="bg-transparent" onClick={() => setModalOpen(false)} disabled={savingFicha}>
               Cancelar
             </Button>
-            <Button onClick={handleSaveFicha}>{editingFichaId ? "Salvar alterações" : "Salvar ficha"}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={statusModalOpen} onOpenChange={setStatusModalOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Alterar status da ficha</DialogTitle>
-            <DialogDescription>
-              Informe o resultado final da ficha ou a inativação do registro.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4">
-            <div>
-              <Label className="mb-1 block text-xs">Status</Label>
-              <select
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                value={fichaStatus}
-                onChange={(e) => setFichaStatus(e.target.value as JudicialFichaStatus)}
-              >
-                {FICHA_STATUS_OPTIONS.map((status) => (
-                  <option key={status} value={status}>
-                    {JUDICIAL_FICHA_STATUS_LABELS[status]}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <Label className="mb-1 block text-xs">Justificativa</Label>
-              <Textarea rows={4} value={fichaStatusReason} onChange={(e) => setFichaStatusReason(e.target.value)} />
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" className="bg-transparent" onClick={() => setStatusModalOpen(false)}>
-              Cancelar
+            <Button onClick={handleSaveFicha} disabled={savingFicha}>
+              {savingFicha ? "Salvando..." : "Salvar ficha"}
             </Button>
-            <Button onClick={handleSaveStatus}>Salvar status</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
