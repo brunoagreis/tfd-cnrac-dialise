@@ -1,23 +1,8 @@
+// @ts-nocheck
 "use client"
 
 import React from "react"
 import Link from "next/link"
-import {
-  FileText,
-  ClipboardList,
-  Stethoscope,
-  ShieldAlert,
-  ArrowRight,
-  Users,
-  AlertTriangle,
-  CheckCircle2,
-  RotateCcw,
-  Scale,
-  CalendarRange,
-  Settings,
-  Gavel,
-  BarChart3,
-} from "lucide-react"
 
 import { useAuth } from "@/lib/auth-context"
 import {
@@ -39,13 +24,184 @@ import {
 } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 
+function IconBase({
+  className,
+  children,
+}: {
+  className?: string
+  children: any
+}) {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      {children}
+    </svg>
+  )
+}
+
+function FileTextIcon({ className }: { className?: string }) {
+  return (
+    <IconBase className={className}>
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" />
+      <path d="M14 2v6h6" />
+      <path d="M8 13h8" />
+      <path d="M8 17h5" />
+    </IconBase>
+  )
+}
+
+function ClipboardIcon({ className }: { className?: string }) {
+  return (
+    <IconBase className={className}>
+      <rect x="8" y="2" width="8" height="4" rx="1" />
+      <path d="M9 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-3" />
+      <path d="M8 12h8" />
+      <path d="M8 16h6" />
+    </IconBase>
+  )
+}
+
+function StethoscopeIcon({ className }: { className?: string }) {
+  return (
+    <IconBase className={className}>
+      <path d="M6 3v5a6 6 0 0 0 12 0V3" />
+      <path d="M6 3H4" />
+      <path d="M18 3h2" />
+      <path d="M12 14v2a4 4 0 0 0 8 0v-1" />
+      <circle cx="20" cy="15" r="2" />
+    </IconBase>
+  )
+}
+
+function UsersIcon({ className }: { className?: string }) {
+  return (
+    <IconBase className={className}>
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </IconBase>
+  )
+}
+
+function AlertIcon({ className }: { className?: string }) {
+  return (
+    <IconBase className={className}>
+      <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" />
+      <path d="M12 9v4" />
+      <path d="M12 17h.01" />
+    </IconBase>
+  )
+}
+
+function CheckIcon({ className }: { className?: string }) {
+  return (
+    <IconBase className={className}>
+      <circle cx="12" cy="12" r="10" />
+      <path d="m9 12 2 2 4-4" />
+    </IconBase>
+  )
+}
+
+function RotateIcon({ className }: { className?: string }) {
+  return (
+    <IconBase className={className}>
+      <path d="M21 12a9 9 0 0 1-15.5 6.3" />
+      <path d="M3 12A9 9 0 0 1 18.5 5.7" />
+      <path d="M18 2v5h-5" />
+      <path d="M6 22v-5h5" />
+    </IconBase>
+  )
+}
+
+function ScaleIcon({ className }: { className?: string }) {
+  return (
+    <IconBase className={className}>
+      <path d="M12 3v18" />
+      <path d="M5 6h14" />
+      <path d="M6 6 3 14h6L6 6Z" />
+      <path d="M18 6 15 14h6l-3-8Z" />
+    </IconBase>
+  )
+}
+
+function CalendarIcon({ className }: { className?: string }) {
+  return (
+    <IconBase className={className}>
+      <rect x="3" y="4" width="18" height="18" rx="2" />
+      <path d="M16 2v4" />
+      <path d="M8 2v4" />
+      <path d="M3 10h18" />
+    </IconBase>
+  )
+}
+
+function SettingsIcon({ className }: { className?: string }) {
+  return (
+    <IconBase className={className}>
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.6-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1A2 2 0 1 1 7.1 4l.1.1a1.7 1.7 0 0 0 1.9.3h.1a1.7 1.7 0 0 0 1-1.6V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.6h.1a1.7 1.7 0 0 0 1.9-.3l.1-.1A2 2 0 1 1 20 7.1l-.1.1a1.7 1.7 0 0 0-.3 1.9v.1a1.7 1.7 0 0 0 1.6 1h.1a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.6 1Z" />
+    </IconBase>
+  )
+}
+
+function GavelIcon({ className }: { className?: string }) {
+  return (
+    <IconBase className={className}>
+      <path d="m14 13-7 7" />
+      <path d="m8 8 8 8" />
+      <path d="m12 4 8 8" />
+      <path d="m4 12 8-8" />
+      <path d="m2 22 6-6" />
+    </IconBase>
+  )
+}
+
+function BarChartIcon({ className }: { className?: string }) {
+  return (
+    <IconBase className={className}>
+      <path d="M3 3v18h18" />
+      <path d="M7 16v-5" />
+      <path d="M12 16V7" />
+      <path d="M17 16v-8" />
+    </IconBase>
+  )
+}
+
+function ShieldAlertIcon({ className }: { className?: string }) {
+  return (
+    <IconBase className={className}>
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" />
+      <path d="M12 8v5" />
+      <path d="M12 17h.01" />
+    </IconBase>
+  )
+}
+
+function ArrowRightIcon({ className }: { className?: string }) {
+  return (
+    <IconBase className={className}>
+      <path d="M5 12h14" />
+      <path d="m12 5 7 7-7 7" />
+    </IconBase>
+  )
+}
+
 const MODULE_ICONS: Record<
   Module,
   React.ComponentType<{ className?: string }>
 > = {
-  tfd: FileText,
-  cnrac: ClipboardList,
-  hemodialise: Stethoscope,
+  tfd: FileTextIcon,
+  cnrac: ClipboardIcon,
+  hemodialise: StethoscopeIcon,
 }
 
 const MODULE_DESCRIPTIONS: Record<Module, string> = {
@@ -144,7 +300,7 @@ export default function DashboardPage() {
             label: "Judicial",
             description: "Monitoramento de ações judiciais.",
             href: "/judicial",
-            icon: Scale,
+            icon: ScaleIcon,
             badge: `${judicialQueue.length} na fila`,
           },
         ]
@@ -156,7 +312,7 @@ export default function DashboardPage() {
             label: "Pré Judicial",
             description: "Prazos, interação e retorno automático da fila.",
             href: "/pre-judicial",
-            icon: Gavel,
+            icon: GavelIcon,
             badge: `${preJudicialQueue.length} na fila`,
           },
         ]
@@ -168,7 +324,7 @@ export default function DashboardPage() {
             label: "Agendamento da Demanda",
             description: "Reserva, agenda e devolução ao fluxo de origem.",
             href: "/agendamento-demanda",
-            icon: CalendarRange,
+            icon: CalendarIcon,
             badge: `${schedulingQueue.length} em análise`,
           },
         ]
@@ -181,7 +337,7 @@ export default function DashboardPage() {
             description:
               "Emissão de relatórios por módulo com filtros, Excel e PDF.",
             href: "/relatorios",
-            icon: BarChart3,
+            icon: BarChartIcon,
             badge: "Excel / PDF",
           },
         ]
@@ -236,7 +392,7 @@ export default function DashboardPage() {
         <Card className="border-border">
           <CardContent className="flex items-center gap-3 pt-6">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-              <Users className="h-5 w-5 text-primary" />
+              <UsersIcon className="h-5 w-5 text-primary" />
             </div>
 
             <div>
@@ -253,7 +409,7 @@ export default function DashboardPage() {
         <Card className="border-border">
           <CardContent className="flex items-center gap-3 pt-6">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-amber-500/10">
-              <AlertTriangle className="h-5 w-5 text-amber-600" />
+              <AlertIcon className="h-5 w-5 text-amber-600" />
             </div>
 
             <div>
@@ -268,7 +424,7 @@ export default function DashboardPage() {
         <Card className="border-border">
           <CardContent className="flex items-center gap-3 pt-6">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10">
-              <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+              <CheckIcon className="h-5 w-5 text-emerald-600" />
             </div>
 
             <div>
@@ -283,7 +439,7 @@ export default function DashboardPage() {
         <Card className="border-border">
           <CardContent className="flex items-center gap-3 pt-6">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-destructive/10">
-              <RotateCcw className="h-5 w-5 text-destructive" />
+              <RotateIcon className="h-5 w-5 text-destructive" />
             </div>
 
             <div>
@@ -329,7 +485,7 @@ export default function DashboardPage() {
                   className="inline-flex items-center gap-1.5 text-sm font-medium text-primary transition-colors hover:text-primary/80"
                 >
                   Acessar módulo
-                  <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+                  <ArrowRightIcon className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
                 </Link>
               </CardContent>
             </Card>
@@ -354,7 +510,7 @@ export default function DashboardPage() {
                 href="/pacientes"
                 className="inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2.5 text-sm font-medium text-card-foreground transition-colors hover:bg-muted"
               >
-                <Users className="h-4 w-4 text-primary" />
+                <UsersIcon className="h-4 w-4 text-primary" />
                 Cadastrar Paciente
               </Link>
             )}
@@ -364,7 +520,7 @@ export default function DashboardPage() {
                 href="/judicial"
                 className="inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2.5 text-sm font-medium text-card-foreground transition-colors hover:bg-muted"
               >
-                <Scale className="h-4 w-4 text-primary" />
+                <ScaleIcon className="h-4 w-4 text-primary" />
                 Fila Judicial
               </Link>
             )}
@@ -374,7 +530,7 @@ export default function DashboardPage() {
                 href="/pre-judicial"
                 className="inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2.5 text-sm font-medium text-card-foreground transition-colors hover:bg-muted"
               >
-                <Gavel className="h-4 w-4 text-primary" />
+                <GavelIcon className="h-4 w-4 text-primary" />
                 Fila Pré Judicial
               </Link>
             )}
@@ -384,7 +540,7 @@ export default function DashboardPage() {
                 href="/agendamento-demanda"
                 className="inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2.5 text-sm font-medium text-card-foreground transition-colors hover:bg-muted"
               >
-                <CalendarRange className="h-4 w-4 text-primary" />
+                <CalendarIcon className="h-4 w-4 text-primary" />
                 Agendamento da Demanda
               </Link>
             )}
@@ -394,7 +550,7 @@ export default function DashboardPage() {
                 href="/relatorios"
                 className="inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2.5 text-sm font-medium text-card-foreground transition-colors hover:bg-muted"
               >
-                <BarChart3 className="h-4 w-4 text-primary" />
+                <BarChartIcon className="h-4 w-4 text-primary" />
                 Relatórios
               </Link>
             )}
@@ -404,7 +560,7 @@ export default function DashboardPage() {
                 href="/admin/judicial"
                 className="inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2.5 text-sm font-medium text-card-foreground transition-colors hover:bg-muted"
               >
-                <Settings className="h-4 w-4 text-primary" />
+                <SettingsIcon className="h-4 w-4 text-primary" />
                 Admin Judicial
               </Link>
             )}
@@ -414,7 +570,7 @@ export default function DashboardPage() {
                 href="/admin/usuarios"
                 className="inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2.5 text-sm font-medium text-card-foreground transition-colors hover:bg-muted"
               >
-                <ShieldAlert className="h-4 w-4 text-primary" />
+                <ShieldAlertIcon className="h-4 w-4 text-primary" />
                 Gerenciar Usuários
               </Link>
             )}

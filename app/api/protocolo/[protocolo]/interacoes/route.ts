@@ -5,6 +5,8 @@ import { prisma } from "@/lib/prisma"
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
+const PENDENCIA_FINALIZAR_DEMANDA = "finalizar_demanda"
+
 type InteracaoRow = {
   id: string
   demandaId: string
@@ -139,6 +141,7 @@ export async function POST(
     }
 
     const id = buildId("int_")
+    const isFinalizacao = pendencia === PENDENCIA_FINALIZAR_DEMANDA
 
     await prisma.$executeRawUnsafe(
       `
@@ -167,6 +170,7 @@ export async function POST(
 
     return NextResponse.json({
       ok: true,
+      finalizada: isFinalizacao,
       item: {
         id,
         demandaId: demanda.id,

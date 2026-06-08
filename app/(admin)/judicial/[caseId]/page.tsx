@@ -8,12 +8,12 @@ import { useJudicial } from "@/lib/judicial-context"
 import { JudicialCaseDetail } from "@/components/modules/judicial-case-detail"
 
 export default function JudicialCasePage() {
-  const params = useParams<{ caseId: string }>()
+  const params = useParams()
+const caseId = String(params?.caseId ?? "")
   const { user } = useAuth()
   const judicial = useJudicial()
-  const trackedRef = useRef<string | null>(null)
+  const trackedRef = useRef(null as string | null)
 
-  const caseId = typeof params?.caseId === "string" ? params.caseId : null
   const userId = user?.id ?? null
   const trackingKey = caseId && userId ? `${caseId}:${userId}` : null
 

@@ -414,7 +414,7 @@ export function AgendamentoDemandasBoard() {
   }
 
   return (
-    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_330px]">
+    <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_330px]">
       <div className="space-y-4">
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <Card className="border-border">
@@ -456,8 +456,8 @@ export function AgendamentoDemandasBoard() {
 
         <Card className="border-border">
           <CardHeader className="pb-3">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-              <div>
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
+              <div className="min-w-0">
                 <CardTitle>Fila ativa do agendamento</CardTitle>
                 <CardDescription>
                   Demandas enviadas pelo Judicial e Pré Judicial para reserva,
@@ -465,7 +465,7 @@ export function AgendamentoDemandasBoard() {
                 </CardDescription>
               </div>
 
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-2 lg:justify-end">
                 <Button
                   type="button"
                   variant="outline"
@@ -492,23 +492,27 @@ export function AgendamentoDemandasBoard() {
           </CardHeader>
 
           <CardContent className="space-y-4">
-            <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_180px_180px]">
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_180px_180px] lg:items-end">
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Buscar</Label>
 
-                <Input
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") loadQueue()
-                  }}
-                  className="pl-9"
-                  placeholder="Buscar por paciente, município, procedimento, CPF ou protocolo..."
-                />
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+
+                  <Input
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") loadQueue()
+                    }}
+                    className="h-10 pl-9"
+                    placeholder="Buscar por paciente, município, procedimento, CPF ou protocolo..."
+                  />
+                </div>
               </div>
 
-              <div>
-                <Label className="mb-1 block text-xs text-muted-foreground">
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">
                   Status
                 </Label>
                 <select
@@ -522,8 +526,8 @@ export function AgendamentoDemandasBoard() {
                 </select>
               </div>
 
-              <div>
-                <Label className="mb-1 block text-xs text-muted-foreground">
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">
                   Origem
                 </Label>
                 <select

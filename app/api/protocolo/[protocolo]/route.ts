@@ -84,7 +84,16 @@ export async function GET(
           d."criadoPorNome" AS "criadoPorNome",
           d."createdAt"::text AS "createdAt",
           d."updatedAt"::text AS "updatedAt",
-          b.status_monitoramento_atual AS "statusMonitoramentoAtual"
+          CASE
+  WHEN EXISTS (
+    SELECT 1
+    FROM public.interacoes i
+    WHERE i."demandaId" = d.id
+      AND i.pendencia = 'finalizar_demanda'
+  )
+  THEN 'RESOLVIDO'
+  ELSE b.status_monitoramento_atual
+END AS "statusMonitoramentoAtual"
         FROM public.demandas d
         INNER JOIN public.pacientes p
           ON p.id = d."pacienteId"

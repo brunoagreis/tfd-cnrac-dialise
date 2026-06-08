@@ -101,9 +101,9 @@ export function PreJudicialBoard() {
         setLoading(true)
         setError("")
 
-        const response = await fetch("/api/pre-judicial/casos", {
-          cache: "no-store",
-        })
+const response = await fetch("/api/pre-judicial/casos?somenteAtivos=false", {
+  cache: "no-store",
+})
 
         const data = await response.json()
 
@@ -167,20 +167,36 @@ export function PreJudicialBoard() {
     })
   }, [items, reason, search, status])
 
-  const stats = {
-    total: items.length,
-    criticos: items.filter((item) =>
+function isResolvedPreJudicialStatus(status: string) {
+  return ["resolvido", "encerrado"].includes(
+    String(status || "").trim().toLowerCase(),
+  )
+}
+
+const stats = {
+  total: items.filter((item) => !isResolvedPreJudicialStatus(item.status)).length,
+
+  criticos: items.filter(
+    (item) =>
+      !isResolvedPreJudicialStatus(item.status) &&
       [
         "prazo_critico",
         "prazo_hoje",
         "prazo_vencido",
         "retorno_automatico",
       ].includes(item.queueReason),
-    ).length,
-    scheduling: items.filter((item) => item.schedulingStatus !== "fora_fila")
-      .length,
-    resolvidos: items.filter((item) => item.status === "resolvido").length,
-  }
+  ).length,
+
+  scheduling: items.filter(
+    (item) =>
+      !isResolvedPreJudicialStatus(item.status) &&
+      item.schedulingStatus !== "fora_fila",
+  ).length,
+
+  resolvidos: items.filter((item) =>
+    isResolvedPreJudicialStatus(item.status),
+  ).length,
+}
 
   return (
     <div className="flex flex-col gap-4">

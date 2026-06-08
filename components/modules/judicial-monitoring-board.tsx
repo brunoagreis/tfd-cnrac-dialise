@@ -73,6 +73,14 @@ function getStatusVariant(status: string) {
   return STATUS_BADGE_VARIANTS[key] ?? "secondary"
 }
 
+function getStatusFilterValue(status: string) {
+  const key = String(status || "").trim().toUpperCase()
+
+  if (key === "FINALIZADO" || key === "RESOLVIDO") return "finalizado"
+  if (key === "DEVOLVIDA" || key === "DEVOLVIDO") return "devolvida"
+
+  return "pendente"
+}
 function formatDateTime(value: string) {
   if (!value) return "Não informado"
 
@@ -120,8 +128,8 @@ export function JudicialMonitoringBoard() {
 
   const filtered = useMemo(() => {
     return items.filter((item) => {
-      if (status !== "todos" && item.statusMonitoramentoAtual.toLowerCase() !== status) {
-        return false
+if (status !== "todos" && getStatusFilterValue(item.statusMonitoramentoAtual) !== status) {
+  return false
       }
 
       if (origemModulo !== "todos" && item.origemModulo.toLowerCase() !== origemModulo) {
@@ -153,32 +161,15 @@ export function JudicialMonitoringBoard() {
     })
   }, [items, origemModulo, search, status])
 
-  const stats = useMemo(() => {
-    return {
-      total: items.length,
-      pendente: items.filter((item) =>
-        ["pendente", "em_andamento", ""].includes(item.statusMonitoramentoAtual.toLowerCase()),
-      ).length,
-      resolvido: items.filter((item) =>
-        ["resolvido", "finalizado"].includes(item.statusMonitoramentoAtual.toLowerCase()),
-      ).length,
-      devolvida: items.filter((item) =>
-        ["devolvida", "devolvido"].includes(item.statusMonitoramentoAtual.toLowerCase()),
-      ).length,
-    }
-  }, [items])
+const stats = useMemo(() => {
+  return {
+    total: items.length,
+    pendente: items.filter((item) => getStatusFilterValue(item.statusMonitoramentoAtual) === "pendente").length,
+    resolvido: items.filter((item) => getStatusFilterValue(item.statusMonitoramentoAtual) === "finalizado").length,
+    devolvida: items.filter((item) => getStatusFilterValue(item.statusMonitoramentoAtual) === "devolvida").length,
+  }
+}, [items])
 
-  const statusOptions = useMemo(() => {
-    const unique = Array.from(
-      new Set(
-        items
-          .map((item) => item.statusMonitoramentoAtual.toLowerCase())
-          .filter(Boolean),
-      ),
-    )
-
-    return unique.sort()
-  }, [items])
 
   const origemOptions = useMemo(() => {
     const unique = Array.from(
@@ -258,12 +249,11 @@ export function JudicialMonitoringBoard() {
                   value={status}
                   onChange={(e) => setStatus(e.target.value)}
                 >
-                  <option value="todos">Todos ({items.length})</option>
-                  {statusOptions.map((value) => (
-                    <option key={value} value={value}>
-                      {value.toUpperCase()}
-                    </option>
-                  ))}
+
+<option value="todos">Todos ({stats.total})</option>
+<option value="pendente">Pendente ({stats.pendente})</option>
+<option value="finalizado">Finalizado ({stats.resolvido})</option>
+<option value="devolvida">Devolvida ({stats.devolvida})</option>
                 </select>
               </div>
 
@@ -288,7 +278,7 @@ export function JudicialMonitoringBoard() {
                   variant="ghost"
                   size="sm"
                   onClick={() => {
-                    setStatus("todos")
+                    setStatus("pendente")
                     setOrigemModulo("todos")
                     setSearch("")
                   }}

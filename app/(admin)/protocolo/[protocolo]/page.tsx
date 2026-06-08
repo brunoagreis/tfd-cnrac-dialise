@@ -869,14 +869,19 @@ export default function ProtocoloPage({
                 <SelectTrigger>
                   <SelectValue placeholder="Sem pendência" />
                 </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Sem pendência</SelectItem>
-                  {PENDENCIA_TIPOS.map((item) => (
-                    <SelectItem key={item} value={item}>
-                      {PENDENCIA_LABELS[item]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
+<SelectContent>
+  <SelectItem value="none">Sem pendência</SelectItem>
+
+  <SelectItem value="finalizar_demanda">
+    Finalizar demanda
+  </SelectItem>
+
+  {PENDENCIA_TIPOS.map((item) => (
+    <SelectItem key={item} value={item}>
+      {PENDENCIA_LABELS[item]}
+    </SelectItem>
+  ))}
+</SelectContent>
               </Select>
             </div>
 

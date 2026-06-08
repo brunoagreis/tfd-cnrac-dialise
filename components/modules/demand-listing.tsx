@@ -118,7 +118,7 @@ function getApiPathByModule(modulo: Module) {
 export function DemandListing({ modulo, filterByEmail }: DemandListingProps) {
   const store = useStore()
   const [search, setSearch] = useState("")
-  const [statusFilter, setStatusFilter] = useState<DemandaStatus | "todos">("todos")
+  const [statusFilter, setStatusFilter] = useState<DemandaStatus | "todos">("pendente")
   const [dateFrom, setDateFrom] = useState("")
   const [dateTo, setDateTo] = useState("")
   const [dbDemandas, setDbDemandas] = useState<DemandListItem[]>([])
@@ -315,7 +315,7 @@ export function DemandListing({ modulo, filterByEmail }: DemandListingProps) {
                   variant="ghost"
                   size="sm"
                   onClick={() => {
-                    setStatusFilter("todos")
+                    setStatusFilter("pendente")
                     setDateFrom("")
                     setDateTo("")
                     setSearch("")

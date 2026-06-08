@@ -99,7 +99,16 @@ export async function GET(req: NextRequest) {
           COALESCE(NULLIF(b.cid_codigo, ''), NULLIF(d.cid10, '')) AS cid10,
           NULLIF(d.especialidade, '') AS especialidade,
           NULLIF(d.subespecialidade, '') AS subespecialidade,
-          NULLIF(b.status_monitoramento_atual, '') AS "statusMonitoramentoAtual",
+          CASE
+  WHEN EXISTS (
+    SELECT 1
+    FROM public.interacoes i
+    WHERE i."demandaId" = d.id
+      AND i.pendencia = 'finalizar_demanda'
+  )
+  THEN 'RESOLVIDO'
+  ELSE NULLIF(b.status_monitoramento_atual, '')
+END AS "statusMonitoramentoAtual",
           COALESCE(d."createdAt", b.created_at, NOW())::text AS "criadoEm",
           COALESCE(d."updatedAt", b.updated_at, d."createdAt", NOW())::text AS "atualizadoEm",
           COALESCE(d."acaoJudicial", FALSE) AS "acaoJudicial"
