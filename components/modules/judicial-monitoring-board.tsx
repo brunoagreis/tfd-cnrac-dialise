@@ -28,7 +28,8 @@ import { Label } from "@/components/ui/label"
 
 type JudicialBoardItem = {
   id: string
-  monitoramentoId: number
+  monitoramentoId: string
+  atribuicaoId: string
   demandaId: string
   pacienteId: string
   protocolo: string
@@ -81,6 +82,25 @@ function getStatusFilterValue(status: string) {
 
   return "pendente"
 }
+
+function isMonitoringUser(user: any) {
+  const perfilCodigo = String(user?.perfilCodigo ?? "").trim().toUpperCase()
+  const cargo = String(user?.cargo ?? "").trim().toUpperCase()
+  const role = String(user?.role ?? "").trim().toUpperCase()
+  const permissions = Array.isArray(user?.permissions) ? user.permissions : []
+
+  return (
+    perfilCodigo === "MONITORAMENTO" ||
+    role === "MONITORAMENTO" ||
+    cargo.includes("MONITOR") ||
+    permissions.some((permission: any) => {
+      const modulo = String(permission?.moduloCodigo ?? permission?.modulo ?? "").trim().toUpperCase()
+      const perfil = String(permission?.perfilNome ?? permission?.perfil ?? "").trim().toUpperCase()
+      return modulo === "JUDICIAL" && perfil === "MONITORAMENTO"
+    })
+  )
+}
+
 function formatDateTime(value: string) {
   if (!value) return "Não informado"
 
@@ -99,15 +119,26 @@ export function JudicialMonitoringBoard() {
   const [status, setStatus] = useState("pendente")
   const [origemModulo, setOrigemModulo] = useState("todos")
 
+  const monitoringUser = useMemo(() => isMonitoringUser(user), [user])
+
   useEffect(() => {
+    if (!user?.id) return
     void fetchCases()
-  }, [])
+  }, [monitoringUser, user?.email, user?.id])
 
   async function fetchCases() {
     try {
       setLoading(true)
 
-      const response = await fetch("/api/judicial/casos?somenteAtivos=true", {
+      const params = new URLSearchParams({ somenteAtivos: "true" })
+
+      if (monitoringUser && user?.id) {
+        params.set("somenteAtribuidos", "true")
+        params.set("usuarioId", user.id)
+        if (user.email) params.set("usuarioEmail", user.email)
+      }
+
+      const response = await fetch(`/api/judicial/casos?${params.toString()}`, {
         method: "GET",
         cache: "no-store",
       })
@@ -128,8 +159,8 @@ export function JudicialMonitoringBoard() {
 
   const filtered = useMemo(() => {
     return items.filter((item) => {
-if (status !== "todos" && getStatusFilterValue(item.statusMonitoramentoAtual) !== status) {
-  return false
+      if (status !== "todos" && getStatusFilterValue(item.statusMonitoramentoAtual) !== status) {
+        return false
       }
 
       if (origemModulo !== "todos" && item.origemModulo.toLowerCase() !== origemModulo) {
@@ -161,15 +192,14 @@ if (status !== "todos" && getStatusFilterValue(item.statusMonitoramentoAtual) !=
     })
   }, [items, origemModulo, search, status])
 
-const stats = useMemo(() => {
-  return {
-    total: items.length,
-    pendente: items.filter((item) => getStatusFilterValue(item.statusMonitoramentoAtual) === "pendente").length,
-    resolvido: items.filter((item) => getStatusFilterValue(item.statusMonitoramentoAtual) === "finalizado").length,
-    devolvida: items.filter((item) => getStatusFilterValue(item.statusMonitoramentoAtual) === "devolvida").length,
-  }
-}, [items])
-
+  const stats = useMemo(() => {
+    return {
+      total: items.length,
+      pendente: items.filter((item) => getStatusFilterValue(item.statusMonitoramentoAtual) === "pendente").length,
+      resolvido: items.filter((item) => getStatusFilterValue(item.statusMonitoramentoAtual) === "finalizado").length,
+      devolvida: items.filter((item) => getStatusFilterValue(item.statusMonitoramentoAtual) === "devolvida").length,
+    }
+  }, [items])
 
   const origemOptions = useMemo(() => {
     const unique = Array.from(
@@ -249,11 +279,10 @@ const stats = useMemo(() => {
                   value={status}
                   onChange={(e) => setStatus(e.target.value)}
                 >
-
-<option value="todos">Todos ({stats.total})</option>
-<option value="pendente">Pendente ({stats.pendente})</option>
-<option value="finalizado">Finalizado ({stats.resolvido})</option>
-<option value="devolvida">Devolvida ({stats.devolvida})</option>
+                  <option value="todos">Todos ({stats.total})</option>
+                  <option value="pendente">Pendente ({stats.pendente})</option>
+                  <option value="finalizado">Finalizado ({stats.resolvido})</option>
+                  <option value="devolvida">Devolvida ({stats.devolvida})</option>
                 </select>
               </div>
 
@@ -297,9 +326,11 @@ const stats = useMemo(() => {
             Demandas ({filtered.length})
           </CardTitle>
           <CardDescription>
-            {showMunicipalityMode
-              ? "Visualização simplificada da Judicialização."
-              : "Fila judicial baseada no banco de dados real."}
+            {monitoringUser
+              ? "Fila judicial limitada às demandas atribuídas para o seu monitoramento hoje."
+              : showMunicipalityMode
+                ? "Visualização simplificada da Judicialização."
+                : "Fila judicial baseada no banco de dados real."}
           </CardDescription>
         </CardHeader>
 
