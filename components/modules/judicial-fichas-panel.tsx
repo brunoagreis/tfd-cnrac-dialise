@@ -2,19 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
-import { Download, Eye, Plus, Upload } from "lucide-react"
+import { Ban, CheckCheck, Download, Eye, Plus, Trash2, Upload, X } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -23,6 +15,7 @@ import {
   JUDICIAL_FICHA_STATUS_LABELS,
   SYSTEM_LABELS,
   type JudicialCase,
+  type JudicialFicha,
 } from "@/lib/judicial-types"
 
 type UploadedFileMeta = {
@@ -33,6 +26,10 @@ type UploadedFileMeta = {
   size: number
   mimeType: string
 }
+
+type JudicialFichaStatus = keyof typeof JUDICIAL_FICHA_STATUS_LABELS
+
+const FICHA_STATUS_OPTIONS: JudicialFichaStatus[] = ["atendido", "falta", "obito", "inativa"]
 
 function formatFileSize(size: number) {
   if (!Number.isFinite(size)) return "-"
@@ -98,7 +95,7 @@ export function JudicialFichasPanel({ caseId }: { caseId: string }) {
 
   const [caseItem, setCaseItem] = useState<JudicialCase | null>(null)
   const [loading, setLoading] = useState(true)
-  const [modalOpen, setModalOpen] = useState(false)
+  const [formOpen, setFormOpen] = useState(false)
   const [fichaSystem, setFichaSystem] = useState<"CORE" | "SISREG" | "OUTRO">("CORE")
   const [fichaNumber, setFichaNumber] = useState("")
   const [fichaAttachment, setFichaAttachment] = useState("")
@@ -111,6 +108,10 @@ export function JudicialFichasPanel({ caseId }: { caseId: string }) {
   const [uploadedFichaFiles, setUploadedFichaFiles] = useState<UploadedFileMeta[]>([])
   const [uploadingFicha, setUploadingFicha] = useState(false)
   const [savingFicha, setSavingFicha] = useState(false)
+  const [statusFichaId, setStatusFichaId] = useState("")
+  const [fichaStatus, setFichaStatus] = useState<JudicialFichaStatus>("atendido")
+  const [fichaStatusReason, setFichaStatusReason] = useState("")
+  const [savingAction, setSavingAction] = useState(false)
 
   async function loadCase() {
     try {
@@ -163,7 +164,7 @@ export function JudicialFichasPanel({ caseId }: { caseId: string }) {
 
   function handleNewFicha() {
     resetFichaForm()
-    setModalOpen(true)
+    setFormOpen(true)
   }
 
   async function handleUploadFicha() {
@@ -244,7 +245,7 @@ export function JudicialFichasPanel({ caseId }: { caseId: string }) {
       }
 
       toast.success("Ficha cadastrada no banco.")
-      setModalOpen(false)
+      setFormOpen(false)
       resetFichaForm()
       await loadCase()
     } catch (error) {
@@ -252,6 +253,72 @@ export function JudicialFichasPanel({ caseId }: { caseId: string }) {
       toast.error(error instanceof Error ? error.message : "Erro ao cadastrar ficha.")
     } finally {
       setSavingFicha(false)
+    }
+  }
+
+  function openStatusForm(item: JudicialFicha) {
+    setStatusFichaId(item.id)
+    setFichaStatus((item.status as JudicialFichaStatus) || "atendido")
+    setFichaStatusReason(item.statusReason || "")
+  }
+
+  async function updateFichaAction(action: string, fichaId: string, extra: Record<string, unknown> = {}) {
+    if (!user) return
+
+    try {
+      setSavingAction(true)
+      const response = await fetch(`/api/judicial/casos/${encodeURIComponent(caseId)}/fichas`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fichaId, action, user, ...extra }),
+      })
+      const data = await response.json().catch(() => ({}))
+
+      if (!response.ok || !data?.ok) {
+        throw new Error(data?.error || "Erro ao atualizar ficha.")
+      }
+
+      toast.success("Ficha atualizada.")
+      setStatusFichaId("")
+      setFichaStatusReason("")
+      await loadCase()
+    } catch (error) {
+      console.error("UPDATE_JUDICIAL_FICHA_ERROR", error)
+      toast.error(error instanceof Error ? error.message : "Erro ao atualizar ficha.")
+    } finally {
+      setSavingAction(false)
+    }
+  }
+
+  async function deleteFicha(item: JudicialFicha) {
+    if (!user) return
+
+    const reason = window.prompt(`Informe o motivo para excluir a ficha ${item.number || item.id}:`, "Cadastro incorreto")
+    if (reason === null) return
+
+    const confirmed = window.confirm(`Confirma excluir a ficha ${item.number || item.id}?`)
+    if (!confirmed) return
+
+    try {
+      setSavingAction(true)
+      const response = await fetch(`/api/judicial/casos/${encodeURIComponent(caseId)}/fichas`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fichaId: item.id, reason, user }),
+      })
+      const data = await response.json().catch(() => ({}))
+
+      if (!response.ok || !data?.ok) {
+        throw new Error(data?.error || "Erro ao excluir ficha.")
+      }
+
+      toast.success("Ficha excluída.")
+      await loadCase()
+    } catch (error) {
+      console.error("DELETE_JUDICIAL_FICHA_ERROR", error)
+      toast.error(error instanceof Error ? error.message : "Erro ao excluir ficha.")
+    } finally {
+      setSavingAction(false)
     }
   }
 
@@ -273,9 +340,119 @@ export function JudicialFichasPanel({ caseId }: { caseId: string }) {
             Cadastrar nova ficha
           </Button>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          {formOpen && (
+            <div className="space-y-4 rounded-xl border border-border bg-muted/20 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-semibold">Nova ficha</p>
+                <Button type="button" variant="ghost" size="sm" onClick={() => setFormOpen(false)}>
+                  <X className="mr-2 h-4 w-4" /> Fechar
+                </Button>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2">
+                <div>
+                  <Label className="mb-1 block text-xs">Sistema</Label>
+                  <select
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    value={fichaSystem}
+                    onChange={(e) => setFichaSystem(e.target.value as "CORE" | "SISREG" | "OUTRO")}
+                  >
+                    <option value="CORE">CORE</option>
+                    <option value="SISREG">SISREG</option>
+                    <option value="OUTRO">Outro</option>
+                  </select>
+                </div>
+                <div>
+                  <Label className="mb-1 block text-xs">Número da ficha</Label>
+                  <Input value={fichaNumber} onChange={(e) => setFichaNumber(e.target.value)} placeholder="Número da ficha" />
+                </div>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2">
+                <div>
+                  <Label className="mb-1 block text-xs">SIGTAP vinculado</Label>
+                  <select
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    value={fichaProcedureCode}
+                    onChange={(e) => setFichaProcedureCode(e.target.value)}
+                  >
+                    <option value="">Selecione</option>
+                    {activeProcedures.map((item) => (
+                      <option key={item.id} value={`${item.sigtapCode} - ${item.description}`}>
+                        {item.sigtapCode} - {item.description}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <Label className="mb-1 block text-xs">CID vinculado</Label>
+                  <select
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    value={fichaCidCode}
+                    onChange={(e) => setFichaCidCode(e.target.value)}
+                  >
+                    <option value="">Selecione</option>
+                    {activeCids.map((item) => (
+                      <option key={item.id} value={`${item.code} - ${item.description}`}>
+                        {item.code} - {item.description}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2">
+                <label className="flex items-center gap-2 rounded-xl border border-border p-3 text-sm">
+                  <input type="checkbox" checked={requestedInclusion} onChange={(e) => setRequestedInclusion(e.target.checked)} />
+                  Foi solicitada inclusão
+                </label>
+                <label className="flex items-center gap-2 rounded-xl border border-border p-3 text-sm">
+                  <input type="checkbox" checked={hasJudicialMark} onChange={(e) => setHasJudicialMark(e.target.checked)} />
+                  Judicial marcada?
+                </label>
+              </div>
+
+              <div className="space-y-3 rounded-xl border border-dashed border-border p-4">
+                <div>
+                  <Label className="mb-1 block text-xs">Anexar ficha</Label>
+                  <Input type="file" multiple onChange={(e) => setSelectedFichaFiles(e.target.files)} />
+                </div>
+
+                {selectedFichaFiles && selectedFichaFiles.length > 0 && (
+                  <div className="rounded-lg border border-border bg-muted/20 p-3 text-sm text-muted-foreground">
+                    {Array.from(selectedFichaFiles).map((file) => (
+                      <p key={`${file.name}-${file.size}`}>{file.name} • {formatFileSize(file.size)}</p>
+                    ))}
+                  </div>
+                )}
+
+                <Button type="button" variant="outline" className="bg-transparent" disabled={uploadingFicha} onClick={handleUploadFicha}>
+                  <Upload className="mr-2 h-4 w-4" />
+                  {uploadingFicha ? "Enviando..." : "Enviar arquivo(s)"}
+                </Button>
+
+                <Input value={fichaAttachment} onChange={(e) => setFichaAttachment(e.target.value)} placeholder="Arquivos enviados" />
+              </div>
+
+              <div>
+                <Label className="mb-1 block text-xs">Observações</Label>
+                <Textarea rows={4} value={fichaNotes} onChange={(e) => setFichaNotes(e.target.value)} />
+              </div>
+
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" className="bg-transparent" onClick={() => setFormOpen(false)} disabled={savingFicha}>
+                  Cancelar
+                </Button>
+                <Button onClick={handleSaveFicha} disabled={savingFicha}>
+                  {savingFicha ? "Salvando..." : "Salvar ficha"}
+                </Button>
+              </div>
+            </div>
+          )}
+
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[980px] border-collapse text-sm">
+            <table className="w-full min-w-[1180px] border-collapse text-sm">
               <thead>
                 <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
                   <th className="px-3 py-2">Sistema</th>
@@ -284,13 +461,14 @@ export function JudicialFichasPanel({ caseId }: { caseId: string }) {
                   <th className="px-3 py-2">SIGTAP vinculado</th>
                   <th className="px-3 py-2">CID vinculado</th>
                   <th className="px-3 py-2">Observações</th>
-                  <th className="px-3 py-2">Judicial marcada?</th>
+                  <th className="px-3 py-2">Judicial?</th>
+                  <th className="px-3 py-2 text-center">Ações</th>
                 </tr>
               </thead>
               <tbody>
                 {caseItem.fichas.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-3 py-6 text-center text-sm text-muted-foreground">
+                    <td colSpan={8} className="px-3 py-6 text-center text-sm text-muted-foreground">
                       Nenhuma ficha cadastrada.
                     </td>
                   </tr>
@@ -332,12 +510,43 @@ export function JudicialFichasPanel({ caseId }: { caseId: string }) {
                         <td className="px-3 py-3">{getLinkedValue(notes, "Procedimento vinculado:")}</td>
                         <td className="px-3 py-3">{getLinkedValue(notes, "CID vinculado:")}</td>
                         <td className="px-3 py-3">
-                          <p className="max-w-[280px] whitespace-pre-wrap text-muted-foreground">{getPlainNotes(notes)}</p>
+                          <p className="max-w-[260px] whitespace-pre-wrap text-muted-foreground">{getPlainNotes(notes)}</p>
+                          {item.inactiveReason && (
+                            <p className="mt-1 text-xs text-destructive">Inativação: {item.inactiveReason}</p>
+                          )}
                           {item.statusReason && (
                             <p className="mt-1 text-xs text-muted-foreground">Status: {item.statusReason}</p>
                           )}
                         </td>
                         <td className="px-3 py-3">{item.hasJudicialMark ? "Sim" : "Não"}</td>
+                        <td className="px-3 py-3">
+                          <div className="flex items-center justify-center gap-2">
+                            <Button type="button" variant="outline" size="icon" className="bg-transparent" title="Alterar status" onClick={() => openStatusForm(item)}>
+                              <CheckCheck className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="icon"
+                              className="bg-transparent"
+                              title={item.active === false ? "Reativar" : "Inativar"}
+                              disabled={savingAction}
+                              onClick={() => {
+                                if (item.active === false) {
+                                  void updateFichaAction("reativar", item.id)
+                                  return
+                                }
+                                const reason = window.prompt(`Informe o motivo para inativar a ficha ${item.number || item.id}:`, "Ficha substituída ou cadastro incorreto")
+                                if (reason !== null) void updateFichaAction("inativar", item.id, { reason })
+                              }}
+                            >
+                              <Ban className="h-4 w-4" />
+                            </Button>
+                            <Button type="button" variant="outline" size="icon" className="bg-transparent" title="Excluir" disabled={savingAction} onClick={() => deleteFicha(item)}>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </td>
                       </tr>
                     )
                   })
@@ -345,130 +554,48 @@ export function JudicialFichasPanel({ caseId }: { caseId: string }) {
               </tbody>
             </table>
           </div>
+
+          {statusFichaId && (
+            <div className="space-y-3 rounded-xl border border-border bg-muted/20 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-semibold">Alterar status da ficha</p>
+                <Button type="button" variant="ghost" size="sm" onClick={() => setStatusFichaId("")}>
+                  <X className="mr-2 h-4 w-4" /> Fechar
+                </Button>
+              </div>
+              <div className="grid gap-3 md:grid-cols-[220px_minmax(0,1fr)]">
+                <div>
+                  <Label className="mb-1 block text-xs">Status</Label>
+                  <select
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    value={fichaStatus}
+                    onChange={(e) => setFichaStatus(e.target.value as JudicialFichaStatus)}
+                  >
+                    {FICHA_STATUS_OPTIONS.map((option) => (
+                      <option key={option} value={option}>
+                        {JUDICIAL_FICHA_STATUS_LABELS[option]}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <Label className="mb-1 block text-xs">Justificativa</Label>
+                  <Input value={fichaStatusReason} onChange={(e) => setFichaStatusReason(e.target.value)} />
+                </div>
+              </div>
+              <div className="flex justify-end">
+                <Button
+                  type="button"
+                  disabled={savingAction}
+                  onClick={() => updateFichaAction("status", statusFichaId, { status: fichaStatus, reason: fichaStatusReason })}
+                >
+                  Salvar status
+                </Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
-
-      <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-        <DialogContent className="max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>Cadastrar nova ficha</DialogTitle>
-            <DialogDescription>
-              Informe os dados principais da ficha e os vínculos necessários.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4">
-            <div className="grid gap-3 md:grid-cols-2">
-              <div>
-                <Label className="mb-1 block text-xs">Sistema</Label>
-                <select
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  value={fichaSystem}
-                  onChange={(e) => setFichaSystem(e.target.value as "CORE" | "SISREG" | "OUTRO")}
-                >
-                  <option value="CORE">CORE</option>
-                  <option value="SISREG">SISREG</option>
-                  <option value="OUTRO">Outro</option>
-                </select>
-              </div>
-              <div>
-                <Label className="mb-1 block text-xs">Número da ficha</Label>
-                <Input value={fichaNumber} onChange={(e) => setFichaNumber(e.target.value)} placeholder="Número da ficha" />
-              </div>
-            </div>
-
-            <div className="grid gap-3 md:grid-cols-2">
-              <div>
-                <Label className="mb-1 block text-xs">SIGTAP vinculado</Label>
-                <select
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  value={fichaProcedureCode}
-                  onChange={(e) => setFichaProcedureCode(e.target.value)}
-                >
-                  <option value="">Selecione</option>
-                  {activeProcedures.map((item) => (
-                    <option key={item.id} value={`${item.sigtapCode} - ${item.description}`}>
-                      {item.sigtapCode} - {item.description}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <Label className="mb-1 block text-xs">CID vinculado</Label>
-                <select
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  value={fichaCidCode}
-                  onChange={(e) => setFichaCidCode(e.target.value)}
-                >
-                  <option value="">Selecione</option>
-                  {activeCids.map((item) => (
-                    <option key={item.id} value={`${item.code} - ${item.description}`}>
-                      {item.code} - {item.description}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="grid gap-3 md:grid-cols-2">
-              <label className="flex items-center gap-2 rounded-xl border border-border p-3 text-sm">
-                <input type="checkbox" checked={requestedInclusion} onChange={(e) => setRequestedInclusion(e.target.checked)} />
-                Foi solicitada inclusão
-              </label>
-              <label className="flex items-center gap-2 rounded-xl border border-border p-3 text-sm">
-                <input type="checkbox" checked={hasJudicialMark} onChange={(e) => setHasJudicialMark(e.target.checked)} />
-                Judicial marcada?
-              </label>
-            </div>
-
-            <div className="space-y-3 rounded-xl border border-dashed border-border p-4">
-              <div>
-                <Label className="mb-1 block text-xs">Anexar ficha</Label>
-                <Input type="file" multiple onChange={(e) => setSelectedFichaFiles(e.target.files)} />
-              </div>
-
-              {selectedFichaFiles && selectedFichaFiles.length > 0 && (
-                <div className="rounded-lg border border-border bg-muted/20 p-3 text-sm text-muted-foreground">
-                  {Array.from(selectedFichaFiles).map((file) => (
-                    <p key={`${file.name}-${file.size}`}>{file.name} • {formatFileSize(file.size)}</p>
-                  ))}
-                </div>
-              )}
-
-              <Button type="button" variant="outline" className="bg-transparent" disabled={uploadingFicha} onClick={handleUploadFicha}>
-                <Upload className="mr-2 h-4 w-4" />
-                {uploadingFicha ? "Enviando..." : "Enviar arquivo(s)"}
-              </Button>
-
-              <Input value={fichaAttachment} onChange={(e) => setFichaAttachment(e.target.value)} placeholder="Arquivos enviados" />
-
-              {uploadedFichaFiles.length > 0 && (
-                <div className="space-y-2 rounded-lg border border-border p-3">
-                  {uploadedFichaFiles.map((file) => (
-                    <a key={file.relativePath} href={file.url} target="_blank" rel="noreferrer" className="block text-sm text-primary underline">
-                      {file.name}
-                    </a>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div>
-              <Label className="mb-1 block text-xs">Observações</Label>
-              <Textarea rows={4} value={fichaNotes} onChange={(e) => setFichaNotes(e.target.value)} />
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" className="bg-transparent" onClick={() => setModalOpen(false)} disabled={savingFicha}>
-              Cancelar
-            </Button>
-            <Button onClick={handleSaveFicha} disabled={savingFicha}>
-              {savingFicha ? "Salvando..." : "Salvar ficha"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }
