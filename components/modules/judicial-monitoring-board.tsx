@@ -83,21 +83,25 @@ function getStatusFilterValue(status: string) {
   return "pendente"
 }
 
+function isAdminUser(user: any) {
+  const perfilCodigo = String(user?.perfilCodigo ?? "").trim().toUpperCase()
+  const role = String(user?.role ?? "").trim().toUpperCase()
+
+  return ["ADMIN", "ADMINISTRADOR", "ADMINISTRATOR"].includes(role) ||
+    ["ADMIN", "ADMINISTRADOR", "ADMINISTRATOR"].includes(perfilCodigo)
+}
+
 function isMonitoringUser(user: any) {
+  if (isAdminUser(user)) return false
+
   const perfilCodigo = String(user?.perfilCodigo ?? "").trim().toUpperCase()
   const cargo = String(user?.cargo ?? "").trim().toUpperCase()
   const role = String(user?.role ?? "").trim().toUpperCase()
-  const permissions = Array.isArray(user?.permissions) ? user.permissions : []
 
   return (
     perfilCodigo === "MONITORAMENTO" ||
     role === "MONITORAMENTO" ||
-    cargo.includes("MONITOR") ||
-    permissions.some((permission: any) => {
-      const modulo = String(permission?.moduloCodigo ?? permission?.modulo ?? "").trim().toUpperCase()
-      const perfil = String(permission?.perfilNome ?? permission?.perfil ?? "").trim().toUpperCase()
-      return modulo === "JUDICIAL" && perfil === "MONITORAMENTO"
-    })
+    cargo.includes("MONITOR")
   )
 }
 
