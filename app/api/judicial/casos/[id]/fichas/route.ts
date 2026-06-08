@@ -12,6 +12,21 @@ type JudicialBaseRow = {
   protocolo: string | null
 }
 
+type JudicialFichaRow = {
+  id: string
+  system: string | null
+  number: string | null
+  notes: string | null
+  active: boolean | null
+  status: string | null
+}
+
+type RequestUser = {
+  id: string
+  nome: string
+  email: string
+}
+
 function text(value: unknown) {
   return String(value ?? "").trim()
 }
@@ -23,6 +38,18 @@ function normalizeSystem(value: unknown): "CORE" | "SISREG" | "OUTRO" {
   return "CORE"
 }
 
+function normalizeFichaStatus(value: unknown) {
+  const status = text(value)
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+
+  if (status === "falta") return "falta"
+  if (status === "obito") return "obito"
+  if (status === "inativa") return "inativa"
+  return "atendido"
+}
+
 function bool(value: unknown, fallback = false) {
   if (typeof value === "boolean") return value
   if (typeof value === "number") return value !== 0
@@ -30,6 +57,14 @@ function bool(value: unknown, fallback = false) {
   if (["1", "true", "sim", "yes", "s"].includes(normalized)) return true
   if (["0", "false", "nao", "não", "no", "n"].includes(normalized)) return false
   return fallback
+}
+
+function getRequestUser(body: any): RequestUser {
+  return {
+    id: text(body?.user?.id || body?.userId || "sistema"),
+    nome: text(body?.user?.nome || body?.user?.name || body?.userName || "Sistema"),
+    email: text(body?.user?.email || body?.userEmail),
+  }
 }
 
 async function findJudicialCase(decodedId: string) {
@@ -60,6 +95,122 @@ async function findJudicialCase(decodedId: string) {
   return rows[0] ?? null
 }
 
+async function findFicha(monitoramentoId: string, fichaId: string) {
+  const rows = await prisma.$queryRawUnsafe<JudicialFichaRow[]>(
+    `
+      SELECT
+        id::text AS id,
+        system,
+        number,
+        notes,
+        active,
+        status
+      FROM public.judicial_fichas
+      WHERE monitoramento_id = $1::bigint
+        AND id::text = $2
+      LIMIT 1
+    `,
+    monitoramentoId,
+    fichaId,
+  )
+
+  return rows[0] ?? null
+}
+
+async function insertMovement(tx: any, params: {
+  processo: JudicialBaseRow
+  description: string
+  user: RequestUser
+}) {
+  await tx.$executeRawUnsafe(
+    `
+      INSERT INTO public.judicial_movimentacoes (
+        id,
+        monitoramento_id,
+        demanda_id,
+        type,
+        description,
+        attachments,
+        created_by,
+        created_by_name,
+        created_by_email,
+        created_at
+      )
+      VALUES (
+        $1,
+        $2::bigint,
+        $3,
+        'monitoramento',
+        $4,
+        '[]'::jsonb,
+        $5,
+        $6,
+        $7,
+        NOW()
+      )
+    `,
+    `jmov_ficha_${randomUUID()}`,
+    params.processo.monitoramentoId,
+    params.processo.demandaId || null,
+    params.description,
+    params.user.id,
+    params.user.nome,
+    params.user.email || null,
+  )
+}
+
+async function insertAudit(tx: any, params: {
+  processo: JudicialBaseRow
+  fichaId: string
+  action: string
+  description: string
+  user: RequestUser
+}) {
+  await tx.$executeRawUnsafe(
+    `
+      INSERT INTO public.sistema_auditoria (
+        tabela_nome,
+        acao,
+        registro_id,
+        usuario_id,
+        usuario_nome,
+        usuario_email,
+        modulo_codigo,
+        data_hora,
+        dados_anteriores,
+        dados_novos,
+        campos_alterados,
+        observacao
+      )
+      VALUES (
+        'judicial_fichas',
+        $1,
+        $2,
+        $3,
+        $4,
+        $5,
+        'JUDICIAL',
+        NOW(),
+        jsonb_build_object(),
+        jsonb_build_object(
+          'ficha_id', $6::text,
+          'monitoramento_id', $2::text,
+          'descricao', $7::text
+        ),
+        jsonb_build_array('judicial_fichas'),
+        $7
+      )
+    `,
+    params.action,
+    params.processo.monitoramentoId,
+    params.user.id,
+    params.user.nome,
+    params.user.email || null,
+    params.fichaId,
+    params.description,
+  )
+}
+
 export async function POST(
   req: NextRequest,
   context: { params: Promise<{ id: string }> },
@@ -77,15 +228,7 @@ export async function POST(
     const attachmentUrl = text(body?.attachmentUrl ?? body?.attachment_url)
     const attachmentRelativePath = text(body?.attachmentRelativePath ?? body?.attachment_relative_path)
     const notes = text(body?.notes ?? body?.observacoes)
-
-    const userId = text(body?.user?.id || body?.userId || "sistema")
-    const userName = text(
-      body?.user?.nome ||
-        body?.user?.name ||
-        body?.userName ||
-        "Sistema",
-    )
-    const userEmail = text(body?.user?.email || body?.userEmail)
+    const user = getRequestUser(body)
 
     if (!number) {
       return NextResponse.json(
@@ -183,9 +326,9 @@ export async function POST(
         attachmentUrl || null,
         attachmentRelativePath || null,
         notes || null,
-        userId,
-        userName,
-        userEmail || null,
+        user.id,
+        user.nome,
+        user.email || null,
       )
 
       await tx.$executeRawUnsafe(
@@ -238,70 +381,18 @@ export async function POST(
         processo.demandaId || null,
         movimentoDescricao,
         JSON.stringify(attachments),
-        userId,
-        userName,
-        userEmail || null,
+        user.id,
+        user.nome,
+        user.email || null,
       )
 
-      await tx.$executeRawUnsafe(
-        `
-          INSERT INTO public.sistema_auditoria (
-            tabela_nome,
-            acao,
-            registro_id,
-            usuario_id,
-            usuario_nome,
-            usuario_email,
-            modulo_codigo,
-            data_hora,
-            dados_anteriores,
-            dados_novos,
-            campos_alterados,
-            observacao
-          )
-          VALUES (
-            'judicial_fichas',
-            'cadastrar_ficha_judicial',
-            $1,
-            $2,
-            $3,
-            $4,
-            'JUDICIAL',
-            NOW(),
-            jsonb_build_object(),
-            jsonb_build_object(
-              'ficha_id', $5::text,
-              'monitoramento_id', $6::text,
-              'system', $7::text,
-              'number', $8::text,
-              'requested_inclusion', $9::boolean,
-              'has_judicial_mark', $10::boolean,
-              'notes', $11::text
-            ),
-            jsonb_build_array(
-              'judicial_fichas',
-              'system',
-              'number',
-              'requested_inclusion',
-              'has_judicial_mark',
-              'notes'
-            ),
-            $12
-          )
-        `,
-        processo.monitoramentoId,
-        userId,
-        userName,
-        userEmail || null,
+      await insertAudit(tx, {
+        processo,
         fichaId,
-        processo.monitoramentoId,
-        system,
-        number,
-        requestedInclusion,
-        hasJudicialMark,
-        notes || null,
-        movimentoDescricao,
-      )
+        action: "cadastrar_ficha_judicial",
+        description: movimentoDescricao,
+        user,
+      })
     })
 
     return NextResponse.json({
@@ -321,6 +412,255 @@ export async function POST(
 
     return NextResponse.json(
       { ok: false, error: "Erro ao cadastrar ficha judicial." },
+      { status: 500 },
+    )
+  }
+}
+
+export async function PATCH(
+  req: NextRequest,
+  context: { params: Promise<{ id: string }> },
+) {
+  try {
+    const { id } = await context.params
+    const decodedId = decodeURIComponent(id)
+    const body = await req.json().catch(() => ({}))
+    const fichaId = text(body?.fichaId || body?.id)
+    const action = text(body?.action || body?.acao).toLowerCase()
+    const reason = text(body?.reason || body?.motivo || body?.statusReason)
+    const user = getRequestUser(body)
+
+    if (!fichaId) {
+      return NextResponse.json(
+        { ok: false, error: "Informe a ficha." },
+        { status: 400 },
+      )
+    }
+
+    const processo = await findJudicialCase(decodedId)
+
+    if (!processo) {
+      return NextResponse.json(
+        { ok: false, error: "Processo judicial não encontrado." },
+        { status: 404 },
+      )
+    }
+
+    const ficha = await findFicha(processo.monitoramentoId, fichaId)
+
+    if (!ficha) {
+      return NextResponse.json(
+        { ok: false, error: "Ficha não encontrada." },
+        { status: 404 },
+      )
+    }
+
+    if (action === "status") {
+      const status = normalizeFichaStatus(body?.status)
+      if (!reason) {
+        return NextResponse.json(
+          { ok: false, error: "Justifique a alteração do status da ficha." },
+          { status: 400 },
+        )
+      }
+
+      const description = `Status da ficha ${ficha.system || ""} ${ficha.number || ficha.id} alterado para ${status}. Justificativa: ${reason}`
+
+      await prisma.$transaction(async (tx) => {
+        await tx.$executeRawUnsafe(
+          `
+            UPDATE public.judicial_fichas
+            SET
+              status = $3,
+              status_reason = $4,
+              status_updated_at = NOW(),
+              status_updated_by = $5,
+              status_updated_by_name = $6,
+              status_updated_by_email = $7,
+              updated_at = NOW(),
+              updated_by = $5,
+              updated_by_name = $6,
+              updated_by_email = $7
+            WHERE monitoramento_id = $1::bigint
+              AND id::text = $2
+          `,
+          processo.monitoramentoId,
+          fichaId,
+          status,
+          reason,
+          user.id,
+          user.nome,
+          user.email || null,
+        )
+
+        await insertMovement(tx, { processo, description, user })
+        await insertAudit(tx, {
+          processo,
+          fichaId,
+          action: "alterar_status_ficha_judicial",
+          description,
+          user,
+        })
+      })
+
+      return NextResponse.json({ ok: true })
+    }
+
+    if (action === "inativar") {
+      const description = `Ficha ${ficha.system || ""} ${ficha.number || ficha.id} inativada. Motivo: ${reason || "Não informado"}`
+
+      await prisma.$transaction(async (tx) => {
+        await tx.$executeRawUnsafe(
+          `
+            UPDATE public.judicial_fichas
+            SET
+              active = FALSE,
+              inactive_reason = $3,
+              updated_at = NOW(),
+              updated_by = $4,
+              updated_by_name = $5,
+              updated_by_email = $6
+            WHERE monitoramento_id = $1::bigint
+              AND id::text = $2
+          `,
+          processo.monitoramentoId,
+          fichaId,
+          reason || "Inativada pelo usuário",
+          user.id,
+          user.nome,
+          user.email || null,
+        )
+
+        await insertMovement(tx, { processo, description, user })
+        await insertAudit(tx, {
+          processo,
+          fichaId,
+          action: "inativar_ficha_judicial",
+          description,
+          user,
+        })
+      })
+
+      return NextResponse.json({ ok: true })
+    }
+
+    if (action === "reativar") {
+      const description = `Ficha ${ficha.system || ""} ${ficha.number || ficha.id} reativada.`
+
+      await prisma.$transaction(async (tx) => {
+        await tx.$executeRawUnsafe(
+          `
+            UPDATE public.judicial_fichas
+            SET
+              active = TRUE,
+              inactive_reason = NULL,
+              updated_at = NOW(),
+              updated_by = $3,
+              updated_by_name = $4,
+              updated_by_email = $5
+            WHERE monitoramento_id = $1::bigint
+              AND id::text = $2
+          `,
+          processo.monitoramentoId,
+          fichaId,
+          user.id,
+          user.nome,
+          user.email || null,
+        )
+
+        await insertMovement(tx, { processo, description, user })
+        await insertAudit(tx, {
+          processo,
+          fichaId,
+          action: "reativar_ficha_judicial",
+          description,
+          user,
+        })
+      })
+
+      return NextResponse.json({ ok: true })
+    }
+
+    return NextResponse.json(
+      { ok: false, error: "Ação inválida para a ficha." },
+      { status: 400 },
+    )
+  } catch (error) {
+    console.error("[PATCH /api/judicial/casos/[id]/fichas] erro:", error)
+
+    return NextResponse.json(
+      { ok: false, error: "Erro ao atualizar ficha judicial." },
+      { status: 500 },
+    )
+  }
+}
+
+export async function DELETE(
+  req: NextRequest,
+  context: { params: Promise<{ id: string }> },
+) {
+  try {
+    const { id } = await context.params
+    const decodedId = decodeURIComponent(id)
+    const body = await req.json().catch(() => ({}))
+    const fichaId = text(body?.fichaId || body?.id)
+    const reason = text(body?.reason || body?.motivo)
+    const user = getRequestUser(body)
+
+    if (!fichaId) {
+      return NextResponse.json(
+        { ok: false, error: "Informe a ficha." },
+        { status: 400 },
+      )
+    }
+
+    const processo = await findJudicialCase(decodedId)
+
+    if (!processo) {
+      return NextResponse.json(
+        { ok: false, error: "Processo judicial não encontrado." },
+        { status: 404 },
+      )
+    }
+
+    const ficha = await findFicha(processo.monitoramentoId, fichaId)
+
+    if (!ficha) {
+      return NextResponse.json(
+        { ok: false, error: "Ficha não encontrada." },
+        { status: 404 },
+      )
+    }
+
+    const description = `Ficha ${ficha.system || ""} ${ficha.number || ficha.id} excluída. Motivo: ${reason || "Não informado"}`
+
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe(
+        `
+          DELETE FROM public.judicial_fichas
+          WHERE monitoramento_id = $1::bigint
+            AND id::text = $2
+        `,
+        processo.monitoramentoId,
+        fichaId,
+      )
+
+      await insertMovement(tx, { processo, description, user })
+      await insertAudit(tx, {
+        processo,
+        fichaId,
+        action: "excluir_ficha_judicial",
+        description,
+        user,
+      })
+    })
+
+    return NextResponse.json({ ok: true })
+  } catch (error) {
+    console.error("[DELETE /api/judicial/casos/[id]/fichas] erro:", error)
+
+    return NextResponse.json(
+      { ok: false, error: "Erro ao excluir ficha judicial." },
       { status: 500 },
     )
   }
