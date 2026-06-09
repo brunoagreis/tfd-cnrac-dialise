@@ -97,6 +97,26 @@
   }
 }
 
+@layer components {
+  [role="dialog"] {
+    max-width: min(96vw, 1180px) !important;
+    max-height: 92vh;
+    overflow-y: auto;
+  }
+
+  [role="dialog"] > *,
+  [role="dialog"] .rounded-lg,
+  [role="dialog"] .overflow-x-auto {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  [role="dialog"] .overflow-x-auto {
+    width: 100%;
+    overflow-x: auto;
+  }
+}
+
 @media print {
   html,
   body {
