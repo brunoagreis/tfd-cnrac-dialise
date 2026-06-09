@@ -21,10 +21,20 @@ const STATUS_PERMITIDOS = [
   "bloqueio",
   "sequestro",
   "obito",
+  "arquivado",
   "devolvida",
 ] as const
 
 type StatusFinalizacao = (typeof STATUS_PERMITIDOS)[number]
+
+const STATUS_TERMINAIS = new Set<StatusFinalizacao>([
+  "resolvido",
+  "cumprido",
+  "bloqueio",
+  "sequestro",
+  "obito",
+  "arquivado",
+])
 
 function text(value: unknown) {
   return String(value ?? "").trim()
@@ -114,7 +124,7 @@ export async function POST(
 
     const userId = text(body?.user?.id || body?.userId || "sistema")
     const userName = text(body?.user?.nome || body?.user?.name || body?.userName || "Sistema")
-    const userEmail = text(body?.user?.email || body?.userEmail)
+    const userEmail = text(body?.user?.email || body?.userEmail).toLowerCase()
     const userCpf = text(body?.user?.cpf || body?.userCpf)
 
     if (!status) {
@@ -175,6 +185,7 @@ export async function POST(
     const statusTexto = statusParaTexto(status)
     const localPendenteTexto = pendingLocationParaTexto(pendingLocation)
     const finalizacaoId = `jfin_${randomUUID()}`
+    const isTerminal = STATUS_TERMINAIS.has(status)
 
     const descricao = [
       `FINALIZAÇÃO DA DEMANDA: ${statusTexto}`,
@@ -191,13 +202,40 @@ export async function POST(
         `
           UPDATE public.judicial_monitoramento_base
           SET status_monitoramento_atual = $2,
-              ativo_monitoramento = CASE WHEN $2 IN ('RESOLVIDO', 'OBITO') THEN FALSE ELSE ativo_monitoramento END,
+              ativo_monitoramento = CASE WHEN $3 = TRUE THEN FALSE ELSE ativo_monitoramento END,
               data_ultimo_monitoramento = NOW(),
               updated_at = NOW()
           WHERE id::text = $1
         `,
         processo.monitoramentoId,
         statusBanco,
+        isTerminal,
+      )
+
+      await tx.$executeRawUnsafe(
+        `
+          UPDATE public.judicial_monitoramento_atribuicoes
+          SET
+            status = 'FINALIZADO',
+            iniciado_em = COALESCE(iniciado_em, NOW()),
+            finalizado_em = COALESCE(finalizado_em, NOW()),
+            observacao = COALESCE(NULLIF(observacao, ''), '') || CASE
+              WHEN COALESCE(NULLIF(observacao, ''), '') = '' THEN ''
+              ELSE E'\n'
+            END || $4,
+            updated_at = NOW()
+          WHERE data_referencia = CURRENT_DATE
+            AND monitoramento_id = $1::bigint
+            AND (
+              NULLIF($2, '') IS NOT NULL AND usuario_id = $2
+              OR NULLIF($3, '') IS NOT NULL AND LOWER(COALESCE(usuario_email, '')) = $3
+            )
+            AND status <> 'CANCELADO'
+        `,
+        processo.monitoramentoId,
+        userId,
+        userEmail,
+        `Finalizado pela demanda judicial: ${statusTexto}`,
       )
 
       await tx.$executeRawUnsafe(
@@ -249,8 +287,8 @@ export async function POST(
             'judicial_finalizacoes', 'finalizar_demanda_judicial', $1, $2, $3, $4,
             'JUDICIAL', NOW(),
             jsonb_build_object('status_monitoramento_atual', $5::text),
-            jsonb_build_object('finalizacao_id', $6::text, 'status_monitoramento_atual', $7::text, 'status_finalizacao', $8::text, 'pendingLocation', $9::text, 'reason', $10::text, 'valor_estado', $11::numeric, 'valor_municipio', $12::numeric),
-            jsonb_build_array('status_monitoramento_atual', 'judicial_finalizacoes', 'valor_estado', 'valor_municipio'),
+            jsonb_build_object('finalizacao_id', $6::text, 'status_monitoramento_atual', $7::text, 'status_finalizacao', $8::text, 'pendingLocation', $9::text, 'reason', $10::text, 'valor_estado', $11::numeric, 'valor_municipio', $12::numeric, 'ativo_monitoramento', $14::boolean),
+            jsonb_build_array('status_monitoramento_atual', 'judicial_finalizacoes', 'valor_estado', 'valor_municipio', 'judicial_monitoramento_atribuicoes'),
             $13
           )
         `,
@@ -267,6 +305,7 @@ export async function POST(
         valorEstado,
         valorMunicipio,
         descricao,
+        !isTerminal,
       )
     })
 
