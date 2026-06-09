@@ -135,6 +135,10 @@ export function JudicialFichasPanel({ caseId }: { caseId: string }) {
     }
   }
 
+  function refreshProcessView() {
+    window.location.reload()
+  }
+
   useEffect(() => {
     void loadCase()
   }, [caseId])
@@ -247,7 +251,7 @@ export function JudicialFichasPanel({ caseId }: { caseId: string }) {
       toast.success("Ficha cadastrada no banco.")
       setFormOpen(false)
       resetFichaForm()
-      await loadCase()
+      refreshProcessView()
     } catch (error) {
       console.error("SAVE_JUDICIAL_FICHA_ERROR", error)
       toast.error(error instanceof Error ? error.message : "Erro ao cadastrar ficha.")
@@ -281,7 +285,7 @@ export function JudicialFichasPanel({ caseId }: { caseId: string }) {
       toast.success("Ficha atualizada.")
       setStatusFichaId("")
       setFichaStatusReason("")
-      await loadCase()
+      refreshProcessView()
     } catch (error) {
       console.error("UPDATE_JUDICIAL_FICHA_ERROR", error)
       toast.error(error instanceof Error ? error.message : "Erro ao atualizar ficha.")
@@ -313,7 +317,7 @@ export function JudicialFichasPanel({ caseId }: { caseId: string }) {
       }
 
       toast.success("Ficha excluída.")
-      await loadCase()
+      refreshProcessView()
     } catch (error) {
       console.error("DELETE_JUDICIAL_FICHA_ERROR", error)
       toast.error(error instanceof Error ? error.message : "Erro ao excluir ficha.")
