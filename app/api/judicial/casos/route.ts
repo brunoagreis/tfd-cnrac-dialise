@@ -82,6 +82,12 @@ export async function GET(req: NextRequest) {
       atribuicaoHojeWhereParts.push(`LOWER(COALESCE(a.usuario_email, '')) = $${params.length}`)
     }
 
+    if (somenteAtribuidos) {
+      atribuicaoHojeWhereParts.push(
+        `a.status IN ('ATRIBUIDO', 'EM_ANALISE', 'EM_MONITORAMENTO')`,
+      )
+    }
+
     if (somenteAtivos !== "false") {
       whereParts.push(`COALESCE(b.ativo_monitoramento, TRUE) = TRUE`)
     }
