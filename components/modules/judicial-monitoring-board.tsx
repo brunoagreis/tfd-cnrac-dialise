@@ -60,6 +60,7 @@ const STATUS_BADGE_VARIANTS: Record<
 > = {
   PENDENTE: "secondary",
   EM_ANDAMENTO: "default",
+  EM_MONITORAMENTO: "default",
   FINALIZADO: "outline",
   RESOLVIDO: "default",
   DEVOLVIDA: "destructive",
@@ -81,6 +82,10 @@ function getStatusFilterValue(status: string) {
   if (key === "DEVOLVIDA" || key === "DEVOLVIDO") return "devolvida"
 
   return "pendente"
+}
+
+function isMonitoredToday(item: JudicialBoardItem) {
+  return String(item.atribuicaoStatus || "").trim().toUpperCase() === "FINALIZADO"
 }
 
 function isAdminUser(user: any) {
@@ -134,10 +139,13 @@ export function JudicialMonitoringBoard() {
     try {
       setLoading(true)
 
-      const params = new URLSearchParams({ somenteAtivos: "true" })
+      const params = new URLSearchParams({
+        somenteAtivos: monitoringUser ? "false" : "true",
+      })
 
       if (monitoringUser && user?.id) {
         params.set("somenteAtribuidos", "true")
+        params.set("incluirMonitoradosHoje", "true")
         params.set("usuarioId", user.id)
         if (user.email) params.set("usuarioEmail", user.email)
       }
@@ -163,7 +171,12 @@ export function JudicialMonitoringBoard() {
 
   const filtered = useMemo(() => {
     return items.filter((item) => {
-      if (status !== "todos" && getStatusFilterValue(item.statusMonitoramentoAtual) !== status) {
+      if (status === "monitorados_hoje") {
+        if (!isMonitoredToday(item)) return false
+      } else if (status !== "todos") {
+        if (monitoringUser && isMonitoredToday(item)) return false
+        if (getStatusFilterValue(item.statusMonitoramentoAtual) !== status) return false
+      } else if (monitoringUser && isMonitoredToday(item)) {
         return false
       }
 
@@ -194,16 +207,19 @@ export function JudicialMonitoringBoard() {
 
       return true
     })
-  }, [items, origemModulo, search, status])
+  }, [items, origemModulo, search, status, monitoringUser])
 
   const stats = useMemo(() => {
+    const notMonitoredToday = items.filter((item) => !isMonitoredToday(item))
+
     return {
-      total: items.length,
-      pendente: items.filter((item) => getStatusFilterValue(item.statusMonitoramentoAtual) === "pendente").length,
-      resolvido: items.filter((item) => getStatusFilterValue(item.statusMonitoramentoAtual) === "finalizado").length,
-      devolvida: items.filter((item) => getStatusFilterValue(item.statusMonitoramentoAtual) === "devolvida").length,
+      total: monitoringUser ? notMonitoredToday.length : items.length,
+      pendente: notMonitoredToday.filter((item) => getStatusFilterValue(item.statusMonitoramentoAtual) === "pendente").length,
+      resolvido: notMonitoredToday.filter((item) => getStatusFilterValue(item.statusMonitoramentoAtual) === "finalizado").length,
+      devolvida: notMonitoredToday.filter((item) => getStatusFilterValue(item.statusMonitoramentoAtual) === "devolvida").length,
+      monitoradosHoje: items.filter(isMonitoredToday).length,
     }
-  }, [items])
+  }, [items, monitoringUser])
 
   const origemOptions = useMemo(() => {
     const unique = Array.from(
@@ -251,8 +267,12 @@ export function JudicialMonitoringBoard() {
           <CardContent className="flex items-center gap-3 pt-4">
             <RotateCcw className="h-5 w-5 text-muted-foreground" />
             <div>
-              <p className="text-xs text-muted-foreground">Devolvida</p>
-              <p className="text-2xl font-bold text-card-foreground">{stats.devolvida}</p>
+              <p className="text-xs text-muted-foreground">
+                {monitoringUser ? "Monitorados hoje" : "Devolvida"}
+              </p>
+              <p className="text-2xl font-bold text-card-foreground">
+                {monitoringUser ? stats.monitoradosHoje : stats.devolvida}
+              </p>
             </div>
           </CardContent>
         </Card>
@@ -286,7 +306,11 @@ export function JudicialMonitoringBoard() {
                   <option value="todos">Todos ({stats.total})</option>
                   <option value="pendente">Pendente ({stats.pendente})</option>
                   <option value="finalizado">Finalizado ({stats.resolvido})</option>
-                  <option value="devolvida">Devolvida ({stats.devolvida})</option>
+                  {monitoringUser ? (
+                    <option value="monitorados_hoje">Monitorados hoje ({stats.monitoradosHoje})</option>
+                  ) : (
+                    <option value="devolvida">Devolvida ({stats.devolvida})</option>
+                  )}
                 </select>
               </div>
 
@@ -331,7 +355,7 @@ export function JudicialMonitoringBoard() {
           </CardTitle>
           <CardDescription>
             {monitoringUser
-              ? "Fila judicial limitada às demandas atribuídas para o seu monitoramento hoje."
+              ? "Fila judicial limitada às demandas atribuídas para o seu monitoramento hoje, com opção de consultar as já monitoradas."
               : showMunicipalityMode
                 ? "Visualização simplificada da Judicialização."
                 : "Fila judicial baseada no banco de dados real."}
@@ -377,8 +401,8 @@ export function JudicialMonitoringBoard() {
                       )}
 
                       {item.atribuicaoStatus && (
-                        <Badge variant="outline">
-                          {item.atribuicaoStatusLabel}
+                        <Badge variant={isMonitoredToday(item) ? "default" : "outline"}>
+                          {isMonitoredToday(item) ? "Monitorado hoje" : item.atribuicaoStatusLabel}
                         </Badge>
                       )}
                     </div>
