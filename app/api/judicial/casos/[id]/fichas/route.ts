@@ -285,12 +285,10 @@ export async function POST(
             active,
             created_by,
             created_by_name,
-            created_by_email,
             created_at,
             updated_at,
             updated_by,
-            updated_by_name,
-            updated_by_email
+            updated_by_name
           )
           VALUES (
             $1,
@@ -307,12 +305,10 @@ export async function POST(
             TRUE,
             $12,
             $13,
-            $14,
             NOW(),
             NOW(),
             $12,
-            $13,
-            $14
+            $13
           )
         `,
         fichaId,
@@ -328,7 +324,6 @@ export async function POST(
         notes || null,
         user.id,
         user.nome,
-        user.email || null,
       )
 
       await tx.$executeRawUnsafe(
@@ -476,11 +471,9 @@ export async function PATCH(
               status_updated_at = NOW(),
               status_updated_by = $5,
               status_updated_by_name = $6,
-              status_updated_by_email = $7,
               updated_at = NOW(),
               updated_by = $5,
-              updated_by_name = $6,
-              updated_by_email = $7
+              updated_by_name = $6
             WHERE monitoramento_id = $1::bigint
               AND id::text = $2
           `,
@@ -490,7 +483,6 @@ export async function PATCH(
           reason,
           user.id,
           user.nome,
-          user.email || null,
         )
 
         await insertMovement(tx, { processo, description, user })
@@ -518,8 +510,7 @@ export async function PATCH(
               inactive_reason = $3,
               updated_at = NOW(),
               updated_by = $4,
-              updated_by_name = $5,
-              updated_by_email = $6
+              updated_by_name = $5
             WHERE monitoramento_id = $1::bigint
               AND id::text = $2
           `,
@@ -528,7 +519,6 @@ export async function PATCH(
           reason || "Inativada pelo usuário",
           user.id,
           user.nome,
-          user.email || null,
         )
 
         await insertMovement(tx, { processo, description, user })
@@ -556,8 +546,7 @@ export async function PATCH(
               inactive_reason = NULL,
               updated_at = NOW(),
               updated_by = $3,
-              updated_by_name = $4,
-              updated_by_email = $5
+              updated_by_name = $4
             WHERE monitoramento_id = $1::bigint
               AND id::text = $2
           `,
@@ -565,7 +554,6 @@ export async function PATCH(
           fichaId,
           user.id,
           user.nome,
-          user.email || null,
         )
 
         await insertMovement(tx, { processo, description, user })
