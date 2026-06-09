@@ -67,6 +67,9 @@ export async function GET(req: NextRequest) {
     const somenteAtribuidos = isTruthyParam(
       normalizeText(req.nextUrl.searchParams.get("somenteAtribuidos")).toLowerCase(),
     )
+    const incluirMonitoradosHoje = isTruthyParam(
+      normalizeText(req.nextUrl.searchParams.get("incluirMonitoradosHoje")).toLowerCase(),
+    )
     const usuarioId = normalizeText(req.nextUrl.searchParams.get("usuarioId"))
     const usuarioEmail = normalizeText(req.nextUrl.searchParams.get("usuarioEmail")).toLowerCase()
 
@@ -83,9 +86,13 @@ export async function GET(req: NextRequest) {
     }
 
     if (somenteAtribuidos) {
-      atribuicaoHojeWhereParts.push(
-        `a.status IN ('ATRIBUIDO', 'EM_ANALISE', 'EM_MONITORAMENTO')`,
-      )
+      if (incluirMonitoradosHoje) {
+        atribuicaoHojeWhereParts.push(`a.status <> 'CANCELADO'`)
+      } else {
+        atribuicaoHojeWhereParts.push(
+          `a.status IN ('ATRIBUIDO', 'EM_ANALISE', 'EM_MONITORAMENTO')`,
+        )
+      }
     }
 
     if (somenteAtivos !== "false") {
@@ -130,6 +137,7 @@ export async function GET(req: NextRequest) {
     const orderSql = somenteAtribuidos
       ? `
         ORDER BY
+          CASE WHEN ah.status = 'FINALIZADO' THEN 1 ELSE 0 END,
           ah.bloco_numero NULLS LAST,
           ah.ordem_no_bloco NULLS LAST,
           ah.atribuida_em NULLS LAST,
