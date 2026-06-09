@@ -12,6 +12,17 @@ type JudicialBaseRow = {
   protocolo: string | null
 }
 
+const TERMINAL_MOVEMENT_STATUS: Record<string, string> = {
+  arquivado: "ARQUIVADO",
+  cumprido: "CUMPRIDO",
+  cumprimento: "CUMPRIDO",
+  resolvido: "RESOLVIDO",
+  obito: "OBITO",
+  bloqueio: "BLOQUEIO",
+  sequestro: "SEQUESTRO",
+  encerramento_processo: "ARQUIVADO",
+}
+
 function text(value: unknown) {
   return String(value ?? "").trim()
 }
@@ -162,7 +173,7 @@ export async function POST(
         body?.userName ||
         "Sistema",
     )
-    const userEmail = text(body?.user?.email || body?.userEmail)
+    const userEmail = text(body?.user?.email || body?.userEmail).toLowerCase()
 
     if (!description) {
       return NextResponse.json(
@@ -204,15 +215,9 @@ export async function POST(
     }
 
     const movementId = `jmov_${randomUUID()}`
+    const nextMonitoringStatus = TERMINAL_MOVEMENT_STATUS[type] || null
+    const isTerminal = Boolean(nextMonitoringStatus)
 
-    const closingStatusByMovement: Record<string, string> = {
-      arquivado: "ARQUIVADO",
-      cumprido: "CUMPRIDO",
-      resolvido: "RESOLVIDO",
-      obito: "OBITO",
-    }
-
-    const nextMonitoringStatus = closingStatusByMovement[type] || null
     const descricaoAuditoria = [
       `MOVIMENTAÇÃO JUDICIAL: ${movementTypeLabel(type)}`,
       description,
@@ -281,11 +286,43 @@ export async function POST(
         `
           UPDATE public.judicial_monitoramento_base
           SET
+            status_monitoramento_atual = COALESCE($2, status_monitoramento_atual),
+            ativo_monitoramento = CASE WHEN $3 = TRUE THEN FALSE ELSE ativo_monitoramento END,
             data_ultimo_monitoramento = NOW(),
             updated_at = NOW()
           WHERE id::text = $1
         `,
         processo.monitoramentoId,
+        nextMonitoringStatus,
+        isTerminal,
+      )
+
+      await tx.$executeRawUnsafe(
+        `
+          UPDATE public.judicial_monitoramento_atribuicoes
+          SET
+            status = 'FINALIZADO',
+            iniciado_em = COALESCE(iniciado_em, NOW()),
+            finalizado_em = COALESCE(finalizado_em, NOW()),
+            observacao = COALESCE(NULLIF(observacao, ''), '') || CASE
+              WHEN COALESCE(NULLIF(observacao, ''), '') = '' THEN ''
+              ELSE E'\n'
+            END || $4,
+            updated_at = NOW()
+          WHERE data_referencia = CURRENT_DATE
+            AND monitoramento_id = $1::bigint
+            AND (
+              NULLIF($2, '') IS NOT NULL AND usuario_id = $2
+              OR NULLIF($3, '') IS NOT NULL AND LOWER(COALESCE(usuario_email, '')) = $3
+            )
+            AND status <> 'CANCELADO'
+        `,
+        processo.monitoramentoId,
+        userId,
+        userEmail,
+        isTerminal
+          ? `Finalizado por movimentação terminal: ${movementTypeLabel(type)}`
+          : `Monitoramento do dia concluído por movimentação: ${movementTypeLabel(type)}`,
       )
 
       await tx.$executeRawUnsafe(
@@ -322,13 +359,17 @@ export async function POST(
               'response_requested_at', $9::text,
               'state_amount', $10::numeric,
               'municipality_amount', $11::numeric,
-              'attachments', $12::jsonb
+              'attachments', $12::jsonb,
+              'terminal', $14::boolean,
+              'status_monitoramento_atual', $15::text
             ),
             jsonb_build_array(
               'judicial_movimentacoes',
               'type',
               'description',
-              'attachments'
+              'attachments',
+              'judicial_monitoramento_atribuicoes',
+              'ativo_monitoramento'
             ),
             $13
           )
@@ -346,6 +387,8 @@ export async function POST(
         municipalityAmount,
         JSON.stringify(attachments),
         descricaoAuditoria,
+        isTerminal,
+        nextMonitoringStatus,
       )
     })
 
