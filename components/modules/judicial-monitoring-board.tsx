@@ -63,6 +63,9 @@ const STATUS_BADGE_VARIANTS: Record<
   EM_MONITORAMENTO: "default",
   FINALIZADO: "outline",
   RESOLVIDO: "default",
+  ARQUIVADO: "outline",
+  ENCERRADO: "outline",
+  CUMPRIDO: "default",
   DEVOLVIDA: "destructive",
   DEVOLVIDO: "destructive",
   BLOQUEIO: "destructive",
@@ -75,11 +78,33 @@ function getStatusVariant(status: string) {
   return STATUS_BADGE_VARIANTS[key] ?? "secondary"
 }
 
-function getStatusFilterValue(status: string) {
-  const key = String(status || "").trim().toUpperCase()
+function normalizeStatusKey(status: string) {
+  return String(status || "")
+    .trim()
+    .toUpperCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+}
 
-  if (key === "FINALIZADO" || key === "RESOLVIDO") return "finalizado"
-  if (key === "DEVOLVIDA" || key === "DEVOLVIDO") return "devolvida"
+function getStatusFilterValue(status: string) {
+  const key = normalizeStatusKey(status)
+
+  if (
+    [
+      "FINALIZADO",
+      "RESOLVIDO",
+      "ARQUIVADO",
+      "ENCERRADO",
+      "OBITO",
+      "CUMPRIDO",
+      "BLOQUEIO",
+      "SEQUESTRO",
+      "DEVOLVIDA",
+      "DEVOLVIDO",
+    ].includes(key)
+  ) {
+    return "finalizado"
+  }
 
   return "pendente"
 }
@@ -127,20 +152,22 @@ export function JudicialMonitoringBoard() {
   const [search, setSearch] = useState("")
   const [status, setStatus] = useState("pendente")
   const [origemModulo, setOrigemModulo] = useState("todos")
+  const [assignmentFilter, setAssignmentFilter] = useState("todos")
 
+  const adminUser = useMemo(() => isAdminUser(user), [user])
   const monitoringUser = useMemo(() => isMonitoringUser(user), [user])
 
   useEffect(() => {
     if (!user?.id) return
     void fetchCases()
-  }, [monitoringUser, user?.email, user?.id])
+  }, [adminUser, monitoringUser, user?.email, user?.id])
 
   async function fetchCases() {
     try {
       setLoading(true)
 
       const params = new URLSearchParams({
-        somenteAtivos: monitoringUser ? "false" : "true",
+        somenteAtivos: adminUser || monitoringUser ? "false" : "true",
       })
 
       if (monitoringUser && user?.id) {
@@ -180,6 +207,14 @@ export function JudicialMonitoringBoard() {
         return false
       }
 
+      if (assignmentFilter !== "todos") {
+        if (assignmentFilter === "__sem_atribuicao") {
+          if (item.usuarioAtribuidoNome) return false
+        } else if (item.usuarioAtribuidoNome !== assignmentFilter) {
+          return false
+        }
+      }
+
       if (origemModulo !== "todos" && item.origemModulo.toLowerCase() !== origemModulo) {
         return false
       }
@@ -198,6 +233,7 @@ export function JudicialMonitoringBoard() {
           item.cidDescricao,
           item.origemModulo,
           item.usuarioAtribuidoNome,
+          item.atribuicaoStatusLabel,
         ]
           .join(" ")
           .toLowerCase()
@@ -207,16 +243,17 @@ export function JudicialMonitoringBoard() {
 
       return true
     })
-  }, [items, origemModulo, search, status, monitoringUser])
+  }, [assignmentFilter, items, origemModulo, search, status, monitoringUser])
 
   const stats = useMemo(() => {
-    const notMonitoredToday = items.filter((item) => !isMonitoredToday(item))
+    const visibleForMainQueue = monitoringUser
+      ? items.filter((item) => !isMonitoredToday(item))
+      : items
 
     return {
-      total: monitoringUser ? notMonitoredToday.length : items.length,
-      pendente: notMonitoredToday.filter((item) => getStatusFilterValue(item.statusMonitoramentoAtual) === "pendente").length,
-      resolvido: notMonitoredToday.filter((item) => getStatusFilterValue(item.statusMonitoramentoAtual) === "finalizado").length,
-      devolvida: notMonitoredToday.filter((item) => getStatusFilterValue(item.statusMonitoramentoAtual) === "devolvida").length,
+      total: visibleForMainQueue.length,
+      pendente: visibleForMainQueue.filter((item) => getStatusFilterValue(item.statusMonitoramentoAtual) === "pendente").length,
+      resolvido: visibleForMainQueue.filter((item) => getStatusFilterValue(item.statusMonitoramentoAtual) === "finalizado").length,
       monitoradosHoje: items.filter(isMonitoredToday).length,
     }
   }, [items, monitoringUser])
@@ -229,6 +266,16 @@ export function JudicialMonitoringBoard() {
     )
 
     return unique.sort()
+  }, [items])
+
+  const assignmentOptions = useMemo(() => {
+    const unique = Array.from(
+      new Set(
+        items.map((item) => item.usuarioAtribuidoNome).filter(Boolean),
+      ),
+    )
+
+    return unique.sort((a, b) => a.localeCompare(b, "pt-BR"))
   }, [items])
 
   const showMunicipalityMode = user?.role === "UNIDADE_HOSPITALAR"
@@ -257,7 +304,7 @@ export function JudicialMonitoringBoard() {
           <CardContent className="flex items-center gap-3 pt-4">
             <CheckCircle2 className="h-5 w-5 text-muted-foreground" />
             <div>
-              <p className="text-xs text-muted-foreground">Resolvido</p>
+              <p className="text-xs text-muted-foreground">Finalizados</p>
               <p className="text-2xl font-bold text-card-foreground">{stats.resolvido}</p>
             </div>
           </CardContent>
@@ -267,12 +314,8 @@ export function JudicialMonitoringBoard() {
           <CardContent className="flex items-center gap-3 pt-4">
             <RotateCcw className="h-5 w-5 text-muted-foreground" />
             <div>
-              <p className="text-xs text-muted-foreground">
-                {monitoringUser ? "Monitorados hoje" : "Devolvida"}
-              </p>
-              <p className="text-2xl font-bold text-card-foreground">
-                {monitoringUser ? stats.monitoradosHoje : stats.devolvida}
-              </p>
+              <p className="text-xs text-muted-foreground">Monitorados hoje</p>
+              <p className="text-2xl font-bold text-card-foreground">{stats.monitoradosHoje}</p>
             </div>
           </CardContent>
         </Card>
@@ -287,7 +330,7 @@ export function JudicialMonitoringBoard() {
                 aria-hidden="true"
               />
               <Input
-                placeholder="Buscar por protocolo, paciente, CPF, CNS, ficha CORE, procedimento ou CID..."
+                placeholder="Buscar por protocolo, paciente, CPF, CNS, ficha CORE, procedimento, CID ou monitor..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="pl-9"
@@ -299,20 +342,35 @@ export function JudicialMonitoringBoard() {
               <div className="flex flex-col gap-1">
                 <Label className="text-xs">Status</Label>
                 <select
-                  className="flex h-10 w-44 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  className="flex h-10 w-48 rounded-md border border-input bg-background px-3 py-2 text-sm"
                   value={status}
                   onChange={(e) => setStatus(e.target.value)}
                 >
                   <option value="todos">Todos ({stats.total})</option>
                   <option value="pendente">Pendente ({stats.pendente})</option>
-                  <option value="finalizado">Finalizado ({stats.resolvido})</option>
-                  {monitoringUser ? (
-                    <option value="monitorados_hoje">Monitorados hoje ({stats.monitoradosHoje})</option>
-                  ) : (
-                    <option value="devolvida">Devolvida ({stats.devolvida})</option>
-                  )}
+                  <option value="finalizado">Finalizados ({stats.resolvido})</option>
+                  <option value="monitorados_hoje">Monitorados hoje ({stats.monitoradosHoje})</option>
                 </select>
               </div>
+
+              {adminUser && (
+                <div className="flex flex-col gap-1">
+                  <Label className="text-xs">Monitor</Label>
+                  <select
+                    className="flex h-10 w-52 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    value={assignmentFilter}
+                    onChange={(e) => setAssignmentFilter(e.target.value)}
+                  >
+                    <option value="todos">Todos</option>
+                    <option value="__sem_atribuicao">Sem atribuição</option>
+                    {assignmentOptions.map((value) => (
+                      <option key={value} value={value}>
+                        {value}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div className="flex flex-col gap-1">
                 <Label className="text-xs">Origem</Label>
@@ -330,13 +388,14 @@ export function JudicialMonitoringBoard() {
                 </select>
               </div>
 
-              {(status !== "todos" || origemModulo !== "todos" || search) && (
+              {(status !== "todos" || origemModulo !== "todos" || assignmentFilter !== "todos" || search) && (
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => {
                     setStatus("pendente")
                     setOrigemModulo("todos")
+                    setAssignmentFilter("todos")
                     setSearch("")
                   }}
                 >
@@ -356,9 +415,11 @@ export function JudicialMonitoringBoard() {
           <CardDescription>
             {monitoringUser
               ? "Fila judicial limitada às demandas atribuídas para o seu monitoramento hoje, com opção de consultar as já monitoradas."
-              : showMunicipalityMode
-                ? "Visualização simplificada da Judicialização."
-                : "Fila judicial baseada no banco de dados real."}
+              : adminUser
+                ? "Visão administrativa completa: pendentes, finalizados, monitorados hoje e atribuições por monitor."
+                : showMunicipalityMode
+                  ? "Visualização simplificada da Judicialização."
+                  : "Fila judicial baseada no banco de dados real."}
           </CardDescription>
         </CardHeader>
 
@@ -394,11 +455,13 @@ export function JudicialMonitoringBoard() {
                         {item.origemModulo || "JUDICIAL"}
                       </Badge>
 
-                      {item.usuarioAtribuidoNome && (
+                      {item.usuarioAtribuidoNome ? (
                         <Badge variant="secondary">
                           {item.usuarioAtribuidoNome}
                         </Badge>
-                      )}
+                      ) : adminUser ? (
+                        <Badge variant="outline">Sem atribuição</Badge>
+                      ) : null}
 
                       {item.atribuicaoStatus && (
                         <Badge variant={isMonitoredToday(item) ? "default" : "outline"}>
