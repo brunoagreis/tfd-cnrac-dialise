@@ -117,16 +117,19 @@ async function ensureDailyAssignment(userId: string, userName: string, userEmail
             jm.id AS monitoramento_id,
             CASE
               WHEN jm.pendente_dia_anterior = TRUE THEN 1
-              WHEN jm.data_ultimo_monitoramento IS NULL THEN 2
-              WHEN jm.data_ultimo_monitoramento <= NOW() - INTERVAL '20 days' THEN 3
-              ELSE 4
+              WHEN jm.data_proximo_monitoramento IS NOT NULL AND jm.data_proximo_monitoramento <= NOW() THEN 2
+              WHEN jm.data_ultimo_monitoramento IS NULL THEN 3
+              WHEN jm.data_ultimo_monitoramento <= NOW() - INTERVAL '20 days' THEN 4
+              ELSE 5
             END AS prioridade_nivel,
             CASE
               WHEN jm.pendente_dia_anterior = TRUE THEN 'SOBRA_DIA_ANTERIOR'
+              WHEN jm.data_proximo_monitoramento IS NOT NULL AND jm.data_proximo_monitoramento <= NOW() THEN COALESCE(jm.motivo_proximo_monitoramento, 'RETORNO_PRAZO')
               WHEN jm.data_ultimo_monitoramento IS NULL THEN 'NUNCA_MONITORADO'
               WHEN jm.data_ultimo_monitoramento <= NOW() - INTERVAL '20 days' THEN 'MAIS_20_DIAS'
               ELSE 'ROTINA'
             END AS motivo_prioridade,
+            jm.data_proximo_monitoramento,
             jm.data_ultimo_monitoramento
           FROM public.judicial_monitoramento_base jm
           WHERE COALESCE(jm.ativo_monitoramento, TRUE) = TRUE
@@ -140,10 +143,12 @@ async function ensureDailyAssignment(userId: string, userName: string, userEmail
           ORDER BY
             CASE
               WHEN jm.pendente_dia_anterior = TRUE THEN 1
-              WHEN jm.data_ultimo_monitoramento IS NULL THEN 2
-              WHEN jm.data_ultimo_monitoramento <= NOW() - INTERVAL '20 days' THEN 3
-              ELSE 4
+              WHEN jm.data_proximo_monitoramento IS NOT NULL AND jm.data_proximo_monitoramento <= NOW() THEN 2
+              WHEN jm.data_ultimo_monitoramento IS NULL THEN 3
+              WHEN jm.data_ultimo_monitoramento <= NOW() - INTERVAL '20 days' THEN 4
+              ELSE 5
             END,
+            jm.data_proximo_monitoramento NULLS LAST,
             jm.data_ultimo_monitoramento NULLS FIRST,
             jm.id
           LIMIT $4::int
@@ -173,7 +178,7 @@ async function ensureDailyAssignment(userId: string, userName: string, userEmail
             $5::int,
             $4::int,
             ROW_NUMBER() OVER (
-              ORDER BY c.prioridade_nivel, c.data_ultimo_monitoramento NULLS FIRST, c.monitoramento_id
+              ORDER BY c.prioridade_nivel, c.data_proximo_monitoramento NULLS LAST, c.data_ultimo_monitoramento NULLS FIRST, c.monitoramento_id
             ),
             c.motivo_prioridade,
             c.prioridade_nivel,
@@ -187,6 +192,9 @@ async function ensureDailyAssignment(userId: string, userName: string, userEmail
           UPDATE public.judicial_monitoramento_base jm
           SET
             status_monitoramento_atual = 'ATRIBUIDO',
+            data_proximo_monitoramento = NULL,
+            motivo_proximo_monitoramento = NULL,
+            prazo_retorno_dias = NULL,
             updated_at = NOW()
           WHERE EXISTS (
             SELECT 1
@@ -287,7 +295,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       ok: true,
-      strategy: "daily_batch_20_then_5_with_20_day_priority",
+      strategy: "daily_batch_20_then_5_with_return_deadline_priority",
       ...result,
     })
   } catch (error) {
