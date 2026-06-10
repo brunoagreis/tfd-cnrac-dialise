@@ -12,11 +12,18 @@ type JudicialBaseRow = {
   protocolo: string | null
 }
 
+type ReturnRule = {
+  nextDate: string | null
+  reason: string | null
+  days: number | null
+}
+
 const TERMINAL_MOVEMENT_STATUS: Record<string, string> = {
-  arquivado: "ARQUIVADO",
-  cumprido: "CUMPRIDO",
   cumprimento: "CUMPRIDO",
+  cumprido: "CUMPRIDO",
   resolvido: "RESOLVIDO",
+  arquivado: "ARQUIVADO",
+  falta_paciente: "FALTA_PACIENTE",
   obito: "OBITO",
   bloqueio: "BLOQUEIO",
   sequestro: "SEQUESTRO",
@@ -54,6 +61,62 @@ function parseDateTime(value: unknown) {
   if (Number.isNaN(date.getTime())) return null
 
   return date.toISOString()
+}
+
+function addDaysIso(baseDate: string | Date, days: number) {
+  const date = baseDate instanceof Date ? new Date(baseDate) : new Date(baseDate)
+
+  if (Number.isNaN(date.getTime())) return null
+
+  date.setDate(date.getDate() + days)
+  return date.toISOString()
+}
+
+function resolveReturnRule(params: {
+  type: string
+  appointmentDate: string | null
+  responseRequestedAt: string | null
+  terminal: boolean
+}): ReturnRule {
+  const { type, appointmentDate, responseRequestedAt, terminal } = params
+
+  if (terminal) {
+    return {
+      nextDate: null,
+      reason: null,
+      days: null,
+    }
+  }
+
+  if (type === "envio_agendamento_demanda") {
+    return {
+      nextDate: addDaysIso(new Date(), 5),
+      reason: "RETORNO_ENVIO_AGENDAMENTO_5_DIAS",
+      days: 5,
+    }
+  }
+
+  if (type === "agendamento") {
+    return {
+      nextDate: appointmentDate ? addDaysIso(appointmentDate, 7) : null,
+      reason: "RETORNO_7_DIAS_APOS_AGENDAMENTO",
+      days: 7,
+    }
+  }
+
+  if (type === "solicitacao_inclusao") {
+    return {
+      nextDate: responseRequestedAt ? addDaysIso(responseRequestedAt, 3) : null,
+      reason: "RETORNO_3_DIAS_APOS_SOLICITACAO_INCLUSAO",
+      days: 3,
+    }
+  }
+
+  return {
+    nextDate: addDaysIso(new Date(), 20),
+    reason: "RETORNO_MONITORAMENTO_20_DIAS",
+    days: 20,
+  }
 }
 
 function normalizeAttachments(value: unknown) {
@@ -189,6 +252,13 @@ export async function POST(
       )
     }
 
+    if (type === "solicitacao_inclusao" && !responseRequestedAt) {
+      return NextResponse.json(
+        { ok: false, error: "Informe a data da solicitação de inclusão." },
+        { status: 400 },
+      )
+    }
+
     if (["bloqueio", "sequestro"].includes(type)) {
       if (stateAmount === null || stateAmount <= 0) {
         return NextResponse.json(
@@ -217,12 +287,27 @@ export async function POST(
     const movementId = `jmov_${randomUUID()}`
     const nextMonitoringStatus = TERMINAL_MOVEMENT_STATUS[type] || null
     const isTerminal = Boolean(nextMonitoringStatus)
+    const returnRule = resolveReturnRule({
+      type,
+      appointmentDate,
+      responseRequestedAt,
+      terminal: isTerminal,
+    })
+
+    if (!isTerminal && !returnRule.nextDate) {
+      return NextResponse.json(
+        { ok: false, error: "Não foi possível calcular a data de retorno do monitoramento." },
+        { status: 400 },
+      )
+    }
 
     const descricaoAuditoria = [
       `MOVIMENTAÇÃO JUDICIAL: ${movementTypeLabel(type)}`,
       description,
       appointmentDate ? `Agendamento: ${appointmentDate}` : "",
       responseRequestedAt ? `Solicitado em: ${responseRequestedAt}` : "",
+      returnRule.nextDate ? `Próximo monitoramento: ${returnRule.nextDate}` : "",
+      returnRule.reason ? `Motivo retorno: ${returnRule.reason}` : "",
       stateAmount !== null ? `Valor Estado: R$ ${stateAmount.toFixed(2)}` : "",
       municipalityAmount !== null
         ? `Valor Município: R$ ${municipalityAmount.toFixed(2)}`
@@ -286,15 +371,21 @@ export async function POST(
         `
           UPDATE public.judicial_monitoramento_base
           SET
-            status_monitoramento_atual = COALESCE($2, status_monitoramento_atual),
+            status_monitoramento_atual = CASE WHEN $3 = TRUE THEN $2 ELSE status_monitoramento_atual END,
             ativo_monitoramento = CASE WHEN $3 = TRUE THEN FALSE ELSE ativo_monitoramento END,
             data_ultimo_monitoramento = NOW(),
+            data_proximo_monitoramento = $4::timestamptz,
+            motivo_proximo_monitoramento = $5,
+            prazo_retorno_dias = $6::int,
             updated_at = NOW()
           WHERE id::text = $1
         `,
         processo.monitoramentoId,
         nextMonitoringStatus,
         isTerminal,
+        returnRule.nextDate,
+        returnRule.reason,
+        returnRule.days,
       )
 
       await tx.$executeRawUnsafe(
@@ -322,7 +413,7 @@ export async function POST(
         userEmail,
         isTerminal
           ? `Finalizado por movimentação terminal: ${movementTypeLabel(type)}`
-          : `Monitoramento do dia concluído por movimentação: ${movementTypeLabel(type)}`,
+          : `Monitoramento do dia concluído por movimentação: ${movementTypeLabel(type)}. Retorno em ${returnRule.days} dia(s).`,
       )
 
       await tx.$executeRawUnsafe(
@@ -361,7 +452,10 @@ export async function POST(
               'municipality_amount', $11::numeric,
               'attachments', $12::jsonb,
               'terminal', $14::boolean,
-              'status_monitoramento_atual', $15::text
+              'status_monitoramento_atual', $15::text,
+              'data_proximo_monitoramento', $16::text,
+              'motivo_proximo_monitoramento', $17::text,
+              'prazo_retorno_dias', $18::int
             ),
             jsonb_build_array(
               'judicial_movimentacoes',
@@ -369,7 +463,10 @@ export async function POST(
               'description',
               'attachments',
               'judicial_monitoramento_atribuicoes',
-              'ativo_monitoramento'
+              'ativo_monitoramento',
+              'data_proximo_monitoramento',
+              'motivo_proximo_monitoramento',
+              'prazo_retorno_dias'
             ),
             $13
           )
@@ -389,6 +486,9 @@ export async function POST(
         descricaoAuditoria,
         isTerminal,
         nextMonitoringStatus,
+        returnRule.nextDate,
+        returnRule.reason,
+        returnRule.days,
       )
     })
 
@@ -407,6 +507,9 @@ export async function POST(
         stateAmount,
         municipalityAmount,
         attachments,
+        nextMonitoringAt: returnRule.nextDate,
+        nextMonitoringReason: returnRule.reason,
+        returnDeadlineDays: returnRule.days,
         createdAt: new Date().toISOString(),
         createdById: userId,
         createdByName: userName,
