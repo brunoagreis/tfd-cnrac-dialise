@@ -50,6 +50,7 @@ type JudicialBoardItem = {
   dataUltimoMonitoramento: string
   atribuicaoStatus: string
   atribuicaoStatusLabel: string
+  atribuicaoDataReferencia: string
   atribuidaEm: string
   usuarioAtribuidoNome: string
 }
@@ -109,8 +110,17 @@ function getStatusFilterValue(status: string) {
   return "pendente"
 }
 
+function getTodayIsoDate() {
+  const now = new Date()
+  const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000)
+  return local.toISOString().slice(0, 10)
+}
+
 function isMonitoredToday(item: JudicialBoardItem) {
-  return String(item.atribuicaoStatus || "").trim().toUpperCase() === "FINALIZADO"
+  return (
+    String(item.atribuicaoStatus || "").trim().toUpperCase() === "FINALIZADO" &&
+    item.atribuicaoDataReferencia === getTodayIsoDate()
+  )
 }
 
 function isAdminUser(user: any) {
@@ -162,9 +172,30 @@ export function JudicialMonitoringBoard() {
     void fetchCases()
   }, [adminUser, monitoringUser, user?.email, user?.id])
 
+  async function ensureDailyAssignments() {
+    if (!monitoringUser || !user?.id) return
+
+    try {
+      const response = await fetch("/api/judicial/monitoramento/atribuir", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user }),
+      })
+
+      if (!response.ok) {
+        const json = await response.json().catch(() => ({}))
+        console.error("ENSURE_JUDICIAL_ASSIGNMENT_ERROR", json)
+      }
+    } catch (error) {
+      console.error("ENSURE_JUDICIAL_ASSIGNMENT_ERROR", error)
+    }
+  }
+
   async function fetchCases() {
     try {
       setLoading(true)
+
+      await ensureDailyAssignments()
 
       const params = new URLSearchParams({
         somenteAtivos: adminUser || monitoringUser ? "false" : "true",
