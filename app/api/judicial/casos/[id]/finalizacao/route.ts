@@ -14,6 +14,12 @@ type JudicialBaseRow = {
   demandaExiste: boolean | null
 }
 
+type ReturnRule = {
+  nextDate: string | null
+  reason: string | null
+  days: number | null
+}
+
 const STATUS_PERMITIDOS = [
   "pendente",
   "resolvido",
@@ -47,6 +53,12 @@ function parseMoney(value: unknown) {
   const number = Number(normalized)
   if (!Number.isFinite(number)) return null
   return number
+}
+
+function addDaysIso(days: number) {
+  const date = new Date()
+  date.setDate(date.getDate() + days)
+  return date.toISOString()
 }
 
 function normalizarStatus(value: unknown): StatusFinalizacao | null {
@@ -105,6 +117,46 @@ function pendingLocationParaTexto(value: unknown) {
   if (local === "core") return "Pendente CORE"
   if (local === "municipio") return "Pendente Município"
   return ""
+}
+
+function resolveReturnRule(status: StatusFinalizacao, pendingLocation: string): ReturnRule {
+  if (STATUS_TERMINAIS.has(status)) {
+    return {
+      nextDate: null,
+      reason: null,
+      days: null,
+    }
+  }
+
+  if (status === "pendente") {
+    if (pendingLocation === "municipio") {
+      return {
+        nextDate: addDaysIso(10),
+        reason: "RETORNO_PENDENTE_MUNICIPIO_10_DIAS",
+        days: 10,
+      }
+    }
+
+    if (pendingLocation === "core") {
+      return {
+        nextDate: addDaysIso(5),
+        reason: "RETORNO_PENDENTE_CORE_5_DIAS",
+        days: 5,
+      }
+    }
+
+    return {
+      nextDate: addDaysIso(5),
+      reason: "RETORNO_PENDENTE_SES_5_DIAS",
+      days: 5,
+    }
+  }
+
+  return {
+    nextDate: addDaysIso(20),
+    reason: "RETORNO_FINALIZACAO_NAO_TERMINAL_20_DIAS",
+    days: 20,
+  }
 }
 
 export async function POST(
@@ -186,11 +238,14 @@ export async function POST(
     const localPendenteTexto = pendingLocationParaTexto(pendingLocation)
     const finalizacaoId = `jfin_${randomUUID()}`
     const isTerminal = STATUS_TERMINAIS.has(status)
+    const returnRule = resolveReturnRule(status, pendingLocation)
 
     const descricao = [
       `FINALIZAÇÃO DA DEMANDA: ${statusTexto}`,
       localPendenteTexto ? `Pendente em: ${localPendenteTexto}` : "",
       reason ? `Justificativa: ${reason}` : "",
+      returnRule.nextDate ? `Próximo monitoramento: ${returnRule.nextDate}` : "",
+      returnRule.reason ? `Motivo retorno: ${returnRule.reason}` : "",
       status === "bloqueio" && valorEstado !== null ? `Valor do bloqueio para o Estado: R$ ${valorEstado.toFixed(2)}` : "",
       status === "bloqueio" && valorMunicipio !== null ? `Valor do bloqueio para o Município: R$ ${valorMunicipio.toFixed(2)}` : "",
       status === "sequestro" && valorEstado !== null ? `Valor do sequestro para o Estado: R$ ${valorEstado.toFixed(2)}` : "",
@@ -204,12 +259,18 @@ export async function POST(
           SET status_monitoramento_atual = $2,
               ativo_monitoramento = CASE WHEN $3 = TRUE THEN FALSE ELSE ativo_monitoramento END,
               data_ultimo_monitoramento = NOW(),
+              data_proximo_monitoramento = $4::timestamptz,
+              motivo_proximo_monitoramento = $5,
+              prazo_retorno_dias = $6::int,
               updated_at = NOW()
           WHERE id::text = $1
         `,
         processo.monitoramentoId,
         statusBanco,
         isTerminal,
+        returnRule.nextDate,
+        returnRule.reason,
+        returnRule.days,
       )
 
       await tx.$executeRawUnsafe(
@@ -235,7 +296,9 @@ export async function POST(
         processo.monitoramentoId,
         userId,
         userEmail,
-        `Finalizado pela demanda judicial: ${statusTexto}`,
+        isTerminal
+          ? `Finalizado pela demanda judicial: ${statusTexto}`
+          : `Finalizado pela demanda judicial: ${statusTexto}. Retorno em ${returnRule.days} dia(s).`,
       )
 
       await tx.$executeRawUnsafe(
@@ -287,8 +350,30 @@ export async function POST(
             'judicial_finalizacoes', 'finalizar_demanda_judicial', $1, $2, $3, $4,
             'JUDICIAL', NOW(),
             jsonb_build_object('status_monitoramento_atual', $5::text),
-            jsonb_build_object('finalizacao_id', $6::text, 'status_monitoramento_atual', $7::text, 'status_finalizacao', $8::text, 'pendingLocation', $9::text, 'reason', $10::text, 'valor_estado', $11::numeric, 'valor_municipio', $12::numeric, 'ativo_monitoramento', $14::boolean),
-            jsonb_build_array('status_monitoramento_atual', 'judicial_finalizacoes', 'valor_estado', 'valor_municipio', 'judicial_monitoramento_atribuicoes'),
+            jsonb_build_object(
+              'finalizacao_id', $6::text,
+              'status_monitoramento_atual', $7::text,
+              'status_finalizacao', $8::text,
+              'pendingLocation', $9::text,
+              'reason', $10::text,
+              'valor_estado', $11::numeric,
+              'valor_municipio', $12::numeric,
+              'ativo_monitoramento', $14::boolean,
+              'data_proximo_monitoramento', $15::text,
+              'motivo_proximo_monitoramento', $16::text,
+              'prazo_retorno_dias', $17::int
+            ),
+            jsonb_build_array(
+              'status_monitoramento_atual',
+              'judicial_finalizacoes',
+              'valor_estado',
+              'valor_municipio',
+              'judicial_monitoramento_atribuicoes',
+              'ativo_monitoramento',
+              'data_proximo_monitoramento',
+              'motivo_proximo_monitoramento',
+              'prazo_retorno_dias'
+            ),
             $13
           )
         `,
@@ -306,6 +391,9 @@ export async function POST(
         valorMunicipio,
         descricao,
         !isTerminal,
+        returnRule.nextDate,
+        returnRule.reason,
+        returnRule.days,
       )
     })
 
@@ -324,6 +412,9 @@ export async function POST(
         reason: reason || null,
         valorEstado,
         valorMunicipio,
+        nextMonitoringAt: returnRule.nextDate,
+        nextMonitoringReason: returnRule.reason,
+        returnDeadlineDays: returnRule.days,
         createdAt: new Date().toISOString(),
         createdById: userId,
         createdByName: userName,
