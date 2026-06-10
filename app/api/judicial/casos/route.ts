@@ -32,6 +32,7 @@ type JudicialCaseListRow = {
   origemRegistroId: string | null
   ativoMonitoramento: boolean | null
   atribuicaoStatus: string | null
+  atribuicaoDataReferencia: string | null
   atribuidaEm: string | null
   usuarioAtribuidoNome: string | null
 }
@@ -155,6 +156,7 @@ export async function GET(req: NextRequest) {
           SELECT DISTINCT ON (a.monitoramento_id)
             a.id::text AS atribuicao_id,
             a.monitoramento_id::text AS monitoramento_id,
+            a.data_referencia::text AS data_referencia,
             a.status,
             a.atribuida_em,
             a.usuario_nome,
@@ -168,6 +170,7 @@ export async function GET(req: NextRequest) {
           SELECT DISTINCT ON (a.monitoramento_id)
             a.id::text AS atribuicao_id,
             a.monitoramento_id::text AS monitoramento_id,
+            a.data_referencia::text AS data_referencia,
             a.status,
             a.atribuida_em,
             a.usuario_nome
@@ -202,8 +205,9 @@ export async function GET(req: NextRequest) {
           b.origem_registro_id AS "origemRegistroId",
           b.ativo_monitoramento AS "ativoMonitoramento",
           COALESCE(ah.status, ua.status) AS "atribuicaoStatus",
+          COALESCE(ah.data_referencia, ua.data_referencia)::text AS "atribuicaoDataReferencia",
           COALESCE(ah.atribuida_em, ua.atribuida_em)::text AS "atribuidaEm",
-          COALESCE(ah.usuario_nome, ua.usuario_nome) AS "usuarioAtribuidoNome"
+          ah.usuario_nome AS "usuarioAtribuidoNome"
         FROM public.judicial_monitoramento_base b
         LEFT JOIN public.demandas d
           ON d.id = b.demanda_id
@@ -246,6 +250,7 @@ export async function GET(req: NextRequest) {
       dataUltimoMonitoramento: row.dataUltimoMonitoramento ?? "",
       atribuicaoStatus: row.atribuicaoStatus ?? "",
       atribuicaoStatusLabel: formatStatus(row.atribuicaoStatus),
+      atribuicaoDataReferencia: row.atribuicaoDataReferencia ?? "",
       atribuidaEm: row.atribuidaEm ?? "",
       usuarioAtribuidoNome: row.usuarioAtribuidoNome ?? "",
     }))
