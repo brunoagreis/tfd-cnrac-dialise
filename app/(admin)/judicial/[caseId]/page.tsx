@@ -6,6 +6,7 @@ import { useParams } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
 import { useJudicial } from "@/lib/judicial-context"
 import { JudicialCaseDetail } from "@/components/modules/judicial-case-detail"
+import { JudicialPriorityPanel } from "@/components/modules/judicial-priority-panel"
 
 export default function JudicialCasePage() {
   const params = useParams()
@@ -43,5 +44,10 @@ export default function JudicialCasePage() {
 
   if (!caseId) return null
 
-  return <JudicialCaseDetail caseId={caseId} />
+  return (
+    <>
+      <JudicialPriorityPanel caseId={caseId} user={user} />
+      <JudicialCaseDetail caseId={caseId} />
+    </>
+  )
 }
