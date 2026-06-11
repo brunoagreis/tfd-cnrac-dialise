@@ -115,6 +115,7 @@ async function ensureDailyAssignment(userId: string, userName: string, userEmail
         WITH candidatos AS (
           SELECT
             jm.id AS monitoramento_id,
+            GREATEST(0, LEAST(COALESCE(jm.prioridade_monitoramento, 0), 3))::int AS prioridade_manual,
             CASE
               WHEN jm.pendente_dia_anterior = TRUE THEN 1
               WHEN jm.data_proximo_monitoramento IS NOT NULL AND jm.data_proximo_monitoramento <= NOW() THEN 2
@@ -123,6 +124,9 @@ async function ensureDailyAssignment(userId: string, userName: string, userEmail
               ELSE 5
             END AS prioridade_nivel,
             CASE
+              WHEN GREATEST(0, LEAST(COALESCE(jm.prioridade_monitoramento, 0), 3)) = 3 THEN '03_EMERGENCIA'
+              WHEN GREATEST(0, LEAST(COALESCE(jm.prioridade_monitoramento, 0), 3)) = 2 THEN '02_URGENTE'
+              WHEN GREATEST(0, LEAST(COALESCE(jm.prioridade_monitoramento, 0), 3)) = 1 THEN '01_AGILIZAR'
               WHEN jm.pendente_dia_anterior = TRUE THEN 'SOBRA_DIA_ANTERIOR'
               WHEN jm.data_proximo_monitoramento IS NOT NULL AND jm.data_proximo_monitoramento <= NOW() THEN COALESCE(jm.motivo_proximo_monitoramento, 'RETORNO_PRAZO')
               WHEN jm.data_ultimo_monitoramento IS NULL THEN 'NUNCA_MONITORADO'
@@ -141,6 +145,7 @@ async function ensureDailyAssignment(userId: string, userName: string, userEmail
                 AND a.monitoramento_id = jm.id
             )
           ORDER BY
+            GREATEST(0, LEAST(COALESCE(jm.prioridade_monitoramento, 0), 3)) DESC,
             CASE
               WHEN jm.pendente_dia_anterior = TRUE THEN 1
               WHEN jm.data_proximo_monitoramento IS NOT NULL AND jm.data_proximo_monitoramento <= NOW() THEN 2
@@ -178,10 +183,10 @@ async function ensureDailyAssignment(userId: string, userName: string, userEmail
             $5::int,
             $4::int,
             ROW_NUMBER() OVER (
-              ORDER BY c.prioridade_nivel, c.data_proximo_monitoramento NULLS LAST, c.data_ultimo_monitoramento NULLS FIRST, c.monitoramento_id
+              ORDER BY c.prioridade_manual DESC, c.prioridade_nivel, c.data_proximo_monitoramento NULLS LAST, c.data_ultimo_monitoramento NULLS FIRST, c.monitoramento_id
             ),
             c.motivo_prioridade,
-            c.prioridade_nivel,
+            CASE WHEN c.prioridade_manual > 0 THEN 10 - c.prioridade_manual ELSE c.prioridade_nivel END,
             'ATRIBUIDO',
             NOW()
           FROM candidatos c
@@ -295,7 +300,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       ok: true,
-      strategy: "daily_batch_20_then_5_with_return_deadline_priority",
+      strategy: "daily_batch_20_then_5_with_manual_priority",
       ...result,
     })
   } catch (error) {
