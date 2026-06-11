@@ -220,6 +220,70 @@ export interface JudicialCase {
   attachments: JudicialAttachment[]
 }
 
+export interface MunicipalityContact {
+  id: string
+  municipalityName: string
+  emails: string[]
+  phones: string[]
+  contacts: string[]
+  updatedAt?: string
+}
+
+export interface EmailTemplate {
+  id: string
+  type: string
+  title: string
+  subject: string
+  body: string
+  fontFamily?: string
+  fontSize?: string
+  updatedAt?: string
+}
+
+export interface PriorityFocusItem {
+  id: string
+  mode: "procedure" | "cid"
+  code: string
+  label: string
+  expiresAt?: string
+}
+
+export interface PriorityFocus {
+  mode: "none" | "procedure" | "cid"
+  items: PriorityFocusItem[]
+}
+
+export interface CoreRow {
+  id: string
+  table: CoreTable
+  fichaNumber: string
+  patientName: string
+  cpf?: string
+  cns?: string
+  procedureCode?: string
+  procedureDescription?: string
+  appointmentDate?: string
+  statusText: string
+  importedAt: string
+}
+
+export interface AgendaOffer {
+  id: string
+  caseId: string
+  appointmentDate?: string
+  status: "pendente" | "reservado" | "agendado" | "nao_agendado"
+  description?: string
+}
+
+export interface UiAuditEvent {
+  id: string
+  action: string
+  userId?: string
+  userName?: string
+  createdAt: string
+  details?: string
+}
+
 export const CASE_STATUS_LABELS: Record<JudicialCaseStatus, string> = {
   ativo: "Ativo",
   aguardando_agendamento: "Aguardando agendamento",
@@ -230,10 +294,18 @@ export const CASE_STATUS_LABELS: Record<JudicialCaseStatus, string> = {
   encerrado: "Encerrado",
 }
 
+export const JUDICIAL_CASE_STATUS_LABELS = CASE_STATUS_LABELS
+
 export const SYSTEM_LABELS: Record<JudicialSystem, string> = {
   CORE: "CORE",
   SISREG: "SISREG",
   OUTRO: "Outro",
+}
+
+export const CORE_TABLE_LABELS: Record<CoreTable, string> = {
+  core_ambulatorial_finalizados: "CORE ambulatorial finalizados",
+  core_ambulatorial_em_atendimento: "CORE ambulatorial em atendimento",
+  core_leitos: "CORE leitos",
 }
 
 export const JUDICIAL_FICHA_STATUS_LABELS: Record<NonNullable<JudicialFicha["status"]>, string> = {
@@ -242,6 +314,26 @@ export const JUDICIAL_FICHA_STATUS_LABELS: Record<NonNullable<JudicialFicha["sta
   obito: "Óbito",
   inativa: "Inativa",
   finalizada: "Finalizada",
+}
+
+export const JUDICIAL_PROCEDURE_STATUS_LABELS: Record<NonNullable<JudicialProcedure["status"]>, string> = {
+  atendido: "Atendido",
+  regulado: "Regulado",
+  nao_realizado_rede_sus: "Não realizado na rede SUS",
+  ausente: "Ausente",
+}
+
+export const QUEUE_REASON_LABELS: Record<QueueReason, string> = {
+  monitoramento: "Monitoramento",
+  "1_reiteracao_municipio": "1ª reiteração ao município",
+  "2_reiteracao_municipio": "2ª reiteração ao município",
+  "3_reiteracao_municipio": "3ª reiteração ao município",
+  inercia_municipio: "Inércia do município",
+  obrigacao_municipio: "Obrigação do município",
+  nao_sus: "Não SUS",
+  transferencia: "Transferência",
+  paciente_agendado_verificar: "Paciente agendado: verificar",
+  confirmacao_core_automatica: "Confirmação CORE automática",
 }
 
 export const MOVEMENT_TYPE_LABELS: Record<MovementType, string> = {
