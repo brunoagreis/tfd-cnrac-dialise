@@ -169,22 +169,11 @@ export async function GET(req: NextRequest) {
           FROM public.judicial_monitoramento_atribuicoes a
           ${atribuicaoHojeWhereSql}
           ORDER BY a.monitoramento_id, a.created_at DESC, a.id DESC
-        ),
-        ultima_atribuicao AS (
-          SELECT DISTINCT ON (a.monitoramento_id)
-            a.id::text AS atribuicao_id,
-            a.monitoramento_id::text AS monitoramento_id,
-            a.data_referencia::text AS data_referencia,
-            a.status,
-            a.atribuida_em,
-            a.usuario_nome
-          FROM public.judicial_monitoramento_atribuicoes a
-          ORDER BY a.monitoramento_id, a.data_referencia DESC, a.created_at DESC, a.id DESC
         )
         SELECT
           b.id::text AS id,
           b.id::text AS "monitoramentoId",
-          COALESCE(ah.atribuicao_id, ua.atribuicao_id) AS "atribuicaoId",
+          ah.atribuicao_id AS "atribuicaoId",
           b.demanda_id AS "demandaId",
           b.paciente_id AS "pacienteId",
           d.protocolo,
@@ -211,9 +200,9 @@ export async function GET(req: NextRequest) {
           b.origem_tabela AS "origemTabela",
           b.origem_registro_id AS "origemRegistroId",
           b.ativo_monitoramento AS "ativoMonitoramento",
-          COALESCE(ah.status, ua.status) AS "atribuicaoStatus",
-          COALESCE(ah.data_referencia, ua.data_referencia)::text AS "atribuicaoDataReferencia",
-          COALESCE(ah.atribuida_em, ua.atribuida_em)::text AS "atribuidaEm",
+          ah.status AS "atribuicaoStatus",
+          ah.data_referencia::text AS "atribuicaoDataReferencia",
+          ah.atribuida_em::text AS "atribuidaEm",
           ah.usuario_nome AS "usuarioAtribuidoNome"
         FROM public.judicial_monitoramento_base b
         LEFT JOIN public.demandas d
@@ -222,8 +211,6 @@ export async function GET(req: NextRequest) {
           ON p.id = b.paciente_id
         LEFT JOIN atribuicao_hoje ah
           ON ah.monitoramento_id = b.id::text
-        LEFT JOIN ultima_atribuicao ua
-          ON ua.monitoramento_id = b.id::text
         ${whereSql}
         ${orderSql}
       `,
