@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { JudicialReturnBadge } from "@/components/modules/judicial-return-badge"
 
 type JudicialBoardItem = {
   id: string
@@ -48,6 +49,9 @@ type JudicialBoardItem = {
   origemRegistroId: string
   ativoMonitoramento: boolean
   dataUltimoMonitoramento: string
+  dataProximoMonitoramento: string
+  motivoProximoMonitoramento: string
+  prazoRetornoDias: number | null
   atribuicaoStatus: string
   atribuicaoStatusLabel: string
   atribuicaoDataReferencia: string
@@ -265,6 +269,7 @@ export function JudicialMonitoringBoard() {
           item.origemModulo,
           item.usuarioAtribuidoNome,
           item.atribuicaoStatusLabel,
+          item.motivoProximoMonitoramento,
         ]
           .join(" ")
           .toLowerCase()
@@ -361,7 +366,7 @@ export function JudicialMonitoringBoard() {
                 aria-hidden="true"
               />
               <Input
-                placeholder="Buscar por protocolo, paciente, CPF, CNS, ficha CORE, procedimento, CID ou monitor..."
+                placeholder="Buscar por protocolo, paciente, CPF, CNS, ficha CORE, procedimento, CID, retorno ou monitor..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="pl-9"
@@ -534,6 +539,13 @@ export function JudicialMonitoringBoard() {
                       <span className="font-medium text-foreground">Último monitoramento:</span>{" "}
                       {formatDateTime(item.dataUltimoMonitoramento)}
                     </p>
+
+                    <JudicialReturnBadge
+                      nextAt={item.dataProximoMonitoramento}
+                      reason={item.motivoProximoMonitoramento}
+                      days={item.prazoRetornoDias}
+                      active={item.ativoMonitoramento}
+                    />
                   </div>
 
                   <div className="flex items-center gap-2">
