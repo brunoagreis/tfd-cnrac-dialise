@@ -27,6 +27,9 @@ type JudicialCaseListRow = {
   municipioPaciente: string | null
   statusMonitoramentoAtual: string | null
   dataUltimoMonitoramento: string | null
+  dataProximoMonitoramento: string | null
+  motivoProximoMonitoramento: string | null
+  prazoRetornoDias: number | null
   origemModulo: string | null
   origemTabela: string | null
   origemRegistroId: string | null
@@ -129,6 +132,7 @@ export async function GET(req: NextRequest) {
           OR LOWER(COALESCE(d.especialidade, '')) LIKE $${idx}
           OR LOWER(COALESCE(d.subespecialidade, '')) LIKE $${idx}
           OR LOWER(COALESCE(p.municipio, '')) LIKE $${idx}
+          OR LOWER(COALESCE(b.motivo_proximo_monitoramento, '')) LIKE $${idx}
         )
       `)
     }
@@ -200,6 +204,9 @@ export async function GET(req: NextRequest) {
           p.municipio AS "municipioPaciente",
           b.status_monitoramento_atual AS "statusMonitoramentoAtual",
           b.data_ultimo_monitoramento::text AS "dataUltimoMonitoramento",
+          b.data_proximo_monitoramento::text AS "dataProximoMonitoramento",
+          b.motivo_proximo_monitoramento AS "motivoProximoMonitoramento",
+          b.prazo_retorno_dias AS "prazoRetornoDias",
           b.origem_modulo AS "origemModulo",
           b.origem_tabela AS "origemTabela",
           b.origem_registro_id AS "origemRegistroId",
@@ -248,6 +255,9 @@ export async function GET(req: NextRequest) {
       origemRegistroId: row.origemRegistroId ?? "",
       ativoMonitoramento: Boolean(row.ativoMonitoramento),
       dataUltimoMonitoramento: row.dataUltimoMonitoramento ?? "",
+      dataProximoMonitoramento: row.dataProximoMonitoramento ?? "",
+      motivoProximoMonitoramento: row.motivoProximoMonitoramento ?? "",
+      prazoRetornoDias: row.prazoRetornoDias ?? null,
       atribuicaoStatus: row.atribuicaoStatus ?? "",
       atribuicaoStatusLabel: formatStatus(row.atribuicaoStatus),
       atribuicaoDataReferencia: row.atribuicaoDataReferencia ?? "",
