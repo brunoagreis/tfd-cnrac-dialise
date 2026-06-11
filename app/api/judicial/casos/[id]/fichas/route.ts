@@ -47,6 +47,7 @@ function normalizeFichaStatus(value: unknown) {
   if (status === "falta") return "falta"
   if (status === "obito") return "obito"
   if (status === "inativa") return "inativa"
+  if (status === "finalizada" || status === "finalizado") return "finalizada"
   return "atendido"
 }
 
@@ -65,6 +66,12 @@ function getRequestUser(body: any): RequestUser {
     nome: text(body?.user?.nome || body?.user?.name || body?.userName || "Sistema"),
     email: text(body?.user?.email || body?.userEmail),
   }
+}
+
+function nextDayIso() {
+  const date = new Date()
+  date.setDate(date.getDate() + 1)
+  return date.toISOString()
 }
 
 async function findJudicialCase(decodedId: string) {
@@ -208,6 +215,31 @@ async function insertAudit(tx: any, params: {
     params.user.email || null,
     params.fichaId,
     params.description,
+  )
+}
+
+async function sendCoreToHumanQueue(tx: any, params: {
+  processo: JudicialBaseRow
+  reasonCode: string
+  status: string
+}) {
+  await tx.$executeRawUnsafe(
+    `
+      UPDATE public.judicial_monitoramento_base
+      SET
+        status_monitoramento_atual = $2,
+        pendente_dia_anterior = TRUE,
+        ativo_monitoramento = TRUE,
+        data_proximo_monitoramento = $3::timestamptz,
+        motivo_proximo_monitoramento = $4,
+        prazo_retorno_dias = 1,
+        updated_at = NOW()
+      WHERE id::text = $1
+    `,
+    params.processo.monitoramentoId,
+    params.status,
+    nextDayIso(),
+    params.reasonCode,
   )
 }
 
@@ -485,6 +517,14 @@ export async function PATCH(
           user.nome,
         )
 
+        if (text(ficha.system).toUpperCase() === "CORE" && (status === "finalizada" || status === "inativa")) {
+          await sendCoreToHumanQueue(tx, {
+            processo,
+            status: "ANALISE_HUMANA_CORE",
+            reasonCode: "CORE_FINALIZADA_ANALISE_HUMANA",
+          })
+        }
+
         await insertMovement(tx, { processo, description, user })
         await insertAudit(tx, {
           processo,
@@ -520,6 +560,14 @@ export async function PATCH(
           user.id,
           user.nome,
         )
+
+        if (text(ficha.system).toUpperCase() === "CORE") {
+          await sendCoreToHumanQueue(tx, {
+            processo,
+            status: "ANALISE_HUMANA_CORE",
+            reasonCode: "CORE_INATIVA_ANALISE_HUMANA",
+          })
+        }
 
         await insertMovement(tx, { processo, description, user })
         await insertAudit(tx, {
