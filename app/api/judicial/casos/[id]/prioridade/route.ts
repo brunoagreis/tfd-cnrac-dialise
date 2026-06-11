@@ -24,6 +24,78 @@ function priorityLabel(value: number) {
   return "00 - Normal"
 }
 
+async function findPriority(decodedId: string) {
+  const rows = await prisma.$queryRawUnsafe<Array<{
+    monitoramentoId: string
+    prioridade: number | null
+    motivo: string | null
+    atualizadoEm: string | null
+    atualizadoPor: string | null
+  }>>(
+    `
+      SELECT
+        b.id::text AS "monitoramentoId",
+        COALESCE(b.prioridade_monitoramento, 0)::int AS prioridade,
+        b.prioridade_motivo AS motivo,
+        b.prioridade_atualizada_em::text AS "atualizadoEm",
+        b.prioridade_atualizada_por AS "atualizadoPor"
+      FROM public.judicial_monitoramento_base b
+      LEFT JOIN public.demandas d ON d.id = b.demanda_id
+      WHERE UPPER(COALESCE(b.origem_modulo, '')) = 'JUDICIAL'
+        AND (
+          b.id::text = $1
+          OR b.demanda_id::text = $1
+          OR b.origem_registro_id::text = $1
+          OR d.id::text = $1
+          OR d.protocolo::text = $1
+        )
+      ORDER BY b.id DESC
+      LIMIT 1
+    `,
+    decodedId,
+  )
+
+  return rows[0] ?? null
+}
+
+export async function GET(
+  _req: NextRequest,
+  context: { params: Promise<{ id: string }> },
+) {
+  try {
+    const { id } = await context.params
+    const decodedId = decodeURIComponent(id)
+    const processo = await findPriority(decodedId)
+
+    if (!processo) {
+      return NextResponse.json(
+        { ok: false, error: "Processo judicial não encontrado." },
+        { status: 404 },
+      )
+    }
+
+    const prioridade = Number(processo.prioridade ?? 0)
+
+    return NextResponse.json({
+      ok: true,
+      item: {
+        monitoramentoId: processo.monitoramentoId,
+        prioridade,
+        prioridadeLabel: priorityLabel(prioridade),
+        motivo: processo.motivo || null,
+        atualizadoEm: processo.atualizadoEm || null,
+        atualizadoPor: processo.atualizadoPor || null,
+      },
+    })
+  } catch (error) {
+    console.error("[GET /api/judicial/casos/[id]/prioridade] erro:", error)
+    return NextResponse.json(
+      { ok: false, error: "Erro ao consultar prioridade judicial." },
+      { status: 500 },
+    )
+  }
+}
+
 export async function PATCH(
   req: NextRequest,
   context: { params: Promise<{ id: string }> },
@@ -46,26 +118,7 @@ export async function PATCH(
       )
     }
 
-    const rows = await prisma.$queryRawUnsafe<Array<{ monitoramentoId: string }>>(
-      `
-        SELECT b.id::text AS "monitoramentoId"
-        FROM public.judicial_monitoramento_base b
-        LEFT JOIN public.demandas d ON d.id = b.demanda_id
-        WHERE UPPER(COALESCE(b.origem_modulo, '')) = 'JUDICIAL'
-          AND (
-            b.id::text = $1
-            OR b.demanda_id::text = $1
-            OR b.origem_registro_id::text = $1
-            OR d.id::text = $1
-            OR d.protocolo::text = $1
-          )
-        ORDER BY b.id DESC
-        LIMIT 1
-      `,
-      decodedId,
-    )
-
-    const processo = rows[0]
+    const processo = await findPriority(decodedId)
 
     if (!processo) {
       return NextResponse.json(
