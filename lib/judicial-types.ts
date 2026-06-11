@@ -117,7 +117,7 @@ export interface JudicialFicha {
   updatedAt?: string
   updatedByName?: string
   inactiveReason?: string
-  status?: "atendido" | "falta" | "obito" | "inativa"
+  status?: "atendido" | "falta" | "obito" | "inativa" | "finalizada"
   statusReason?: string
   statusUpdatedAt?: string
   statusUpdatedByName?: string
@@ -218,151 +218,16 @@ export interface JudicialCase {
   cids: JudicialCid[]
   fichas: JudicialFicha[]
   attachments: JudicialAttachment[]
-  movements: JudicialMovement[]
-  municipalityManifestations: MunicipalityManifestation[]
-  coreHistory: CoreHistoryEntry[]
-  registration?: JudicialCaseRegistration
-  processStatusHistory?: JudicialProcessStatusEntry[]
-  finalization?: JudicialFinalization
 }
 
-export interface MunicipalityContact {
-  id: string
-  municipalityName: string
-  emails: string[]
-  phones: string[]
-  contacts: string[]
-  updatedAt: string
-}
-
-export interface EmailTemplate {
-  id: string
-  type:
-    | "demanda_judicial_cadastrada"
-    | "solicitar_inclusao_ficha"
-    | "reiteracao_municipio"
-    | "agendamento_informado"
-    | "inercia_municipio"
-    | "demanda_prejudicial_cadastrada"
-    | "prazo_prejudicial_vencendo"
-    | "prazo_prejudicial_vencido"
-  title: string
-  subject: string
-  body: string
-  updatedAt: string
-}
-
-export interface CoreRow {
-  id: string
-  table: CoreTable
-  fichaNumber: string
-  patientName: string
-  cpf?: string
-  appointmentDate?: string
-  procedureCode?: string
-  procedureDescription?: string
-  statusText: string
-  importedAt: string
-}
-
-export interface AgendaOffer {
-  id: string
-  specialty: string
-  subSpecialty?: string
-  procedureCode?: string
-  procedureDescription?: string
-  cidCode?: string
-  date: string
-  seats: number
-  importedAt: string
-}
-
-export interface UiAuditEvent {
-  id: string
-  createdAt: string
-  userId: string
-  userName: string
-  action: string
-  caseId?: string
-  details?: string
-}
-
-export interface PriorityFocusItem {
-  id: string
-  mode: "procedure" | "cid"
-  value: string
-  label: string
-  expiresAt?: string
-  createdAt: string
-}
-
-export interface PriorityFocus {
-  mode: "none" | "procedure" | "cid"
-  value?: string
-  label?: string
-  items?: PriorityFocusItem[]
-}
-
-export const QUEUE_REASON_LABELS: Record<QueueReason, string> = {
-  monitoramento: "Monitoramento",
-  "1_reiteracao_municipio": "1ª Reiteração ao Município",
-  "2_reiteracao_municipio": "2ª Reiteração ao Município",
-  "3_reiteracao_municipio": "3ª Reiteração ao Município",
-  inercia_municipio: "Inércia do Município",
-  obrigacao_municipio: "Obrigação do Município",
-  nao_sus: "Não SUS",
-  transferencia: "Transferência",
-  paciente_agendado_verificar: "Paciente Agendado - Verificar",
-  confirmacao_core_automatica: "Monitoramento CORE Automático",
-}
-
-export const JUDICIAL_CASE_STATUS_LABELS: Record<JudicialCaseStatus, string> = {
+export const CASE_STATUS_LABELS: Record<JudicialCaseStatus, string> = {
   ativo: "Ativo",
-  aguardando_agendamento: "Aguardando Agendamento",
+  aguardando_agendamento: "Aguardando agendamento",
   agendado: "Agendado",
   cumprido: "Cumprido",
   descumprido: "Descumprido",
-  inercia_municipio: "Inércia do Município",
+  inercia_municipio: "Inércia do município",
   encerrado: "Encerrado",
-}
-
-export const MOVEMENT_TYPE_LABELS: Record<MovementType, string> = {
-  monitoramento: "Monitoramento",
-  descumprimento: "Descumprimento",
-  sequestro: "Sequestro",
-  bloqueio: "Bloqueio",
-  agendamento: "Agendamento",
-  manifestacao_municipio: "Manifestação do Município",
-  solicitacao_inclusao: "Solicitação de Inclusão",
-  reiteracao: "Reiteração",
-  envio_agendamento_demanda: "Envio para Agendamento da Demanda",
-  reserva_agendamento: "Reserva de Agendamento",
-  nao_agendado: "Não Agendado",
-  cumprimento: "Cumprimento",
-  cumprido: "Cumprido",
-  resolvido: "Resolvido",
-  arquivado: "Arquivado",
-  falta_paciente: "Falta do Paciente",
-  obito: "Óbito",
-  encerramento_inercia: "Encerramento por Inércia do Município",
-  reabertura: "Reabertura",
-  retorno_fluxo_automatico: "Retorno ao Fluxo Automático",
-  monitoramento_automatico_core: "Monitoramento Automático CORE",
-  encerramento_processo: "Encerramento do Processo",
-}
-
-export const JUDICIAL_PROCEDURE_STATUS_LABELS: Record<NonNullable<JudicialProcedure["status"]>, string> = {
-  atendido: "Atendido",
-  regulado: "Regulado",
-  nao_realizado_rede_sus: "Não realizado na rede SUS",
-  ausente: "Ausente",
-}
-
-export const JUDICIAL_FICHA_STATUS_LABELS: Record<NonNullable<JudicialFicha["status"]>, string> = {
-  atendido: "Atendido",
-  falta: "Falta",
-  obito: "Óbito",
-  inativa: "Inativa",
 }
 
 export const SYSTEM_LABELS: Record<JudicialSystem, string> = {
@@ -371,14 +236,32 @@ export const SYSTEM_LABELS: Record<JudicialSystem, string> = {
   OUTRO: "Outro",
 }
 
-export const CORE_TABLE_LABELS: Record<CoreTable, string> = {
-  core_ambulatorial_finalizados: "CORE Ambulatorial Finalizados",
-  core_ambulatorial_em_atendimento: "CORE Ambulatorial Em Atendimento",
-  core_leitos: "CORE Leitos",
+export const JUDICIAL_FICHA_STATUS_LABELS: Record<NonNullable<JudicialFicha["status"]>, string> = {
+  atendido: "Atendido",
+  falta: "Falta",
+  obito: "Óbito",
+  inativa: "Inativa",
+  finalizada: "Finalizada",
 }
 
-export const SCHEDULING_STATUS_LABELS: Record<SchedulingStatus, string> = {
-  fora_fila: "Fora da fila",
-  pendente: "Pendente",
-  reservado: "Reservado",
+export const MOVEMENT_TYPE_LABELS: Record<MovementType, string> = {
+  monitoramento: "Monitoramento",
+  descumprimento: "Descumprimento",
+  sequestro: "Sequestro",
+  bloqueio: "Bloqueio",
+  agendamento: "Agendamento",
+  manifestacao_municipio: "Manifestação do município",
+  solicitacao_inclusao: "Solicitação de inclusão",
+  reiteracao: "Reiteração",
+  envio_agendamento_demanda: "Envio para agendamento da demanda",
+  reserva_agendamento: "Reserva de agendamento",
+  nao_agendado: "Não agendado",
+  cumprimento: "Cumprimento",
+  falta_paciente: "Falta do paciente",
+  obito: "Óbito",
+  encerramento_inercia: "Encerramento por inércia",
+  encerramento_processo: "Encerramento do processo",
+  reabertura: "Reabertura",
+  retorno_fluxo_automatico: "Retorno ao fluxo automático",
+  monitoramento_automatico_core: "Monitoramento automático CORE",
 }
