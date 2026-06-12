@@ -318,10 +318,10 @@ async function runAutomaticCoreMonitoring(limit: number) {
           jm.data_ultimo_monitoramento::text AS "ultimaData",
           ca.nr_ficha::text AS "ambFicha",
           ca.situacao_ficha::text AS "ambSituacao",
-          ca.situacao_procedimento::text AS "ambProcedimento",
+          (to_jsonb(ca)->>'situacao_procedimento') AS "ambProcedimento",
           cl.numero_ficha::text AS "leitoFicha",
           cl.situacao_ficha::text AS "leitoSituacao",
-          cl.situacao_procedimento::text AS "leitoProcedimento"
+          (to_jsonb(cl)->>'situacao_procedimento') AS "leitoProcedimento"
         FROM public.judicial_monitoramento_base jm
         LEFT JOIN ficha_core_ativa fca
           ON fca.monitoramento_id = jm.id::text
