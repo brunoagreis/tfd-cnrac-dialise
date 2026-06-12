@@ -262,9 +262,9 @@ export function JudicialMonitoringBoard() {
       } else if (status === "monitorados_hoje") {
         if (!humanToday) return false
       } else if (status !== "todos") {
-        if (monitoringUser && (humanToday || automaticToday)) return false
+        if (humanToday || automaticToday) return false
         if (getStatusFilterValue(item.statusMonitoramentoAtual) !== status) return false
-      } else if (monitoringUser && (humanToday || automaticToday)) {
+      } else if (humanToday || automaticToday) {
         return false
       }
 
@@ -305,14 +305,14 @@ export function JudicialMonitoringBoard() {
 
       return true
     })
-  }, [assignmentFilter, items, origemModulo, search, status, monitoringUser])
+  }, [assignmentFilter, items, origemModulo, search, status])
 
   const stats = useMemo(() => {
     const automaticosHoje = items.filter(isAutomaticallyMonitoredToday).length
     const monitoradosHoje = items.filter(isMonitoredToday).length
-    const visibleForMainQueue = monitoringUser
-      ? items.filter((item) => !isMonitoredToday(item) && !isAutomaticallyMonitoredToday(item))
-      : items
+    const visibleForMainQueue = items.filter(
+      (item) => !isMonitoredToday(item) && !isAutomaticallyMonitoredToday(item),
+    )
 
     return {
       total: visibleForMainQueue.length,
@@ -321,7 +321,7 @@ export function JudicialMonitoringBoard() {
       monitoradosHoje,
       automaticosHoje,
     }
-  }, [items, monitoringUser])
+  }, [items])
 
   const origemOptions = useMemo(() => {
     const unique = Array.from(
