@@ -30,6 +30,7 @@ async function closePreviousOpenAssignments() {
         AND a.data_referencia < CURRENT_DATE
         AND a.status IN ('ATRIBUIDO', 'EM_ANALISE', 'EM_MONITORAMENTO')
         AND COALESCE(b.ativo_monitoramento, TRUE) = TRUE
+        AND UPPER(COALESCE(b.status_monitoramento_atual, '')) <> 'MONITORAMENTO_AUTOMATICO'
     `)
 
     await tx.$executeRawUnsafe(`
@@ -138,6 +139,7 @@ async function ensureDailyAssignment(userId: string, userName: string, userEmail
           FROM public.judicial_monitoramento_base jm
           WHERE COALESCE(jm.ativo_monitoramento, TRUE) = TRUE
             AND UPPER(COALESCE(jm.modulo_codigo, 'JUDICIAL')) = 'JUDICIAL'
+            AND UPPER(COALESCE(jm.status_monitoramento_atual, '')) <> 'MONITORAMENTO_AUTOMATICO'
             AND NOT EXISTS (
               SELECT 1
               FROM public.judicial_monitoramento_atribuicoes a
@@ -300,7 +302,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       ok: true,
-      strategy: "daily_batch_20_then_5_with_manual_priority",
+      strategy: "daily_batch_20_then_5_with_manual_priority_skip_automatic_core",
       ...result,
     })
   } catch (error) {
