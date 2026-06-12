@@ -66,7 +66,7 @@ function resolveCoreSituation(row: CoreCandidateRow) {
 
   if (row.leitoFicha) {
     return {
-      tabela: "core_leito",
+      tabela: "core_leitos",
       ficha: text(row.leitoFicha),
       situacao: text(row.leitoSituacao),
       encontrada: true,
@@ -131,7 +131,7 @@ async function processCandidate(tx: any, row: CoreCandidateRow): Promise<Process
       "Monitoramento automático CORE",
       `Data do monitoramento: ${new Date().toLocaleString("pt-BR")}`,
       `Ficha: ${ficha || "não informada"}`,
-      "Status: NÃO ENCONTRADA nas tabelas core_ambulatorial/core_leito",
+      "Status: NÃO ENCONTRADA nas tabelas core_ambulatorial/core_leitos",
       "Ação: encaminhado para análise humana no dia seguinte.",
     ].join("\n")
 
@@ -293,7 +293,7 @@ async function runAutomaticCoreMonitoring(limit: number) {
           ON fca.monitoramento_id = jm.id::text
         LEFT JOIN public.core_ambulatorial ca
           ON ca.nr_ficha::text = COALESCE(NULLIF(jm.ficha_core, ''), fca.ficha_numero)::text
-        LEFT JOIN public.core_leito cl
+        LEFT JOIN public.core_leitos cl
           ON cl.numero_ficha::text = COALESCE(NULLIF(jm.ficha_core, ''), fca.ficha_numero)::text
         WHERE COALESCE(jm.ativo_monitoramento, TRUE) = TRUE
           AND UPPER(COALESCE(jm.modulo_codigo, 'JUDICIAL')) = 'JUDICIAL'
