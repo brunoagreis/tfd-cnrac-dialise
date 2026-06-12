@@ -15,8 +15,18 @@ type CoreCandidateRow = {
   ultimaData: string | null
   ambFicha: string | null
   ambSituacao: string | null
+  ambProcedimento: string | null
   leitoFicha: string | null
   leitoSituacao: string | null
+  leitoProcedimento: string | null
+}
+
+type CoreSituation = {
+  tabela: string
+  ficha: string
+  situacao: string
+  situacaoProcedimento: string
+  encontrada: boolean
 }
 
 type ProcessResult = {
@@ -24,6 +34,7 @@ type ProcessResult = {
   ficha: string
   tabela: string
   situacao: string
+  situacaoProcedimento?: string
   acao: "automatico" | "humano" | "pendente_core"
 }
 
@@ -39,9 +50,22 @@ function normalizeStatus(value: unknown) {
     .replace(/\s+/g, " ")
 }
 
-function isOpenCoreStatus(value: unknown) {
-  const status = normalizeStatus(value)
-  return status === "ABERTA" || status === "EM ANDAMENTO"
+function isAutomaticCoreStatus(situacaoFichaValue: unknown, situacaoProcedimentoValue?: unknown) {
+  const situacaoFicha = normalizeStatus(situacaoFichaValue)
+  const situacaoProcedimento = normalizeStatus(situacaoProcedimentoValue)
+
+  if (situacaoFicha === "ABERTA" || situacaoFicha === "EM ANDAMENTO") {
+    return true
+  }
+
+  if (situacaoFicha === "REGULADA") {
+    return (
+      situacaoProcedimento === "AGUARDANDO AGENDAMENTO" ||
+      situacaoProcedimento === "AGUARDANDO REGULADOR"
+    )
+  }
+
+  return false
 }
 
 function nextDayIso() {
@@ -54,12 +78,13 @@ function resolveFicha(row: CoreCandidateRow) {
   return text(row.fichaCore || row.fichaNumero)
 }
 
-function resolveCoreSituation(row: CoreCandidateRow) {
+function resolveCoreSituation(row: CoreCandidateRow): CoreSituation {
   if (row.ambFicha) {
     return {
       tabela: "core_ambulatorial",
       ficha: text(row.ambFicha),
       situacao: text(row.ambSituacao),
+      situacaoProcedimento: text(row.ambProcedimento),
       encontrada: true,
     }
   }
@@ -69,6 +94,7 @@ function resolveCoreSituation(row: CoreCandidateRow) {
       tabela: "core_leitos",
       ficha: text(row.leitoFicha),
       situacao: text(row.leitoSituacao),
+      situacaoProcedimento: text(row.leitoProcedimento),
       encontrada: true,
     }
   }
@@ -77,6 +103,7 @@ function resolveCoreSituation(row: CoreCandidateRow) {
     tabela: "CORE",
     ficha: resolveFicha(row),
     situacao: "NÃO ENCONTRADA",
+    situacaoProcedimento: "",
     encontrada: false,
   }
 }
@@ -166,17 +193,19 @@ async function processCandidate(tx: any, row: CoreCandidateRow): Promise<Process
       ficha,
       tabela: core.tabela,
       situacao: core.situacao,
+      situacaoProcedimento: core.situacaoProcedimento,
       acao: "pendente_core",
     }
   }
 
-  if (isOpenCoreStatus(core.situacao)) {
+  if (isAutomaticCoreStatus(core.situacao, core.situacaoProcedimento)) {
     const description = [
       "Monitoramento automático CORE",
       `Data do monitoramento: ${new Date().toLocaleString("pt-BR")}`,
       `Tabela: ${core.tabela}`,
       `Ficha: ${ficha}`,
       `Status da ficha: ${core.situacao}`,
+      `Situação do procedimento: ${core.situacaoProcedimento || "não informada"}`,
       "Ação: mantido em monitoramento automático; não atribuir a monitor humano.",
     ].join("\n")
 
@@ -212,6 +241,7 @@ async function processCandidate(tx: any, row: CoreCandidateRow): Promise<Process
       ficha,
       tabela: core.tabela,
       situacao: core.situacao,
+      situacaoProcedimento: core.situacaoProcedimento,
       acao: "automatico",
     }
   }
@@ -222,7 +252,8 @@ async function processCandidate(tx: any, row: CoreCandidateRow): Promise<Process
     `Tabela: ${core.tabela}`,
     `Ficha: ${ficha}`,
     `Status da ficha: ${core.situacao}`,
-    "Ação: status diferente de ABERTA/EM ANDAMENTO; encaminhado para análise humana no dia seguinte.",
+    `Situação do procedimento: ${core.situacaoProcedimento || "não informada"}`,
+    "Ação: status fora da regra automática; encaminhado para análise humana no dia seguinte.",
   ].join("\n")
 
   await tx.$executeRawUnsafe(
@@ -258,6 +289,7 @@ async function processCandidate(tx: any, row: CoreCandidateRow): Promise<Process
     ficha,
     tabela: core.tabela,
     situacao: core.situacao,
+    situacaoProcedimento: core.situacaoProcedimento,
     acao: "humano",
   }
 }
@@ -286,8 +318,10 @@ async function runAutomaticCoreMonitoring(limit: number) {
           jm.data_ultimo_monitoramento::text AS "ultimaData",
           ca.nr_ficha::text AS "ambFicha",
           ca.situacao_ficha::text AS "ambSituacao",
+          ca.situacao_procedimento::text AS "ambProcedimento",
           cl.numero_ficha::text AS "leitoFicha",
-          cl.situacao_ficha::text AS "leitoSituacao"
+          cl.situacao_ficha::text AS "leitoSituacao",
+          cl.situacao_procedimento::text AS "leitoProcedimento"
         FROM public.judicial_monitoramento_base jm
         LEFT JOIN ficha_core_ativa fca
           ON fca.monitoramento_id = jm.id::text
