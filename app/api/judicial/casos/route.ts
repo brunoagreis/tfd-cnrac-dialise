@@ -74,12 +74,19 @@ export async function GET(req: NextRequest) {
     const incluirMonitoradosHoje = isTruthyParam(
       normalizeText(req.nextUrl.searchParams.get("incluirMonitoradosHoje")).toLowerCase(),
     )
+    const incluirMonitoradosAutomaticamente = isTruthyParam(
+      normalizeText(req.nextUrl.searchParams.get("incluirMonitoradosAutomaticamente")).toLowerCase(),
+    )
     const usuarioId = normalizeText(req.nextUrl.searchParams.get("usuarioId"))
     const usuarioEmail = normalizeText(req.nextUrl.searchParams.get("usuarioEmail")).toLowerCase()
 
     const params: unknown[] = []
     const whereParts: string[] = [`UPPER(COALESCE(b.origem_modulo, '')) = 'JUDICIAL'`]
     const atribuicaoHojeWhereParts: string[] = [`a.data_referencia = CURRENT_DATE`]
+    const automaticoHojeSql = `(
+      UPPER(COALESCE(b.status_monitoramento_atual, '')) = 'MONITORAMENTO_AUTOMATICO'
+      AND b.data_ultimo_monitoramento::date = CURRENT_DATE
+    )`
 
     if (usuarioId) {
       params.push(usuarioId)
@@ -104,7 +111,11 @@ export async function GET(req: NextRequest) {
     }
 
     if (somenteAtribuidos) {
-      whereParts.push(`ah.monitoramento_id IS NOT NULL`)
+      if (incluirMonitoradosAutomaticamente) {
+        whereParts.push(`(ah.monitoramento_id IS NOT NULL OR ${automaticoHojeSql})`)
+      } else {
+        whereParts.push(`ah.monitoramento_id IS NOT NULL`)
+      }
     }
 
     if (status && status !== "todos") {
@@ -142,6 +153,7 @@ export async function GET(req: NextRequest) {
     const orderSql = somenteAtribuidos
       ? `
         ORDER BY
+          CASE WHEN ${automaticoHojeSql} THEN -1 ELSE 0 END,
           CASE WHEN ah.status = 'FINALIZADO' THEN 1 ELSE 0 END,
           ah.bloco_numero NULLS LAST,
           ah.ordem_no_bloco NULLS LAST,
@@ -258,9 +270,9 @@ export async function GET(req: NextRequest) {
     })
   } catch (error) {
     console.error("[GET /api/judicial/casos] erro:", error)
-
+    const detail = error instanceof Error ? error.message : String(error)
     return NextResponse.json(
-      { ok: false, error: "Erro ao carregar casos da Judicialização." },
+      { ok: false, error: "Erro ao listar casos judiciais.", detail },
       { status: 500 },
     )
   }
