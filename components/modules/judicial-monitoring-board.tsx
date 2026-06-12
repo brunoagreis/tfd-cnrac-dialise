@@ -95,8 +95,16 @@ function normalizeStatusKey(status: string) {
     .replace(/[\u0300-\u036f]/g, "")
 }
 
+function isAutomaticMonitoring(item: JudicialBoardItem) {
+  return normalizeStatusKey(item.statusMonitoramentoAtual) === "MONITORAMENTO_AUTOMATICO"
+}
+
 function getStatusFilterValue(status: string) {
   const key = normalizeStatusKey(status)
+
+  if (key === "MONITORAMENTO_AUTOMATICO") {
+    return "monitoramento_automatico"
+  }
 
   if (
     [
@@ -124,27 +132,10 @@ function getTodayIsoDate() {
   return local.toISOString().slice(0, 10)
 }
 
-function getLocalIsoDate(value: string) {
-  if (!value) return ""
-
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return String(value).slice(0, 10)
-
-  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000)
-  return local.toISOString().slice(0, 10)
-}
-
 function isMonitoredToday(item: JudicialBoardItem) {
   return (
     String(item.atribuicaoStatus || "").trim().toUpperCase() === "FINALIZADO" &&
     item.atribuicaoDataReferencia === getTodayIsoDate()
-  )
-}
-
-function isAutomaticallyMonitoredToday(item: JudicialBoardItem) {
-  return (
-    normalizeStatusKey(item.statusMonitoramentoAtual) === "MONITORAMENTO_AUTOMATICO" &&
-    getLocalIsoDate(item.dataUltimoMonitoramento) === getTodayIsoDate()
   )
 }
 
@@ -254,17 +245,17 @@ export function JudicialMonitoringBoard() {
 
   const filtered = useMemo(() => {
     return items.filter((item) => {
-      const automaticToday = isAutomaticallyMonitoredToday(item)
+      const automatic = isAutomaticMonitoring(item)
       const humanToday = isMonitoredToday(item)
 
-      if (status === "monitorados_automaticamente") {
-        if (!automaticToday) return false
+      if (status === "monitoramento_automatico") {
+        if (!automatic) return false
       } else if (status === "monitorados_hoje") {
         if (!humanToday) return false
       } else if (status !== "todos") {
-        if (humanToday || automaticToday) return false
+        if (humanToday || automatic) return false
         if (getStatusFilterValue(item.statusMonitoramentoAtual) !== status) return false
-      } else if (humanToday || automaticToday) {
+      } else if (humanToday || automatic) {
         return false
       }
 
@@ -308,10 +299,10 @@ export function JudicialMonitoringBoard() {
   }, [assignmentFilter, items, origemModulo, search, status])
 
   const stats = useMemo(() => {
-    const automaticosHoje = items.filter(isAutomaticallyMonitoredToday).length
+    const automaticos = items.filter(isAutomaticMonitoring).length
     const monitoradosHoje = items.filter(isMonitoredToday).length
     const visibleForMainQueue = items.filter(
-      (item) => !isMonitoredToday(item) && !isAutomaticallyMonitoredToday(item),
+      (item) => !isMonitoredToday(item) && !isAutomaticMonitoring(item),
     )
 
     return {
@@ -319,7 +310,7 @@ export function JudicialMonitoringBoard() {
       pendente: visibleForMainQueue.filter((item) => getStatusFilterValue(item.statusMonitoramentoAtual) === "pendente").length,
       resolvido: visibleForMainQueue.filter((item) => getStatusFilterValue(item.statusMonitoramentoAtual) === "finalizado").length,
       monitoradosHoje,
-      automaticosHoje,
+      automaticos,
     }
   }, [items])
 
@@ -389,8 +380,8 @@ export function JudicialMonitoringBoard() {
           <CardContent className="flex items-center gap-3 pt-4">
             <Bot className="h-5 w-5 text-muted-foreground" />
             <div>
-              <p className="text-xs text-muted-foreground">Automáticos</p>
-              <p className="text-2xl font-bold text-card-foreground">{stats.automaticosHoje}</p>
+              <p className="text-xs text-muted-foreground">Monitoramento automático</p>
+              <p className="text-2xl font-bold text-card-foreground">{stats.automaticos}</p>
             </div>
           </CardContent>
         </Card>
@@ -423,9 +414,9 @@ export function JudicialMonitoringBoard() {
                 >
                   <option value="todos">Todos ({stats.total})</option>
                   <option value="pendente">Pendente ({stats.pendente})</option>
+                  <option value="monitoramento_automatico">Monitoramento automático ({stats.automaticos})</option>
                   <option value="finalizado">Finalizados ({stats.resolvido})</option>
                   <option value="monitorados_hoje">Monitorados hoje ({stats.monitoradosHoje})</option>
-                  <option value="monitorados_automaticamente">Monitorados automaticamente ({stats.automaticosHoje})</option>
                 </select>
               </div>
 
@@ -492,7 +483,7 @@ export function JudicialMonitoringBoard() {
             {monitoringUser
               ? "Fila judicial limitada às demandas atribuídas para o seu monitoramento hoje, com listas separadas para monitoramento humano e automático."
               : adminUser
-                ? "Visão administrativa completa: pendentes, finalizados, monitorados hoje, automáticos e atribuições por monitor."
+                ? "Visão administrativa completa: pendentes, finalizados, monitorados hoje, monitoramento automático e atribuições por monitor."
                 : showMunicipalityMode
                   ? "Visualização simplificada da Judicialização."
                   : "Fila judicial baseada no banco de dados real."}
@@ -512,7 +503,7 @@ export function JudicialMonitoringBoard() {
           ) : (
             <div className="flex flex-col gap-2">
               {filtered.map((item) => {
-                const automaticToday = isAutomaticallyMonitoredToday(item)
+                const automatic = isAutomaticMonitoring(item)
                 const humanToday = isMonitoredToday(item)
 
                 return (
@@ -531,8 +522,8 @@ export function JudicialMonitoringBoard() {
                           {item.statusLabel}
                         </Badge>
 
-                        {automaticToday && (
-                          <Badge variant="default">Monitorado automaticamente</Badge>
+                        {automatic && (
+                          <Badge variant="default">Monitoramento automático</Badge>
                         )}
 
                         <Badge variant="outline">
@@ -543,7 +534,7 @@ export function JudicialMonitoringBoard() {
                           <Badge variant="secondary">
                             {item.usuarioAtribuidoNome}
                           </Badge>
-                        ) : adminUser && !automaticToday ? (
+                        ) : adminUser && !automatic ? (
                           <Badge variant="outline">Sem atribuição</Badge>
                         ) : null}
 
