@@ -4,6 +4,7 @@ import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
 import {
   AlertTriangle,
+  Bot,
   CheckCircle2,
   ChevronRight,
   Eye,
@@ -66,6 +67,9 @@ const STATUS_BADGE_VARIANTS: Record<
   PENDENTE: "secondary",
   EM_ANDAMENTO: "default",
   EM_MONITORAMENTO: "default",
+  MONITORAMENTO_AUTOMATICO: "default",
+  ANALISE_HUMANA_CORE: "secondary",
+  PENDENTE_CORE: "secondary",
   FINALIZADO: "outline",
   RESOLVIDO: "default",
   ARQUIVADO: "outline",
@@ -120,10 +124,27 @@ function getTodayIsoDate() {
   return local.toISOString().slice(0, 10)
 }
 
+function getLocalIsoDate(value: string) {
+  if (!value) return ""
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return String(value).slice(0, 10)
+
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000)
+  return local.toISOString().slice(0, 10)
+}
+
 function isMonitoredToday(item: JudicialBoardItem) {
   return (
     String(item.atribuicaoStatus || "").trim().toUpperCase() === "FINALIZADO" &&
     item.atribuicaoDataReferencia === getTodayIsoDate()
+  )
+}
+
+function isAutomaticallyMonitoredToday(item: JudicialBoardItem) {
+  return (
+    normalizeStatusKey(item.statusMonitoramentoAtual) === "MONITORAMENTO_AUTOMATICO" &&
+    getLocalIsoDate(item.dataUltimoMonitoramento) === getTodayIsoDate()
   )
 }
 
@@ -208,6 +229,7 @@ export function JudicialMonitoringBoard() {
       if (monitoringUser && user?.id) {
         params.set("somenteAtribuidos", "true")
         params.set("incluirMonitoradosHoje", "true")
+        params.set("incluirMonitoradosAutomaticamente", "true")
         params.set("usuarioId", user.id)
         if (user.email) params.set("usuarioEmail", user.email)
       }
@@ -216,7 +238,6 @@ export function JudicialMonitoringBoard() {
         method: "GET",
         cache: "no-store",
       })
-
       const json = await response.json().catch(() => ({}))
 
       if (!response.ok || !json?.ok) {
@@ -233,12 +254,17 @@ export function JudicialMonitoringBoard() {
 
   const filtered = useMemo(() => {
     return items.filter((item) => {
-      if (status === "monitorados_hoje") {
-        if (!isMonitoredToday(item)) return false
+      const automaticToday = isAutomaticallyMonitoredToday(item)
+      const humanToday = isMonitoredToday(item)
+
+      if (status === "monitorados_automaticamente") {
+        if (!automaticToday) return false
+      } else if (status === "monitorados_hoje") {
+        if (!humanToday) return false
       } else if (status !== "todos") {
-        if (monitoringUser && isMonitoredToday(item)) return false
+        if (monitoringUser && (humanToday || automaticToday)) return false
         if (getStatusFilterValue(item.statusMonitoramentoAtual) !== status) return false
-      } else if (monitoringUser && isMonitoredToday(item)) {
+      } else if (monitoringUser && (humanToday || automaticToday)) {
         return false
       }
 
@@ -282,15 +308,18 @@ export function JudicialMonitoringBoard() {
   }, [assignmentFilter, items, origemModulo, search, status, monitoringUser])
 
   const stats = useMemo(() => {
+    const automaticosHoje = items.filter(isAutomaticallyMonitoredToday).length
+    const monitoradosHoje = items.filter(isMonitoredToday).length
     const visibleForMainQueue = monitoringUser
-      ? items.filter((item) => !isMonitoredToday(item))
+      ? items.filter((item) => !isMonitoredToday(item) && !isAutomaticallyMonitoredToday(item))
       : items
 
     return {
       total: visibleForMainQueue.length,
       pendente: visibleForMainQueue.filter((item) => getStatusFilterValue(item.statusMonitoramentoAtual) === "pendente").length,
       resolvido: visibleForMainQueue.filter((item) => getStatusFilterValue(item.statusMonitoramentoAtual) === "finalizado").length,
-      monitoradosHoje: items.filter(isMonitoredToday).length,
+      monitoradosHoje,
+      automaticosHoje,
     }
   }, [items, monitoringUser])
 
@@ -318,7 +347,7 @@ export function JudicialMonitoringBoard() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <Card className="border-border">
           <CardContent className="pt-4">
             <p className="text-xs text-muted-foreground">Total</p>
@@ -355,6 +384,16 @@ export function JudicialMonitoringBoard() {
             </div>
           </CardContent>
         </Card>
+
+        <Card className="border-border">
+          <CardContent className="flex items-center gap-3 pt-4">
+            <Bot className="h-5 w-5 text-muted-foreground" />
+            <div>
+              <p className="text-xs text-muted-foreground">Automáticos</p>
+              <p className="text-2xl font-bold text-card-foreground">{stats.automaticosHoje}</p>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       <Card className="border-border">
@@ -378,7 +417,7 @@ export function JudicialMonitoringBoard() {
               <div className="flex flex-col gap-1">
                 <Label className="text-xs">Status</Label>
                 <select
-                  className="flex h-10 w-48 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  className="flex h-10 w-56 rounded-md border border-input bg-background px-3 py-2 text-sm"
                   value={status}
                   onChange={(e) => setStatus(e.target.value)}
                 >
@@ -386,6 +425,7 @@ export function JudicialMonitoringBoard() {
                   <option value="pendente">Pendente ({stats.pendente})</option>
                   <option value="finalizado">Finalizados ({stats.resolvido})</option>
                   <option value="monitorados_hoje">Monitorados hoje ({stats.monitoradosHoje})</option>
+                  <option value="monitorados_automaticamente">Monitorados automaticamente ({stats.automaticosHoje})</option>
                 </select>
               </div>
 
@@ -450,9 +490,9 @@ export function JudicialMonitoringBoard() {
           </CardTitle>
           <CardDescription>
             {monitoringUser
-              ? "Fila judicial limitada às demandas atribuídas para o seu monitoramento hoje, com opção de consultar as já monitoradas."
+              ? "Fila judicial limitada às demandas atribuídas para o seu monitoramento hoje, com listas separadas para monitoramento humano e automático."
               : adminUser
-                ? "Visão administrativa completa: pendentes, finalizados, monitorados hoje e atribuições por monitor."
+                ? "Visão administrativa completa: pendentes, finalizados, monitorados hoje, automáticos e atribuições por monitor."
                 : showMunicipalityMode
                   ? "Visualização simplificada da Judicialização."
                   : "Fila judicial baseada no banco de dados real."}
@@ -471,94 +511,103 @@ export function JudicialMonitoringBoard() {
             </div>
           ) : (
             <div className="flex flex-col gap-2">
-              {filtered.map((item) => (
-                <Link
-                  key={item.id}
-                  href={`/judicial/${item.id}`}
-                  className="group flex w-full items-center gap-4 rounded-lg border border-border p-4 text-left transition-colors hover:bg-muted/50"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-mono text-sm font-semibold text-card-foreground">
-                        {item.protocolo}
-                      </span>
+              {filtered.map((item) => {
+                const automaticToday = isAutomaticallyMonitoredToday(item)
+                const humanToday = isMonitoredToday(item)
 
-                      <Badge variant={getStatusVariant(item.statusMonitoramentoAtual)}>
-                        {item.statusLabel}
-                      </Badge>
+                return (
+                  <Link
+                    key={item.id}
+                    href={`/judicial/${item.id}`}
+                    className="group flex w-full items-center gap-4 rounded-lg border border-border p-4 text-left transition-colors hover:bg-muted/50"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-mono text-sm font-semibold text-card-foreground">
+                          {item.protocolo}
+                        </span>
 
-                      <Badge variant="outline">
-                        {item.origemModulo || "JUDICIAL"}
-                      </Badge>
-
-                      {item.usuarioAtribuidoNome ? (
-                        <Badge variant="secondary">
-                          {item.usuarioAtribuidoNome}
+                        <Badge variant={getStatusVariant(item.statusMonitoramentoAtual)}>
+                          {item.statusLabel}
                         </Badge>
-                      ) : adminUser ? (
-                        <Badge variant="outline">Sem atribuição</Badge>
-                      ) : null}
 
-                      {item.atribuicaoStatus && (
-                        <Badge variant={isMonitoredToday(item) ? "default" : "outline"}>
-                          {isMonitoredToday(item) ? "Monitorado hoje" : item.atribuicaoStatusLabel}
+                        {automaticToday && (
+                          <Badge variant="default">Monitorado automaticamente</Badge>
+                        )}
+
+                        <Badge variant="outline">
+                          {item.origemModulo || "JUDICIAL"}
                         </Badge>
-                      )}
+
+                        {item.usuarioAtribuidoNome ? (
+                          <Badge variant="secondary">
+                            {item.usuarioAtribuidoNome}
+                          </Badge>
+                        ) : adminUser && !automaticToday ? (
+                          <Badge variant="outline">Sem atribuição</Badge>
+                        ) : null}
+
+                        {item.atribuicaoStatus && (
+                          <Badge variant={humanToday ? "default" : "outline"}>
+                            {humanToday ? "Monitorado hoje" : item.atribuicaoStatusLabel}
+                          </Badge>
+                        )}
+                      </div>
+
+                      <p className="mt-1 text-lg font-semibold leading-tight text-card-foreground">
+                        {item.nomePaciente}
+                      </p>
+
+                      <p className="truncate text-sm text-muted-foreground">
+                        <span className="font-medium text-foreground">CPF:</span>{" "}
+                        {item.cpf || "Não informado"}
+                        {" | "}
+                        <span className="font-medium text-foreground">CNS:</span>{" "}
+                        {item.cns || "Não informado"}
+                      </p>
+
+                      <p className="truncate text-sm text-muted-foreground">
+                        <span className="font-medium text-foreground">Ficha CORE:</span>{" "}
+                        {item.fichaCore || "Não informada"}
+                      </p>
+
+                      <p className="truncate text-sm text-muted-foreground">
+                        <span className="font-medium text-foreground">Procedimento:</span>{" "}
+                        {item.procedimentoCodigo || "-"}
+                        {item.procedimentoDescricao ? ` - ${item.procedimentoDescricao}` : ""}
+                      </p>
+
+                      <p className="truncate text-sm text-muted-foreground">
+                        <span className="font-medium text-foreground">CID:</span>{" "}
+                        {item.cidCodigo || "-"}
+                        {item.cidDescricao ? ` - ${item.cidDescricao}` : ""}
+                      </p>
+
+                      <p className="truncate text-sm text-muted-foreground">
+                        <span className="font-medium text-foreground">Último monitoramento:</span>{" "}
+                        {formatDateTime(item.dataUltimoMonitoramento)}
+                      </p>
+
+                      <JudicialReturnBadge
+                        nextAt={item.dataProximoMonitoramento}
+                        reason={item.motivoProximoMonitoramento}
+                        days={item.prazoRetornoDias}
+                        active={item.ativoMonitoramento}
+                      />
                     </div>
 
-                    <p className="mt-1 text-lg font-semibold leading-tight text-card-foreground">
-                      {item.nomePaciente}
-                    </p>
-
-                    <p className="truncate text-sm text-muted-foreground">
-                      <span className="font-medium text-foreground">CPF:</span>{" "}
-                      {item.cpf || "Não informado"}
-                      {" | "}
-                      <span className="font-medium text-foreground">CNS:</span>{" "}
-                      {item.cns || "Não informado"}
-                    </p>
-
-                    <p className="truncate text-sm text-muted-foreground">
-                      <span className="font-medium text-foreground">Ficha CORE:</span>{" "}
-                      {item.fichaCore || "Não informada"}
-                    </p>
-
-                    <p className="truncate text-sm text-muted-foreground">
-                      <span className="font-medium text-foreground">Procedimento:</span>{" "}
-                      {item.procedimentoCodigo || "-"}
-                      {item.procedimentoDescricao ? ` - ${item.procedimentoDescricao}` : ""}
-                    </p>
-
-                    <p className="truncate text-sm text-muted-foreground">
-                      <span className="font-medium text-foreground">CID:</span>{" "}
-                      {item.cidCodigo || "-"}
-                      {item.cidDescricao ? ` - ${item.cidDescricao}` : ""}
-                    </p>
-
-                    <p className="truncate text-sm text-muted-foreground">
-                      <span className="font-medium text-foreground">Último monitoramento:</span>{" "}
-                      {formatDateTime(item.dataUltimoMonitoramento)}
-                    </p>
-
-                    <JudicialReturnBadge
-                      nextAt={item.dataProximoMonitoramento}
-                      reason={item.motivoProximoMonitoramento}
-                      days={item.prazoRetornoDias}
-                      active={item.ativoMonitoramento}
-                    />
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <span className="pointer-events-none inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-input bg-background text-foreground shadow-xs">
-                      <Eye className="h-4 w-4" />
-                    </span>
-                    <ChevronRight
-                      className="h-5 w-5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5"
-                      aria-hidden="true"
-                    />
-                  </div>
-                </Link>
-              ))}
+                    <div className="flex items-center gap-2">
+                      <span className="pointer-events-none inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-input bg-background text-foreground shadow-xs">
+                        <Eye className="h-4 w-4" />
+                      </span>
+                      <ChevronRight
+                        className="h-5 w-5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5"
+                        aria-hidden="true"
+                      />
+                    </div>
+                  </Link>
+                )
+              })}
             </div>
           )}
         </CardContent>
