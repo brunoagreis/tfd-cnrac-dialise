@@ -106,7 +106,7 @@ async function insertAutomaticMovement(tx: any, params: {
         $1,
         $2::bigint,
         $3,
-        'monitoramento_automatico_core',
+        'monitoramento',
         $4,
         '[]'::jsonb,
         'sistema',
@@ -335,8 +335,9 @@ export async function POST(req: NextRequest) {
     })
   } catch (error) {
     console.error("[POST /api/judicial/monitoramento/core-automatico] erro:", error)
+    const detail = error instanceof Error ? error.message : String(error)
     return NextResponse.json(
-      { ok: false, error: "Erro ao executar monitoramento automático CORE." },
+      { ok: false, error: "Erro ao executar monitoramento automático CORE.", detail },
       { status: 500 },
     )
   }
