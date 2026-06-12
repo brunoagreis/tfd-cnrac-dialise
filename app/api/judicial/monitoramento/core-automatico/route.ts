@@ -296,7 +296,7 @@ async function runAutomaticCoreMonitoring(limit: number) {
         LEFT JOIN public.core_leitos cl
           ON cl.numero_ficha::text = COALESCE(NULLIF(jm.ficha_core, ''), fca.ficha_numero)::text
         WHERE COALESCE(jm.ativo_monitoramento, TRUE) = TRUE
-          AND UPPER(COALESCE(jm.modulo_codigo, 'JUDICIAL')) = 'JUDICIAL'
+          AND UPPER(COALESCE(jm.origem_modulo, '')) = 'JUDICIAL'
           AND COALESCE(NULLIF(jm.ficha_core, ''), fca.ficha_numero) IS NOT NULL
           AND (
             UPPER(COALESCE(jm.status_monitoramento_atual, '')) = 'MONITORAMENTO_AUTOMATICO'
