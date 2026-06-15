@@ -68,10 +68,14 @@ function isAutomaticCoreStatus(situacaoFichaValue: unknown, situacaoProcedimento
   return false
 }
 
-function nextDayIso() {
+function nextDaysIso(days: number) {
   const date = new Date()
-  date.setDate(date.getDate() + 1)
+  date.setDate(date.getDate() + days)
   return date.toISOString()
+}
+
+function nextDayIso() {
+  return nextDaysIso(1)
 }
 
 function resolveFicha(row: CoreCandidateRow) {
@@ -206,7 +210,7 @@ async function processCandidate(tx: any, row: CoreCandidateRow): Promise<Process
       `Ficha: ${ficha}`,
       `Status da ficha: ${core.situacao}`,
       `Situação do procedimento: ${core.situacaoProcedimento || "não informada"}`,
-      "Ação: mantido em monitoramento automático; não atribuir a monitor humano.",
+      "Ação: mantido em monitoramento automático; próximo monitoramento programado para 2 dias.",
     ].join("\n")
 
     await tx.$executeRawUnsafe(
@@ -218,14 +222,15 @@ async function processCandidate(tx: any, row: CoreCandidateRow): Promise<Process
           pendente_dia_anterior = FALSE,
           ativo_monitoramento = TRUE,
           data_ultimo_monitoramento = NOW(),
-          data_proximo_monitoramento = NULL,
-          motivo_proximo_monitoramento = NULL,
-          prazo_retorno_dias = NULL,
+          data_proximo_monitoramento = $3::timestamptz,
+          motivo_proximo_monitoramento = 'CORE_MONITORAMENTO_AUTOMATICO',
+          prazo_retorno_dias = 2,
           updated_at = NOW()
         WHERE id::text = $1
       `,
       row.monitoramentoId,
       ficha,
+      nextDaysIso(2),
     )
 
     await insertAutomaticMovement(tx, {
@@ -333,9 +338,12 @@ async function runAutomaticCoreMonitoring(limit: number) {
           AND UPPER(COALESCE(jm.origem_modulo, '')) = 'JUDICIAL'
           AND COALESCE(NULLIF(jm.ficha_core, ''), fca.ficha_numero) IS NOT NULL
           AND (
-            UPPER(COALESCE(jm.status_monitoramento_atual, '')) = 'MONITORAMENTO_AUTOMATICO'
-            OR jm.data_ultimo_monitoramento IS NULL
-            OR jm.data_ultimo_monitoramento <= NOW() - INTERVAL '2 days'
+            jm.data_ultimo_monitoramento IS NULL
+            OR jm.data_proximo_monitoramento <= NOW()
+            OR (
+              jm.data_proximo_monitoramento IS NULL
+              AND jm.data_ultimo_monitoramento <= NOW() - INTERVAL '2 days'
+            )
           )
         ORDER BY
           jm.data_ultimo_monitoramento NULLS FIRST,
