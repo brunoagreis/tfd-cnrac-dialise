@@ -5,10 +5,8 @@ export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
 type CidRow = {
-  id: string
-  codigo: string | null
-  descricao: string | null
-  ativo: boolean | null
+  code: string | null
+  description: string | null
 }
 
 function text(value: unknown) {
@@ -18,48 +16,45 @@ function text(value: unknown) {
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)
-
-    const q = text(searchParams.get("q"))
-    const limitRaw = Number(searchParams.get("limit") || 300)
-    const limit = Number.isFinite(limitRaw)
-      ? Math.min(Math.max(limitRaw, 1), 1000)
-      : 300
+    const query = text(searchParams.get("q"))
+    const limit = Math.max(1, Math.min(Number(searchParams.get("limit") ?? 200) || 200, 500))
+    const search = `%${query}%`
 
     const rows = await prisma.$queryRawUnsafe<CidRow[]>(
       `
         SELECT
-          id::text AS id,
-          codigo,
-          descricao,
-          ativo
+          codigo::text AS code,
+          descricao::text AS description
         FROM public.admin_judicial_cid10
-        WHERE COALESCE(ativo, TRUE) = TRUE
+        WHERE
+          COALESCE(codigo::text, '') <> ''
+          AND COALESCE(descricao::text, '') <> ''
           AND (
             $1 = ''
-            OR codigo ILIKE '%' || $1 || '%'
-            OR descricao ILIKE '%' || $1 || '%'
+            OR codigo::text ILIKE $2
+            OR descricao::text ILIKE $2
           )
         ORDER BY codigo ASC, descricao ASC
-        LIMIT $2
+        LIMIT $3::int
       `,
-      q,
+      query,
+      search,
       limit,
     )
 
     return NextResponse.json({
       ok: true,
       items: rows.map((row) => ({
-        id: row.id,
-        code: text(row.codigo),
-        description: text(row.descricao),
-        active: row.ativo !== false,
+        code: text(row.code),
+        description: text(row.description),
       })),
     })
   } catch (error) {
     console.error("[GET /api/judicial/cid10] erro:", error)
+    const detail = error instanceof Error ? error.message : String(error)
 
     return NextResponse.json(
-      { ok: false, error: "Erro ao carregar CID10." },
+      { ok: false, error: "Erro ao carregar catálogo CID-10.", detail },
       { status: 500 },
     )
   }
