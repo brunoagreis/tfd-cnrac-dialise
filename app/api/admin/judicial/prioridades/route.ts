@@ -98,6 +98,30 @@ function mapRow(row: PriorityRow) {
   }
 }
 
+function prioritySetSql() {
+  return `
+    prioridade_monitoramento = 3,
+    prioridade_motivo = $2,
+    prioridade_atualizada_em = NOW(),
+    data_proximo_monitoramento = CASE
+      WHEN UPPER(COALESCE(jm.status_monitoramento_atual, '')) = 'MONITORAMENTO_AUTOMATICO'
+        THEN NOW() - INTERVAL '1 minute'
+      ELSE jm.data_proximo_monitoramento
+    END,
+    motivo_proximo_monitoramento = CASE
+      WHEN UPPER(COALESCE(jm.status_monitoramento_atual, '')) = 'MONITORAMENTO_AUTOMATICO'
+        THEN 'PRIORIDADE_ADMIN_MONITORAMENTO_AUTOMATICO'
+      ELSE jm.motivo_proximo_monitoramento
+    END,
+    prazo_retorno_dias = CASE
+      WHEN UPPER(COALESCE(jm.status_monitoramento_atual, '')) = 'MONITORAMENTO_AUTOMATICO'
+        THEN 0
+      ELSE jm.prazo_retorno_dias
+    END,
+    updated_at = NOW()
+  `
+}
+
 async function applyPriorityEffects(items: SanitizedPriorityItem[]) {
   const activeItems = items.filter(isActiveItem)
 
@@ -119,33 +143,17 @@ async function applyPriorityEffects(items: SanitizedPriorityItem[]) {
         await tx.$executeRawUnsafe(
           `
             UPDATE public.judicial_monitoramento_base jm
-            SET
-              prioridade_monitoramento = 3,
-              prioridade_motivo = $2,
-              prioridade_atualizada_em = NOW(),
-              data_proximo_monitoramento = CASE
-                WHEN UPPER(COALESCE(jm.status_monitoramento_atual, '')) = 'MONITORAMENTO_AUTOMATICO'
-                  THEN NOW() - INTERVAL '1 minute'
-                ELSE jm.data_proximo_monitoramento
-              END,
-              motivo_proximo_monitoramento = CASE
-                WHEN UPPER(COALESCE(jm.status_monitoramento_atual, '')) = 'MONITORAMENTO_AUTOMATICO'
-                  THEN 'PRIORIDADE_ADMIN_MONITORAMENTO_AUTOMATICO'
-                ELSE jm.motivo_proximo_monitoramento
-              END,
-              prazo_retorno_dias = CASE
-                WHEN UPPER(COALESCE(jm.status_monitoramento_atual, '')) = 'MONITORAMENTO_AUTOMATICO'
-                  THEN 0
-                ELSE jm.prazo_retorno_dias
-              END,
-              updated_at = NOW()
-            FROM public.demandas d
-            WHERE d.id = jm.demanda_id
-              AND COALESCE(jm.ativo_monitoramento, TRUE) = TRUE
+            SET ${prioritySetSql()}
+            WHERE COALESCE(jm.ativo_monitoramento, TRUE) = TRUE
               AND UPPER(COALESCE(jm.origem_modulo, '')) = 'JUDICIAL'
               AND (
                 regexp_replace(COALESCE(jm.procedimento_codigo, ''), '\\D', '', 'g') = $1
-                OR regexp_replace(COALESCE(d."codigoSigtap", ''), '\\D', '', 'g') = $1
+                OR EXISTS (
+                  SELECT 1
+                  FROM public.demandas d
+                  WHERE d.id = jm.demanda_id
+                    AND regexp_replace(COALESCE(d."codigoSigtap", ''), '\\D', '', 'g') = $1
+                )
                 OR EXISTS (
                   SELECT 1
                   FROM public.judicial_procedimentos jp
@@ -164,33 +172,17 @@ async function applyPriorityEffects(items: SanitizedPriorityItem[]) {
         await tx.$executeRawUnsafe(
           `
             UPDATE public.judicial_monitoramento_base jm
-            SET
-              prioridade_monitoramento = 3,
-              prioridade_motivo = $2,
-              prioridade_atualizada_em = NOW(),
-              data_proximo_monitoramento = CASE
-                WHEN UPPER(COALESCE(jm.status_monitoramento_atual, '')) = 'MONITORAMENTO_AUTOMATICO'
-                  THEN NOW() - INTERVAL '1 minute'
-                ELSE jm.data_proximo_monitoramento
-              END,
-              motivo_proximo_monitoramento = CASE
-                WHEN UPPER(COALESCE(jm.status_monitoramento_atual, '')) = 'MONITORAMENTO_AUTOMATICO'
-                  THEN 'PRIORIDADE_ADMIN_MONITORAMENTO_AUTOMATICO'
-                ELSE jm.motivo_proximo_monitoramento
-              END,
-              prazo_retorno_dias = CASE
-                WHEN UPPER(COALESCE(jm.status_monitoramento_atual, '')) = 'MONITORAMENTO_AUTOMATICO'
-                  THEN 0
-                ELSE jm.prazo_retorno_dias
-              END,
-              updated_at = NOW()
-            FROM public.demandas d
-            WHERE d.id = jm.demanda_id
-              AND COALESCE(jm.ativo_monitoramento, TRUE) = TRUE
+            SET ${prioritySetSql()}
+            WHERE COALESCE(jm.ativo_monitoramento, TRUE) = TRUE
               AND UPPER(COALESCE(jm.origem_modulo, '')) = 'JUDICIAL'
               AND (
                 strpos(regexp_replace(UPPER(COALESCE(jm.cid_codigo, '')), '[^A-Z0-9]', '', 'g'), $1) > 0
-                OR strpos(regexp_replace(UPPER(COALESCE(d.cid10, '')), '[^A-Z0-9]', '', 'g'), $1) > 0
+                OR EXISTS (
+                  SELECT 1
+                  FROM public.demandas d
+                  WHERE d.id = jm.demanda_id
+                    AND strpos(regexp_replace(UPPER(COALESCE(d.cid10, '')), '[^A-Z0-9]', '', 'g'), $1) > 0
+                )
               )
           `,
           item.value,
@@ -202,32 +194,16 @@ async function applyPriorityEffects(items: SanitizedPriorityItem[]) {
         await tx.$executeRawUnsafe(
           `
             UPDATE public.judicial_monitoramento_base jm
-            SET
-              prioridade_monitoramento = 3,
-              prioridade_motivo = $2,
-              prioridade_atualizada_em = NOW(),
-              data_proximo_monitoramento = CASE
-                WHEN UPPER(COALESCE(jm.status_monitoramento_atual, '')) = 'MONITORAMENTO_AUTOMATICO'
-                  THEN NOW() - INTERVAL '1 minute'
-                ELSE jm.data_proximo_monitoramento
-              END,
-              motivo_proximo_monitoramento = CASE
-                WHEN UPPER(COALESCE(jm.status_monitoramento_atual, '')) = 'MONITORAMENTO_AUTOMATICO'
-                  THEN 'PRIORIDADE_ADMIN_MONITORAMENTO_AUTOMATICO'
-                ELSE jm.motivo_proximo_monitoramento
-              END,
-              prazo_retorno_dias = CASE
-                WHEN UPPER(COALESCE(jm.status_monitoramento_atual, '')) = 'MONITORAMENTO_AUTOMATICO'
-                  THEN 0
-                ELSE jm.prazo_retorno_dias
-              END,
-              updated_at = NOW()
-            FROM public.demandas d
-            WHERE d.id = jm.demanda_id
-              AND COALESCE(jm.ativo_monitoramento, TRUE) = TRUE
+            SET ${prioritySetSql()}
+            WHERE COALESCE(jm.ativo_monitoramento, TRUE) = TRUE
               AND UPPER(COALESCE(jm.origem_modulo, '')) = 'JUDICIAL'
               AND (
-                UPPER(COALESCE(d.especialidade, '')) = $1
+                EXISTS (
+                  SELECT 1
+                  FROM public.demandas d
+                  WHERE d.id = jm.demanda_id
+                    AND UPPER(COALESCE(d.especialidade, '')) = $1
+                )
                 OR EXISTS (
                   SELECT 1
                   FROM public.judicial_procedimentos jp
@@ -246,32 +222,16 @@ async function applyPriorityEffects(items: SanitizedPriorityItem[]) {
         await tx.$executeRawUnsafe(
           `
             UPDATE public.judicial_monitoramento_base jm
-            SET
-              prioridade_monitoramento = 3,
-              prioridade_motivo = $2,
-              prioridade_atualizada_em = NOW(),
-              data_proximo_monitoramento = CASE
-                WHEN UPPER(COALESCE(jm.status_monitoramento_atual, '')) = 'MONITORAMENTO_AUTOMATICO'
-                  THEN NOW() - INTERVAL '1 minute'
-                ELSE jm.data_proximo_monitoramento
-              END,
-              motivo_proximo_monitoramento = CASE
-                WHEN UPPER(COALESCE(jm.status_monitoramento_atual, '')) = 'MONITORAMENTO_AUTOMATICO'
-                  THEN 'PRIORIDADE_ADMIN_MONITORAMENTO_AUTOMATICO'
-                ELSE jm.motivo_proximo_monitoramento
-              END,
-              prazo_retorno_dias = CASE
-                WHEN UPPER(COALESCE(jm.status_monitoramento_atual, '')) = 'MONITORAMENTO_AUTOMATICO'
-                  THEN 0
-                ELSE jm.prazo_retorno_dias
-              END,
-              updated_at = NOW()
-            FROM public.demandas d
-            WHERE d.id = jm.demanda_id
-              AND COALESCE(jm.ativo_monitoramento, TRUE) = TRUE
+            SET ${prioritySetSql()}
+            WHERE COALESCE(jm.ativo_monitoramento, TRUE) = TRUE
               AND UPPER(COALESCE(jm.origem_modulo, '')) = 'JUDICIAL'
               AND (
-                UPPER(COALESCE(d.subespecialidade, '')) = $1
+                EXISTS (
+                  SELECT 1
+                  FROM public.demandas d
+                  WHERE d.id = jm.demanda_id
+                    AND UPPER(COALESCE(d.subespecialidade, '')) = $1
+                )
                 OR EXISTS (
                   SELECT 1
                   FROM public.judicial_procedimentos jp
