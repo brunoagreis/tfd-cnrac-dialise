@@ -1,3 +1,6 @@
+import { appendFile, mkdir } from "fs/promises"
+import path from "path"
+
 const CORE_AUTOMATIC_TASK_KEY = "__sigajusCoreAutomaticScheduler"
 const CHECK_INTERVAL_MS = 15 * 60 * 1000
 const DEFAULT_BASE_URL = "http://127.0.0.1:3000"
@@ -35,6 +38,24 @@ function localDateKey(date = new Date()) {
   return `${year}-${month}-${day}`
 }
 
+function localDateTime(date = new Date()) {
+  return date.toLocaleString("pt-BR")
+}
+
+async function appendSchedulerLog(message: string) {
+  try {
+    const logsDir = process.env.SIGAJUS_LOG_DIR || path.join(process.cwd(), "logs")
+    await mkdir(logsDir, { recursive: true })
+    await appendFile(
+      path.join(logsDir, "core-automatico-interno.log"),
+      `[${localDateTime()}] ${message}\n`,
+      "utf8",
+    )
+  } catch (error) {
+    console.error("[CORE automático] Erro ao registrar log interno:", error)
+  }
+}
+
 function shouldRunNow(state: SchedulerState, now = new Date()) {
   const dateKey = localDateKey(now)
   if (state.lastRunDate === dateKey) return false
@@ -55,6 +76,8 @@ async function runCoreAutomaticMonitoring(state: SchedulerState) {
 
   try {
     const baseUrl = process.env.SIGAJUS_INTERNAL_BASE_URL || process.env.NEXT_PUBLIC_APP_URL || DEFAULT_BASE_URL
+    await appendSchedulerLog(`Executando monitoramento automático CORE em ${baseUrl}.`)
+
     const response = await fetch(`${baseUrl}/api/judicial/monitoramento/core-automatico`, {
       method: "POST",
       headers: {
@@ -67,14 +90,20 @@ async function runCoreAutomaticMonitoring(state: SchedulerState) {
     const body = await response.text()
 
     if (!response.ok) {
-      console.error(`[CORE automático] Falha HTTP ${response.status}: ${body}`)
+      const message = `Falha HTTP ${response.status}: ${body}`
+      console.error(`[CORE automático] ${message}`)
+      await appendSchedulerLog(message)
       return
     }
 
     state.lastRunDate = localDateKey()
-    console.log(`[CORE automático] Execução concluída: ${body}`)
+    const message = `Execução concluída: ${body}`
+    console.log(`[CORE automático] ${message}`)
+    await appendSchedulerLog(message)
   } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
     console.error("[CORE automático] Erro ao executar agendador interno:", error)
+    await appendSchedulerLog(`Erro ao executar agendador interno: ${detail}`)
   } finally {
     state.running = false
   }
@@ -94,7 +123,9 @@ export function startCoreAutomaticScheduler() {
 
   state.started = true
 
-  console.log("[CORE automático] Agendador interno iniciado para execução diária às 06:00.")
+  const message = "Agendador interno iniciado para execução diária às 06:00."
+  console.log(`[CORE automático] ${message}`)
+  void appendSchedulerLog(message)
 
   setTimeout(checkCoreAutomaticMonitoring, 2 * 60 * 1000)
   state.timer = setInterval(checkCoreAutomaticMonitoring, CHECK_INTERVAL_MS)
