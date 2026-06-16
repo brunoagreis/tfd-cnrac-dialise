@@ -11,7 +11,6 @@ const nextConfig = {
   },
 
   experimental: {
-    instrumentationHook: true,
     serverActions: {
       allowedOrigins: [
         "10.126.34.72",
