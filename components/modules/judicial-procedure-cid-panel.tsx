@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
 import { Plus } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
@@ -26,6 +26,15 @@ import {
 
 const PROCEDURE_STATUS_OPTIONS: JudicialProcedureCompletionStatus[] = ["atendido", "regulado", "pendente"]
 
+type CidCatalogOption = {
+  code: string
+  description: string
+}
+
+function normalizeText(value: unknown) {
+  return String(value ?? "").trim()
+}
+
 export function JudicialProcedureCidPanel({ caseId }: { caseId: string }) {
   const { user } = useAuth()
   const judicial = useJudicial()
@@ -35,11 +44,53 @@ export function JudicialProcedureCidPanel({ caseId }: { caseId: string }) {
   const [selectedProcedure, setSelectedProcedure] = useState("")
   const [cidSearch, setCidSearch] = useState("")
   const [selectedCid, setSelectedCid] = useState("")
+  const [cidCatalog, setCidCatalog] = useState<CidCatalogOption[]>(() => judicial.cidCatalog)
+  const [cidLoading, setCidLoading] = useState(false)
 
   const [procedureModalOpen, setProcedureModalOpen] = useState(false)
   const [selectedProcedureId, setSelectedProcedureId] = useState<string | null>(null)
   const [procedureStatus, setProcedureStatus] = useState<JudicialProcedureCompletionStatus>("atendido")
   const [procedureReason, setProcedureReason] = useState("")
+
+  useEffect(() => {
+    const controller = new AbortController()
+    const timeout = window.setTimeout(async () => {
+      try {
+        setCidLoading(true)
+        const response = await fetch(`/api/judicial/cid10?q=${encodeURIComponent(cidSearch.trim())}&limit=300`, {
+          cache: "no-store",
+          signal: controller.signal,
+        })
+
+        const data = await response.json().catch(() => ({}))
+
+        if (!response.ok || data?.ok === false) {
+          throw new Error(data?.error || "Erro ao carregar CID-10.")
+        }
+
+        const items = Array.isArray(data?.items) ? data.items : []
+        setCidCatalog(
+          items
+            .map((item: any) => ({
+              code: normalizeText(item?.code ?? item?.codigo),
+              description: normalizeText(item?.description ?? item?.descricao),
+            }))
+            .filter((item: CidCatalogOption) => item.code && item.description),
+        )
+      } catch (error) {
+        if ((error as Error)?.name === "AbortError") return
+        console.error("[CID judicial] erro ao carregar catálogo:", error)
+        setCidCatalog(judicial.cidCatalog)
+      } finally {
+        if (!controller.signal.aborted) setCidLoading(false)
+      }
+    }, 250)
+
+    return () => {
+      controller.abort()
+      window.clearTimeout(timeout)
+    }
+  }, [cidSearch, judicial.cidCatalog])
 
   const procedureOptions = useMemo(
     () => judicial.procedureCatalog.filter((item) => !procedureSearch || `${item.sigtapCode} ${item.description}`.toLowerCase().includes(procedureSearch.toLowerCase())),
@@ -47,8 +98,8 @@ export function JudicialProcedureCidPanel({ caseId }: { caseId: string }) {
   )
 
   const cidOptions = useMemo(
-    () => judicial.cidCatalog.filter((item) => !cidSearch || `${item.code} ${item.description}`.toLowerCase().includes(cidSearch.toLowerCase())),
-    [judicial.cidCatalog, cidSearch],
+    () => cidCatalog.filter((item) => !cidSearch || `${item.code} ${item.description}`.toLowerCase().includes(cidSearch.toLowerCase())),
+    [cidCatalog, cidSearch],
   )
 
   if (!caseItem) return null
@@ -175,14 +226,14 @@ export function JudicialProcedureCidPanel({ caseId }: { caseId: string }) {
         <CardContent className="space-y-4">
           <Input value={cidSearch} onChange={(e) => setCidSearch(e.target.value)} placeholder="Pesquisar CID por código ou descrição" />
           <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={selectedCid} onChange={(e) => setSelectedCid(e.target.value)}>
-            <option value="">Selecione um CID</option>
+            <option value="">{cidLoading ? "Carregando CID..." : "Selecione um CID"}</option>
             {cidOptions.map((item) => (
               <option key={item.code} value={item.code}>
                 {item.code} - {item.description}
               </option>
             ))}
           </select>
-          <Button onClick={handleAddCid}>
+          <Button onClick={handleAddCid} disabled={cidLoading}>
             <Plus className="mr-2 h-4 w-4" />
             Adicionar CID
           </Button>
