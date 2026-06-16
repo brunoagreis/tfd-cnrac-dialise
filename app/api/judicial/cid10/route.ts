@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)
     const query = text(searchParams.get("q"))
-    const limit = Math.max(1, Math.min(Number(searchParams.get("limit") ?? 200) || 200, 500))
+    const limit = Math.max(1, Math.min(Number(searchParams.get("limit") ?? 200) || 200, 20000))
     const search = `%${query}%`
 
     const rows = await prisma.$queryRawUnsafe<CidRow[]>(
