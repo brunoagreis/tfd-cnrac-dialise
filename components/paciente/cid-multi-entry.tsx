@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Plus, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -16,6 +16,10 @@ export type CidEntry = {
   description: string
 }
 
+function normalizeText(value: unknown) {
+  return String(value ?? "").trim()
+}
+
 export function CidMultiEntry({
   catalog,
   value,
@@ -27,16 +31,60 @@ export function CidMultiEntry({
 }) {
   const [query, setQuery] = useState("")
   const [selectedCode, setSelectedCode] = useState("")
+  const [remoteCatalog, setRemoteCatalog] = useState<CidCatalogItem[]>([])
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    const controller = new AbortController()
+    const timer = window.setTimeout(async () => {
+      try {
+        setLoading(true)
+        const response = await fetch(`/api/judicial/cid10?q=${encodeURIComponent(query.trim())}&limit=50`, {
+          cache: "no-store",
+          signal: controller.signal,
+        })
+        const data = await response.json().catch(() => ({}))
+
+        if (!response.ok || data?.ok === false) {
+          throw new Error(data?.error || "Erro ao carregar CID-10.")
+        }
+
+        const items = Array.isArray(data?.items) ? data.items : []
+        setRemoteCatalog(
+          items
+            .map((item: any) => ({
+              code: normalizeText(item?.code ?? item?.codigo),
+              description: normalizeText(item?.description ?? item?.descricao),
+            }))
+            .filter((item: CidCatalogItem) => item.code && item.description),
+        )
+      } catch (error) {
+        if ((error as Error)?.name === "AbortError") return
+        console.error("[CidMultiEntry] erro ao carregar CID-10:", error)
+        setRemoteCatalog([])
+      } finally {
+        if (!controller.signal.aborted) setLoading(false)
+      }
+    }, 250)
+
+    return () => {
+      controller.abort()
+      window.clearTimeout(timer)
+    }
+  }, [query])
+
+  const sourceCatalog = remoteCatalog.length > 0 ? remoteCatalog : catalog
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
-    if (!q) return catalog.slice(0, 8)
-    return catalog
+    const items = sourceCatalog.filter((item) => item.code && item.description)
+    if (!q) return items.slice(0, 8)
+    return items
       .filter((item) => `${item.code} ${item.description}`.toLowerCase().includes(q))
-      .slice(0, 8)
-  }, [catalog, query])
+      .slice(0, 20)
+  }, [sourceCatalog, query])
 
-  const selected = catalog.find((item) => item.code === selectedCode)
+  const selected = sourceCatalog.find((item) => item.code === selectedCode)
 
   function selectItem(item: CidCatalogItem) {
     setSelectedCode(item.code)
@@ -66,23 +114,29 @@ export function CidMultiEntry({
           }}
           placeholder="Digite o CID ou a descrição"
         />
-        {filtered.length > 0 && query && (
+        {query && (
           <div className="mt-2 max-h-52 overflow-auto rounded-xl border border-border bg-background p-1">
-            {filtered.map((item) => (
-              <button
-                key={`${item.code}-${item.description}`}
-                type="button"
-                className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-muted"
-                onClick={() => selectItem(item)}
-              >
-                <span className="font-medium">{item.code}</span> - {item.description}
-              </button>
-            ))}
+            {loading ? (
+              <div className="px-3 py-2 text-sm text-muted-foreground">Carregando CID...</div>
+            ) : filtered.length > 0 ? (
+              filtered.map((item) => (
+                <button
+                  key={`${item.code}-${item.description}`}
+                  type="button"
+                  className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-muted"
+                  onClick={() => selectItem(item)}
+                >
+                  <span className="font-medium">{item.code}</span> - {item.description}
+                </button>
+              ))
+            ) : (
+              <div className="px-3 py-2 text-sm text-muted-foreground">Nenhum CID encontrado.</div>
+            )}
           </div>
         )}
 
         <div className="mt-3">
-          <Button type="button" onClick={handleAdd}>
+          <Button type="button" onClick={handleAdd} disabled={!selected}>
             <Plus className="mr-2 h-4 w-4" />
             Adicionar CID
           </Button>
