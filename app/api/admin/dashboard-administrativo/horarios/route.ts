@@ -4,6 +4,10 @@ import { prisma } from "@/lib/prisma"
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
+type ColumnRow = {
+  column_name: string
+}
+
 type ScheduleRow = {
   id: string
   idUsuario: string
@@ -35,6 +39,26 @@ function text(value: unknown) {
 function toInt(value: unknown) {
   const number = Number(value)
   return Number.isFinite(number) ? Math.trunc(number) : 0
+}
+
+function quoteIdent(value: string) {
+  return `"${value.replace(/"/g, '""')}"`
+}
+
+function pickFirstExisting(candidates: string[], available: Set<string>) {
+  return candidates.find((item) => available.has(item)) ?? null
+}
+
+async function getUsuariosColumns() {
+  const rows = await prisma.$queryRawUnsafe<ColumnRow[]>(`
+    SELECT column_name
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'usuarios'
+    ORDER BY ordinal_position
+  `)
+
+  return new Set(rows.map((row) => row.column_name))
 }
 
 function isTime(value: string) {
@@ -79,19 +103,47 @@ function normalizeUser(row: UserRow) {
 
 export async function GET() {
   try {
+    const columns = await getUsuariosColumns()
+
+    const idCol = pickFirstExisting(["id"], columns)
+    if (!idCol) {
+      return NextResponse.json(
+        { ok: false, error: "Tabela usuarios sem coluna id." },
+        { status: 500 },
+      )
+    }
+
+    const nomeCol = pickFirstExisting(["nome", "name", "nomeCompleto", "nome_completo"], columns)
+    const emailCol = pickFirstExisting(["email", "e_mail", "login"], columns)
+    const roleCol = pickFirstExisting(["role", "papelPrincipal", "papel_principal", "perfil", "tipo"], columns)
+    const perfilCol = pickFirstExisting(["perfilCodigo", "perfil_codigo", "codigoPerfil", "codigo_perfil"], columns)
+    const ativoCol = pickFirstExisting(["ativo", "active", "isActive", "is_active"], columns)
+
+    const idExpr = `${quoteIdent(idCol)}::text`
+    const nomeExpr = nomeCol
+      ? `${quoteIdent(nomeCol)}::text`
+      : emailCol
+        ? `${quoteIdent(emailCol)}::text`
+        : `${idExpr}`
+    const emailExpr = emailCol ? `${quoteIdent(emailCol)}::text` : `NULL::text`
+    const roleExpr = roleCol ? `${quoteIdent(roleCol)}::text` : `NULL::text`
+    const perfilExpr = perfilCol ? `${quoteIdent(perfilCol)}::text` : `NULL::text`
+    const ativoExpr = ativoCol ? `${quoteIdent(ativoCol)}::boolean` : `true`
+    const whereAtivo = ativoCol ? `WHERE COALESCE(${quoteIdent(ativoCol)}, true) = true` : ""
+
     const [usuarios, horarios] = await Promise.all([
       prisma.$queryRawUnsafe<UserRow[]>(
         `
           SELECT
-            id::text AS id,
-            COALESCE(nome, name, email, id::text) AS nome,
-            email,
-            role::text AS role,
-            "perfilCodigo" AS "perfilCodigo",
-            ativo
+            ${idExpr} AS id,
+            COALESCE(${nomeExpr}, ${emailExpr}, ${idExpr}) AS nome,
+            ${emailExpr} AS email,
+            ${roleExpr} AS role,
+            ${perfilExpr} AS "perfilCodigo",
+            ${ativoExpr} AS ativo
           FROM public.usuarios
-          WHERE COALESCE(ativo, true) = true
-          ORDER BY COALESCE(nome, name, email, id::text)
+          ${whereAtivo}
+          ORDER BY COALESCE(${nomeExpr}, ${emailExpr}, ${idExpr})
         `,
       ),
       prisma.$queryRawUnsafe<ScheduleRow[]>(
