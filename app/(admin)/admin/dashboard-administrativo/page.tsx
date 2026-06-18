@@ -2,7 +2,22 @@
 
 import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
-import { BarChart3, Clock, Eye, RefreshCw, Timer } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { BarChart3, CalendarClock, RefreshCw } from "lucide-react"
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Legend,
+  Pie,
+  PieChart,
+  ReferenceLine,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts"
 
 import { useAuth } from "@/lib/auth-context"
 import { hasUserPermission } from "@/lib/access-control"
@@ -28,19 +43,69 @@ type UserSummary = {
   ultimaFinalizacao: string | null
 }
 
+type FilterUser = {
+  usuarioId: string
+  usuarioNome: string
+  usuarioEmail: string
+}
+
 type DashboardResponse = {
   ok: boolean
   periodo: { inicio: string; fim: string }
+  filtros?: {
+    usuarios: FilterUser[]
+  }
   resumo: {
     usuarios: number
     monitoramentos: number
     minutosMonitorando: number
+    mediaTempoMonitoramento: number
     minutosOciosidade: number
     maiorIntervaloOcioso: number
   }
+  graficos?: {
+    metaMonitoramentosPorUsuario: {
+      diasConsiderados: number
+      metaDiaria: number
+      meta: number
+      usuarios: Array<{
+        usuarioId: string
+        usuarioNome: string
+        quantidade: number
+        meta: number
+      }>
+    }
+    ociosidadePorUsuario: Array<{
+      usuarioId: string
+      usuarioNome: string
+      minutosOciosidade: number
+    }>
+    totalMonitoramentosPorDia: Array<{
+      dataReferencia: string
+      label: string
+      quantidade: number
+    }>
+    monitoramentosPorUsuarioUltimos5Dias: {
+      usuarios: string[]
+      dias: string[]
+      dados: Array<Record<string, string | number>>
+    }
+  }
   usuarios: UserSummary[]
   error?: string
+  detail?: string
 }
+
+const CHART_COLORS = [
+  "#2563eb",
+  "#16a34a",
+  "#f97316",
+  "#9333ea",
+  "#dc2626",
+  "#0891b2",
+  "#ca8a04",
+  "#4f46e5",
+]
 
 function todayText() {
   const date = new Date()
@@ -59,17 +124,16 @@ function formatMinutes(minutes: number | null | undefined) {
   return `${hours}h ${String(mins).padStart(2, "0")}min`
 }
 
-function formatDateTime(value: string | null | undefined) {
-  if (!value) return "-"
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return "-"
-  return date.toLocaleString("pt-BR")
+function formatTooltipMinutes(value: unknown) {
+  return formatMinutes(Number(value))
 }
 
 export default function DashboardAdministrativoPage() {
+  const router = useRouter()
   const { user, isReady } = useAuth()
   const [inicio, setInicio] = useState(todayText())
   const [fim, setFim] = useState(todayText())
+  const [usuarioId, setUsuarioId] = useState("todos")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [data, setData] = useState<DashboardResponse | null>(null)
@@ -84,13 +148,14 @@ export default function DashboardAdministrativoPage() {
       setLoading(true)
       setError("")
       const params = new URLSearchParams({ inicio, fim })
+      if (usuarioId && usuarioId !== "todos") params.set("usuarioId", usuarioId)
       const response = await fetch(`/api/admin/dashboard-administrativo/ociosidade?${params.toString()}`, {
         method: "GET",
         cache: "no-store",
       })
       const json = await response.json().catch(() => ({}))
       if (!response.ok || !json?.ok) {
-        throw new Error(json?.error || "Erro ao carregar dashboard.")
+        throw new Error(json?.detail || json?.error || "Erro ao carregar dashboard.")
       }
       setData(json as DashboardResponse)
     } catch (err) {
@@ -106,15 +171,27 @@ export default function DashboardAdministrativoPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isReady, canAccess])
 
+  function openDetails(id: string) {
+    if (!id) return
+    router.push(
+      `/admin/dashboard-administrativo/detalhes?usuarioId=${encodeURIComponent(id)}&inicio=${encodeURIComponent(inicio)}&fim=${encodeURIComponent(fim)}`,
+    )
+  }
+
   const usuarios = data?.usuarios ?? []
+  const filterUsers = data?.filtros?.usuarios ?? []
   const resumo = data?.resumo ?? {
     usuarios: 0,
     monitoramentos: 0,
     minutosMonitorando: 0,
+    mediaTempoMonitoramento: 0,
     minutosOciosidade: 0,
     maiorIntervaloOcioso: 0,
   }
-  const maxIdle = usuarios.reduce((max, item) => Math.max(max, item.minutosOciosidade), 0)
+  const metaChart = data?.graficos?.metaMonitoramentosPorUsuario
+  const ociosidadePie = data?.graficos?.ociosidadePorUsuario ?? []
+  const totalPorDia = data?.graficos?.totalMonitoramentosPorDia ?? []
+  const ultimos5 = data?.graficos?.monitoramentosPorUsuarioUltimos5Dias
 
   if (!isReady) return null
 
@@ -136,28 +213,49 @@ export default function DashboardAdministrativoPage() {
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Dashboard Administrativo</h1>
             <p className="text-sm text-muted-foreground">
-              Ociosidade e tempo de monitoramento por usuário.
+              Indicadores de monitoramento, ociosidade e produtividade por período.
             </p>
           </div>
         </div>
+
+        <Button asChild variant="outline" className="bg-transparent">
+          <Link href="/admin/dashboard-administrativo/horarios">
+            <CalendarClock className="mr-2 h-4 w-4" /> Cadastrar horários
+          </Link>
+        </Button>
       </div>
 
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Filtros</CardTitle>
           <CardDescription>
-            O cálculo considera o horário de trabalho cadastrado e os monitoramentos iniciados/finalizados.
+            Os cards e gráficos respeitam o período e o usuário selecionado.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-3 md:grid-cols-[180px_180px_auto] md:items-end">
+          <div className="grid gap-3 md:grid-cols-[180px_180px_minmax(220px,1fr)_auto] md:items-end">
             <div>
-              <Label className="mb-1 block text-xs">Início</Label>
+              <Label className="mb-1 block text-xs">Data inicial</Label>
               <Input type="date" value={inicio} onChange={(event) => setInicio(event.target.value)} />
             </div>
             <div>
-              <Label className="mb-1 block text-xs">Fim</Label>
+              <Label className="mb-1 block text-xs">Data final</Label>
               <Input type="date" value={fim} onChange={(event) => setFim(event.target.value)} />
+            </div>
+            <div>
+              <Label className="mb-1 block text-xs">Usuário</Label>
+              <select
+                value={usuarioId}
+                onChange={(event) => setUsuarioId(event.target.value)}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              >
+                <option value="todos">Todos os usuários</option>
+                {filterUsers.map((item) => (
+                  <option key={item.usuarioId} value={item.usuarioId}>
+                    {item.usuarioNome || item.usuarioEmail || item.usuarioId}
+                  </option>
+                ))}
+              </select>
             </div>
             <Button onClick={loadDashboard} disabled={loading}>
               <RefreshCw className="mr-2 h-4 w-4" />
@@ -188,8 +286,8 @@ export default function DashboardAdministrativoPage() {
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>Tempo monitorando</CardDescription>
-            <CardTitle>{formatMinutes(resumo.minutosMonitorando)}</CardTitle>
+            <CardDescription>Tempo médio de monitoramento</CardDescription>
+            <CardTitle>{formatMinutes(resumo.mediaTempoMonitoramento)}</CardTitle>
           </CardHeader>
         </Card>
         <Card>
@@ -206,86 +304,145 @@ export default function DashboardAdministrativoPage() {
         </Card>
       </div>
 
+      <div className="grid gap-4 xl:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+              <div>
+                <CardTitle>Monitoramentos por usuário</CardTitle>
+                <CardDescription>
+                  Meta: dias com monitoramento no período × 20.
+                </CardDescription>
+              </div>
+              <Badge variant="outline">
+                Meta: {metaChart?.meta ?? 0} em {metaChart?.diasConsiderados ?? 0} dia(s)
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {(metaChart?.usuarios?.length ?? 0) === 0 ? (
+              <p className="text-sm text-muted-foreground">Nenhum monitoramento encontrado no período.</p>
+            ) : (
+              <div className="h-[340px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={metaChart?.usuarios ?? []}
+                    margin={{ top: 20, right: 20, left: 0, bottom: 60 }}
+                    onClick={(event) => {
+                      const payload = event?.activePayload?.[0]?.payload as { usuarioId?: string } | undefined
+                      if (payload?.usuarioId) openDetails(payload.usuarioId)
+                    }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="usuarioNome" angle={-35} textAnchor="end" interval={0} height={90} />
+                    <YAxis allowDecimals={false} />
+                    <Tooltip />
+                    <ReferenceLine y={metaChart?.meta ?? 0} stroke="#dc2626" strokeDasharray="6 4" label="Meta" />
+                    <Bar dataKey="quantidade" name="Monitoramentos" fill="#2563eb" radius={[6, 6, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Ociosidade por usuário</CardTitle>
+            <CardDescription>
+              Soma das ociosidades no período selecionado.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {ociosidadePie.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Nenhuma ociosidade encontrada no período.</p>
+            ) : (
+              <div className="h-[340px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={ociosidadePie}
+                      dataKey="minutosOciosidade"
+                      nameKey="usuarioNome"
+                      outerRadius={115}
+                      label={({ usuarioNome, minutosOciosidade }) => `${usuarioNome}: ${formatMinutes(Number(minutosOciosidade))}`}
+                      onClick={(entry) => {
+                        const payload = entry as { usuarioId?: string }
+                        if (payload?.usuarioId) openDetails(payload.usuarioId)
+                      }}
+                    >
+                      {ociosidadePie.map((_, index) => (
+                        <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip formatter={formatTooltipMinutes} />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
       <Card>
         <CardHeader>
-          <CardTitle>Ociosidade por usuário</CardTitle>
+          <CardTitle>Total de monitoramento</CardTitle>
           <CardDescription>
-            Clique em um usuário para ver os intervalos que justificam o tempo calculado.
+            Quantidade por dia no período. Se houver mais de 30 dias, mostra os últimos 30 dias disponíveis.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3">
-          {loading ? (
-            <p className="text-sm text-muted-foreground">Calculando...</p>
-          ) : usuarios.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Nenhum dado encontrado para o período.</p>
+        <CardContent>
+          {totalPorDia.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Nenhum monitoramento encontrado no período.</p>
           ) : (
-            usuarios.map((item) => {
-              const width = maxIdle > 0 ? Math.max(3, Math.round((item.minutosOciosidade / maxIdle) * 100)) : 0
-              const detailsHref = `/admin/dashboard-administrativo/detalhes?usuarioId=${encodeURIComponent(item.usuarioId)}&inicio=${encodeURIComponent(inicio)}&fim=${encodeURIComponent(fim)}`
-              return (
-                <Link key={item.usuarioId} href={detailsHref} className="block rounded-xl border border-border p-4 transition hover:bg-muted/40">
-                  <div className="mb-2 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                    <div>
-                      <p className="font-semibold">{item.usuarioNome}</p>
-                      <p className="text-xs text-muted-foreground">{item.usuarioEmail || item.usuarioId}</p>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant="outline">{item.quantidadeMonitoramentos} monitoramento(s)</Badge>
-                      <Badge>{formatMinutes(item.minutosOciosidade)} ocioso</Badge>
-                    </div>
-                  </div>
-                  <div className="h-3 overflow-hidden rounded-full bg-muted">
-                    <div className="h-full rounded-full bg-primary" style={{ width: `${width}%` }} />
-                  </div>
-                </Link>
-              )
-            })
+            <div className="h-[340px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={totalPorDia} margin={{ top: 20, right: 20, left: 0, bottom: 20 }}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="label" />
+                  <YAxis allowDecimals={false} />
+                  <Tooltip />
+                  <Bar dataKey="quantidade" name="Monitoramentos" fill="#16a34a" radius={[6, 6, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           )}
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>Tempo de monitoramento das ações</CardTitle>
-          <CardDescription>Menor, maior e média de tempo por usuário.</CardDescription>
+          <CardTitle>Monitoramentos por monitor nos últimos 5 dias</CardTitle>
+          <CardDescription>
+            Mesmo com período maior, este gráfico usa sempre os últimos 5 dias disponíveis na tabela.
+          </CardDescription>
         </CardHeader>
-        <CardContent className="overflow-x-auto">
-          <table className="w-full min-w-[900px] text-sm">
-            <thead>
-              <tr className="border-b text-left text-xs text-muted-foreground">
-                <th className="py-2 pr-3">Usuário</th>
-                <th className="py-2 pr-3">Qtd.</th>
-                <th className="py-2 pr-3">Menor tempo</th>
-                <th className="py-2 pr-3">Maior tempo</th>
-                <th className="py-2 pr-3">Média</th>
-                <th className="py-2 pr-3">Total monitorando</th>
-                <th className="py-2 pr-3">Primeiro início</th>
-                <th className="py-2 pr-3">Última finalização</th>
-                <th className="py-2 pr-3"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {usuarios.map((item) => (
-                <tr key={item.usuarioId} className="border-b last:border-0">
-                  <td className="py-3 pr-3 font-medium">{item.usuarioNome}</td>
-                  <td className="py-3 pr-3">{item.quantidadeMonitoramentos}</td>
-                  <td className="py-3 pr-3">{formatMinutes(item.menorTempoMonitoramento)}</td>
-                  <td className="py-3 pr-3">{formatMinutes(item.maiorTempoMonitoramento)}</td>
-                  <td className="py-3 pr-3">{formatMinutes(item.mediaTempoMonitoramento)}</td>
-                  <td className="py-3 pr-3">{formatMinutes(item.minutosMonitorando)}</td>
-                  <td className="py-3 pr-3">{formatDateTime(item.primeiroInicio)}</td>
-                  <td className="py-3 pr-3">{formatDateTime(item.ultimaFinalizacao)}</td>
-                  <td className="py-3 pr-3 text-right">
-                    <Button asChild size="sm" variant="outline" className="bg-transparent">
-                      <Link href={`/admin/dashboard-administrativo/detalhes?usuarioId=${encodeURIComponent(item.usuarioId)}&inicio=${encodeURIComponent(inicio)}&fim=${encodeURIComponent(fim)}`}>
-                        <Eye className="mr-2 h-4 w-4" /> Detalhes
-                      </Link>
-                    </Button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <CardContent>
+          {(ultimos5?.dados?.length ?? 0) === 0 ? (
+            <p className="text-sm text-muted-foreground">Nenhum monitoramento encontrado para os últimos dias disponíveis.</p>
+          ) : (
+            <div className="h-[380px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={ultimos5?.dados ?? []} margin={{ top: 20, right: 20, left: 0, bottom: 20 }}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="label" />
+                  <YAxis allowDecimals={false} />
+                  <Tooltip />
+                  <Legend />
+                  {(ultimos5?.usuarios ?? []).map((usuario, index) => (
+                    <Bar
+                      key={usuario}
+                      dataKey={usuario}
+                      name={usuario}
+                      fill={CHART_COLORS[index % CHART_COLORS.length]}
+                      radius={[4, 4, 0, 0]}
+                    />
+                  ))}
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
