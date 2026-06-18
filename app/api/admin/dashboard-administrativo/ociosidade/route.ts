@@ -32,6 +32,12 @@ type MonitorRow = {
   cidDescricao: string | null
 }
 
+type FilterUserRow = {
+  usuarioId: string
+  usuarioNome: string | null
+  usuarioEmail: string | null
+}
+
 type IdleInterval = {
   dataReferencia: string
   idUsuario: string
@@ -179,6 +185,12 @@ function addToSummary(map: Map<string, SummaryRow>, user: { id: string; nome: st
   return row
 }
 
+function formatChartDate(value: string) {
+  const [year, month, day] = value.split("-")
+  if (!year || !month || !day) return value
+  return `${day}/${month}`
+}
+
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url)
@@ -198,6 +210,37 @@ export async function GET(req: Request) {
       )
     }
 
+    const filterUsers = await prisma.$queryRawUnsafe<FilterUserRow[]>(
+      `
+        SELECT DISTINCT
+          usuario_id AS "usuarioId",
+          usuario_nome AS "usuarioNome",
+          usuario_email AS "usuarioEmail"
+        FROM (
+          SELECT
+            id_usuario::text AS usuario_id,
+            usuario_nome::text AS usuario_nome,
+            usuario_email::text AS usuario_email
+          FROM public.cadastro_horario_trabalho
+
+          UNION ALL
+
+          SELECT
+            usuario_id::text AS usuario_id,
+            usuario_nome::text AS usuario_nome,
+            usuario_email::text AS usuario_email
+          FROM public.judicial_monitoramento_atribuicoes
+          WHERE data_referencia BETWEEN $1::date AND $2::date
+            AND usuario_id IS NOT NULL
+        ) users
+        WHERE usuario_id IS NOT NULL
+          AND usuario_id <> ''
+        ORDER BY COALESCE(usuario_nome, usuario_email, usuario_id)
+      `,
+      startParam,
+      endParam,
+    )
+
     const schedules = await prisma.$queryRawUnsafe<ScheduleRow[]>(
       `
         SELECT
@@ -212,11 +255,9 @@ export async function GET(req: Request) {
           hora_saida::text AS "horaSaida"
         FROM public.cadastro_horario_trabalho
         WHERE ativo = true
-          AND (NULLIF($3, '') IS NULL OR id_usuario::text = $3)
+          AND (NULLIF($1::text, '') IS NULL OR id_usuario::text = $1::text)
         ORDER BY id_usuario, dia_semana, id DESC
       `,
-      startParam,
-      endParam,
       userId,
     )
 
@@ -243,22 +284,14 @@ export async function GET(req: Request) {
           AND a.iniciado_em IS NOT NULL
           AND a.finalizado_em IS NOT NULL
           AND a.finalizado_em >= a.iniciado_em
-          AND a.status <> 'CANCELADO'
-          AND (NULLIF($3, '') IS NULL OR a.usuario_id::text = $3)
+          AND COALESCE(a.status, '') <> 'CANCELADO'
+          AND (NULLIF($3::text, '') IS NULL OR a.usuario_id::text = $3::text)
         ORDER BY a.usuario_id, a.data_referencia, a.iniciado_em
       `,
       startParam,
       endParam,
       userId,
     )
-
-    const scheduleByUserWeekday = new Map<string, ScheduleRow>()
-    for (const schedule of schedules) {
-      const key = `${schedule.idUsuario}|${schedule.diaSemana}`
-      if (!scheduleByUserWeekday.has(key)) {
-        scheduleByUserWeekday.set(key, schedule)
-      }
-    }
 
     const monitorsByUserDate = new Map<string, MonitorRow[]>()
     const summary = new Map<string, SummaryRow>()
@@ -432,7 +465,7 @@ export async function GET(req: Request) {
       `
         DELETE FROM public.tempo_ociosidade_usuario
         WHERE data_referencia BETWEEN $1::date AND $2::date
-          AND (NULLIF($3, '') IS NULL OR id_usuario::text = $3)
+          AND (NULLIF($3::text, '') IS NULL OR id_usuario::text = $3::text)
       `,
       startParam,
       endParam,
@@ -493,15 +526,83 @@ export async function GET(req: Request) {
       }))
       .sort((a, b) => b.minutosOciosidade - a.minutosOciosidade)
 
+    const diasDisponiveis = Array.from(new Set(monitors.map((monitor) => monitor.dataReferencia))).sort()
+    const metaMonitoramentos = diasDisponiveis.length * 20
+
+    const totalByDay = new Map<string, number>()
+    for (const monitor of monitors) {
+      totalByDay.set(monitor.dataReferencia, (totalByDay.get(monitor.dataReferencia) ?? 0) + 1)
+    }
+    const totalMonitoramentosPorDia = diasDisponiveis.slice(-30).map((date) => ({
+      dataReferencia: date,
+      label: formatChartDate(date),
+      quantidade: totalByDay.get(date) ?? 0,
+    }))
+
+    const usuariosComMonitoramento = Array.from(
+      new Set(monitors.map((monitor) => safeText(monitor.usuarioNome) || monitor.usuarioId)),
+    ).sort((a, b) => a.localeCompare(b, "pt-BR"))
+
+    const ultimos5Dias = diasDisponiveis.slice(-5)
+    const monitoramentosPorUsuarioUltimos5Dias = ultimos5Dias.map((date) => {
+      const row: Record<string, string | number> = {
+        dataReferencia: date,
+        label: formatChartDate(date),
+      }
+      for (const userName of usuariosComMonitoramento) {
+        row[userName] = monitors.filter(
+          (monitor) => monitor.dataReferencia === date && (safeText(monitor.usuarioNome) || monitor.usuarioId) === userName,
+        ).length
+      }
+      return row
+    })
+
+    const minutosMonitorandoTotal = summaryRows.reduce((sum, item) => sum + item.minutosMonitorando, 0)
+    const monitoramentosTotal = summaryRows.reduce((sum, item) => sum + item.quantidadeMonitoramentos, 0)
+
     return NextResponse.json({
       ok: true,
       periodo: { inicio: startParam, fim: endParam },
+      filtros: {
+        usuarios: filterUsers.map((item) => ({
+          usuarioId: item.usuarioId,
+          usuarioNome: safeText(item.usuarioNome) || item.usuarioId,
+          usuarioEmail: safeText(item.usuarioEmail),
+        })),
+      },
       resumo: {
         usuarios: summaryRows.length,
-        monitoramentos: summaryRows.reduce((sum, item) => sum + item.quantidadeMonitoramentos, 0),
-        minutosMonitorando: summaryRows.reduce((sum, item) => sum + item.minutosMonitorando, 0),
+        monitoramentos: monitoramentosTotal,
+        minutosMonitorando: minutosMonitorandoTotal,
+        mediaTempoMonitoramento: monitoramentosTotal > 0 ? Math.round(minutosMonitorandoTotal / monitoramentosTotal) : 0,
         minutosOciosidade: summaryRows.reduce((sum, item) => sum + item.minutosOciosidade, 0),
         maiorIntervaloOcioso: summaryRows.reduce((max, item) => Math.max(max, item.maiorIntervaloOcioso), 0),
+      },
+      graficos: {
+        metaMonitoramentosPorUsuario: {
+          diasConsiderados: diasDisponiveis.length,
+          metaDiaria: 20,
+          meta: metaMonitoramentos,
+          usuarios: summaryRows.map((item) => ({
+            usuarioId: item.usuarioId,
+            usuarioNome: item.usuarioNome,
+            quantidade: item.quantidadeMonitoramentos,
+            meta: metaMonitoramentos,
+          })),
+        },
+        ociosidadePorUsuario: summaryRows
+          .filter((item) => item.minutosOciosidade > 0)
+          .map((item) => ({
+            usuarioId: item.usuarioId,
+            usuarioNome: item.usuarioNome,
+            minutosOciosidade: item.minutosOciosidade,
+          })),
+        totalMonitoramentosPorDia,
+        monitoramentosPorUsuarioUltimos5Dias: {
+          usuarios: usuariosComMonitoramento,
+          dias: ultimos5Dias,
+          dados: monitoramentosPorUsuarioUltimos5Dias,
+        },
       },
       usuarios: summaryRows,
       intervalos: idleIntervals.map((item) => ({
@@ -514,7 +615,11 @@ export async function GET(req: Request) {
   } catch (error) {
     console.error("DASHBOARD_ADMINISTRATIVO_OCIosidade_ERROR", error)
     return NextResponse.json(
-      { ok: false, error: "Erro ao calcular dashboard administrativo." },
+      {
+        ok: false,
+        error: "Erro ao calcular dashboard administrativo.",
+        detail: error instanceof Error ? error.message : String(error),
+      },
       { status: 500 },
     )
   }
