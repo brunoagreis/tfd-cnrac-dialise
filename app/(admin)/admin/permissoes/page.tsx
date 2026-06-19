@@ -204,6 +204,10 @@ const PERMISSION_CATALOG: Array<{ modulo: string; acoes: string[] }> = [
     modulo: "ADMIN_JUDICIAL",
     acoes: ["visualizar", "editar_municipios", "editar_emails", "editar_prioridades"],
   },
+{
+  modulo: "DASHBOARD_ADMINISTRATIVO",
+  acoes: ["visualizar"],
+},
 ]
 
 function prettifyAction(value: string) {

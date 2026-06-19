@@ -97,6 +97,7 @@ const ADMIN_FALLBACK_PERMISSIONS = [
   "admin_judicial.editar_municipios",
   "admin_judicial.editar_emails",
   "admin_judicial.editar_prioridades",
+  "dashboard_administrativo.visualizar",
 ]
 
 function normalizeText(value: unknown) {

@@ -42,6 +42,8 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { JudicialBloqueioSequestroPanel } from "@/components/modules/judicial-bloqueio-sequestro-panel"
+import { JudicialPriorityReportShortcuts } from "@/app/(admin)/admin/judicial/page"
 
 type EspecialidadeSubItem = {
   especialidadeId: string
@@ -181,6 +183,8 @@ export function JudicialAdminPanel() {
   const [savingPriorities, setSavingPriorities] = useState(false)
   const [priorityProcedureOptions, setPriorityProcedureOptions] = useState<SigTapCadastroItem[]>([])
   const [loadingPriorityProcedureOptions, setLoadingPriorityProcedureOptions] = useState(false)
+  const [priorityCidOptions, setPriorityCidOptions] = useState<CidCatalogItem[]>([])
+  const [loadingPriorityCidOptions, setLoadingPriorityCidOptions] = useState(false)
 
   const [editingMunicipalityId, setEditingMunicipalityId] = useState("")
   const [municipalityName, setMunicipalityName] = useState("")
@@ -251,21 +255,7 @@ export function JudicialAdminPanel() {
     )
   }, [especialidadeSubItems])
 
-  const filteredPriorityCidOptions = useMemo(() => {
-    const query = priorityCidQuery.trim()
-    const normalizedQuery = normalizeCidCode(query)
-
-    return judicial.cidCatalog
-      .filter((item) => {
-        if (!query) return true
-        const code = normalizeCidCode(item.code)
-        return (
-          (!!normalizedQuery && code.includes(normalizedQuery)) ||
-          item.description.toLowerCase().includes(query.toLowerCase())
-        )
-      })
-      .slice(0, 8)
-  }, [judicial.cidCatalog, priorityCidQuery])
+  const filteredPriorityCidOptions = useMemo(() => priorityCidOptions, [priorityCidOptions])
 
   useEffect(() => {
     setFocusItems(judicial.priorityFocus.items ?? [])
@@ -304,6 +294,16 @@ export function JudicialAdminPanel() {
 
     return () => clearTimeout(timer)
   }, [focusMode, priorityProcedureQuery])
+
+  useEffect(() => {
+    if (focusMode !== "cid") return
+
+    const timer = setTimeout(() => {
+      void fetchPriorityCidOptions(priorityCidQuery)
+    }, 250)
+
+    return () => clearTimeout(timer)
+  }, [focusMode, priorityCidQuery])
 
   async function handleImportCore() {
     if (!selectedCoreFile) {
@@ -348,6 +348,53 @@ export function JudicialAdminPanel() {
     }
   }
 
+  async function fetchPriorityCidOptions(query: string) {
+    try {
+      setLoadingPriorityCidOptions(true)
+
+      const params = new URLSearchParams()
+      const normalized = normalizeCidCode(query)
+
+      if (normalized) {
+        params.set("q", normalized)
+      }
+
+      params.set("limit", "50")
+
+      const response = await fetch(
+        `/api/judicial/cid10${params.toString() ? `?${params.toString()}` : ""}`,
+        {
+          method: "GET",
+          cache: "no-store",
+        },
+      )
+
+      const json = await response.json().catch(() => ({}))
+
+      if (!response.ok || !json?.ok) {
+        toast.error(json?.error || "Erro ao carregar CID.")
+        setPriorityCidOptions([])
+        return
+      }
+
+      const items = Array.isArray(json?.items) ? json.items : []
+
+      setPriorityCidOptions(
+        items
+          .map((item: any) => ({
+            code: String(item?.code ?? item?.codigo ?? "").trim(),
+            description: String(item?.description ?? item?.descricao ?? "").trim(),
+          }))
+          .filter((item: CidCatalogItem) => item.code && item.description),
+      )
+    } catch (error) {
+      console.error("LOAD_PRIORITY_CID_ERROR", error)
+      toast.error("Erro ao carregar CID.")
+      setPriorityCidOptions([])
+    } finally {
+      setLoadingPriorityCidOptions(false)
+    }
+  }
   async function fetchMunicipalities() {
     try {
       setLoadingMunicipalities(true)
@@ -936,7 +983,7 @@ export function JudicialAdminPanel() {
     toast.success("Procedimento adicionado à lista de prioridade.")
   }
 
-  function addCidPriority(item: (typeof judicial.cidCatalog)[number]) {
+  function addCidPriority(item: CidCatalogItem) {
     const nextItem: PriorityFocusItem = {
       id: makeUiId("prio"),
       mode: "cid",
@@ -980,7 +1027,7 @@ export function JudicialAdminPanel() {
       return
     }
 
-    const exactMatch = judicial.cidCatalog.find(
+    const exactMatch = priorityCidOptions.find(
       (item) => normalizeCidCode(item.code) === normalizeCidCode(code),
     )
 
@@ -1101,7 +1148,8 @@ export function JudicialAdminPanel() {
         <TabsTrigger value="core">Importações CORE</TabsTrigger>
         <TabsTrigger value="municipios">Municípios</TabsTrigger>
         <TabsTrigger value="emails">E-mails</TabsTrigger>
-        <TabsTrigger value="prioridade">Prioridade / relatórios</TabsTrigger>
+        <TabsTrigger value="prioridade">Prioridades</TabsTrigger>
+        <TabsTrigger value="bloqueio-sequestro">Bloqueio / Sequestro</TabsTrigger>
         <TabsTrigger value="sigtap-cadastro">SIGTAP</TabsTrigger>
         <TabsTrigger value="especialidade-sub">Especialidade / Subespecialidade</TabsTrigger>
       </TabsList>
@@ -1862,47 +1910,10 @@ export function JudicialAdminPanel() {
           </CardContent>
         </Card>
 
-        <Card className="border-border">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Bloqueio / sequestro</CardTitle>
-            <CardDescription>
-              Relatório fake para impressão/exportação futura.
-            </CardDescription>
-          </CardHeader>
+        </TabsContent>
 
-          <CardContent className="space-y-3">
-            <div className="rounded-lg border border-border bg-muted/30 p-3">
-              <p className="text-xs text-muted-foreground">
-                Total bloqueado do estado
-              </p>
-              <p className="text-2xl font-bold">
-                R$ {seizure.totalState.toFixed(2)}
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              {seizure.byMunicipality.map((item) => (
-                <div
-                  key={item.municipality}
-                  className="flex items-center justify-between rounded-lg border border-border p-3"
-                >
-                  <span className="text-sm font-medium">
-                    {item.municipality}
-                  </span>
-                  <span className="text-sm">R$ {item.total.toFixed(2)}</span>
-                </div>
-              ))}
-            </div>
-
-            <Button
-              variant="outline"
-              className="bg-transparent"
-              onClick={exportSeizureCsv}
-            >
-              <Download className="mr-2 h-4 w-4" /> Exportar Excel/CSV
-            </Button>
-          </CardContent>
-        </Card>
+      <TabsContent value="bloqueio-sequestro" className="mt-0 space-y-4">
+        <JudicialBloqueioSequestroPanel />
       </TabsContent>
     </Tabs>
   )

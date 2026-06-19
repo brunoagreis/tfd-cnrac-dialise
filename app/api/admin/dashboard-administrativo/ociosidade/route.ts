@@ -212,10 +212,10 @@ export async function GET(req: Request) {
 
     const filterUsers = await prisma.$queryRawUnsafe<FilterUserRow[]>(
       `
-        SELECT DISTINCT
+SELECT
           usuario_id AS "usuarioId",
-          usuario_nome AS "usuarioNome",
-          usuario_email AS "usuarioEmail"
+          MAX(usuario_nome) AS "usuarioNome",
+          MAX(usuario_email) AS "usuarioEmail"
         FROM (
           SELECT
             id_usuario::text AS usuario_id,
@@ -235,7 +235,8 @@ export async function GET(req: Request) {
         ) users
         WHERE usuario_id IS NOT NULL
           AND usuario_id <> ''
-        ORDER BY COALESCE(usuario_nome, usuario_email, usuario_id)
+        GROUP BY usuario_id
+ORDER BY MAX(usuario_nome) NULLS LAST, MAX(usuario_email) NULLS LAST, usuario_id
       `,
       startParam,
       endParam,

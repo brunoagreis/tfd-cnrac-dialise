@@ -91,6 +91,11 @@ type SubSpecialtyOption = {
   nome: string
 }
 
+type CidOption = {
+  code: string
+  description: string
+}
+
 type HistoryItem = {
   id: string
   createdAt: string
@@ -400,6 +405,8 @@ function JudicialCaseDetailContent({
   const [loadingSpecialties, setLoadingSpecialties] = useState(false)
   const [loadingSubSpecialties, setLoadingSubSpecialties] = useState(false)
   const [cidSearch, setCidSearch] = useState("")
+  const [cidOptions, setCidOptions] = useState<CidOption[]>([])
+  const [loadingCids, setLoadingCids] = useState(false)
   const [selectedProcedure, setSelectedProcedure] = useState("")
   const [selectedProcedureSpecialty, setSelectedProcedureSpecialty] = useState("")
   const [selectedProcedureSubSpecialty, setSelectedProcedureSubSpecialty] = useState("")
@@ -636,17 +643,55 @@ function JudicialCaseDetailContent({
     }
   }, [selectedProcedureSpecialty])
 
-  const cidOptions = useMemo(
-    () =>
-      judicial.cidCatalog.filter(
-        (item) =>
-          !cidSearch ||
-          `${item.code} ${item.description}`
-            .toLowerCase()
-            .includes(cidSearch.toLowerCase()),
-      ),
-    [judicial.cidCatalog, cidSearch],
-  )
+  useEffect(() => {
+    let active = true
+    const controller = new AbortController()
+
+    async function loadCids() {
+      try {
+        setLoadingCids(true)
+        const response = await fetch(
+          `/api/judicial/cid10?q=${encodeURIComponent(cidSearch.trim())}&limit=300`,
+          {
+            cache: "no-store",
+            signal: controller.signal,
+          },
+        )
+
+        const data = await response.json().catch(() => ({}))
+
+        if (!response.ok || data?.ok === false) {
+          throw new Error(data?.error || "Erro ao carregar CID-10.")
+        }
+
+        if (!active) return
+
+        const items = Array.isArray(data?.items) ? data.items : []
+        setCidOptions(
+          items
+            .map((item: any) => ({
+              code: String(item?.code ?? item?.codigo ?? "").trim(),
+              description: String(item?.description ?? item?.descricao ?? "").trim(),
+            }))
+            .filter((item: CidOption) => item.code && item.description),
+        )
+      } catch (error) {
+        if (!active || controller.signal.aborted) return
+        console.error("[JudicialCaseDetail] erro ao carregar CID-10:", error)
+        setCidOptions([])
+      } finally {
+        if (active) setLoadingCids(false)
+      }
+    }
+
+    const timer = window.setTimeout(loadCids, 250)
+
+    return () => {
+      active = false
+      controller.abort()
+      window.clearTimeout(timer)
+    }
+  }, [cidSearch])
 
   const allAttachments = useMemo(() => {
     const items: JudicialAttachment[] = [
@@ -1253,23 +1298,95 @@ function JudicialCaseDetailContent({
     }
   }
 
-  function handleAddCid() {
+  async function handleAddCid() {
     if (!user) return
+
     const item = cidOptions.find((option) => option.code === selectedCid)
+
     if (!item) {
       toast.error("Selecione um CID.")
       return
     }
-    judicial.addCid(caseItem.id, {
-      code: item.code,
-      description: item.description,
-      user,
-    })
-    setSelectedCid("")
-    setCidSearch("")
-    toast.success("CID adicionado.")
+
+    try {
+      const response = await fetch(
+        `/api/judicial/casos/${encodeURIComponent(caseItem.id)}/cids`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            code: item.code,
+            description: item.description,
+            user,
+          }),
+        },
+      )
+
+      const data = await response.json().catch(() => ({}))
+
+      if (!response.ok || data?.ok === false) {
+        throw new Error(data?.error || "Erro ao adicionar CID judicial.")
+      }
+
+      toast.success("CID adicionado e salvo no banco.")
+      setSelectedCid("")
+      setCidSearch("")
+
+      window.location.reload()
+    } catch (error) {
+      console.error("[JudicialCaseDetail] erro ao adicionar CID:", error)
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Erro ao adicionar CID judicial.",
+      )
+    }
   }
 
+  async function handleInactivateCid(code: string) {
+    if (!user) return
+
+    const reason = window.prompt(`Informe o motivo para inativar o CID ${code}:`, "")
+
+    if (reason === null) return
+
+    const confirmed = window.confirm(`Confirma inativar o CID ${code}?`)
+    if (!confirmed) return
+
+    try {
+      const response = await fetch(
+        `/api/judicial/casos/${encodeURIComponent(caseItem.id)}/cids/${encodeURIComponent(code)}`,
+        {
+          method: "DELETE",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            reason: reason.trim() || undefined,
+            user,
+          }),
+        },
+      )
+
+      const data = await response.json().catch(() => ({}))
+
+      if (!response.ok || data?.ok === false) {
+        throw new Error(data?.error || "Erro ao inativar CID judicial.")
+      }
+
+      toast.success("CID inativado.")
+      window.location.reload()
+    } catch (error) {
+      console.error("[JudicialCaseDetail] erro ao inativar CID:", error)
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Erro ao inativar CID judicial.",
+      )
+    }
+  }
   function handleEditFicha(item: JudicialFicha) {
     setEditingFichaId(item.id)
     setFichaSystem(item.system)
@@ -1849,14 +1966,14 @@ function JudicialCaseDetailContent({
               value={selectedCid}
               onChange={(e) => setSelectedCid(e.target.value)}
             >
-              <option value="">Selecione um CID</option>
+              <option value="">{loadingCids ? "Carregando CID..." : "Selecione um CID"}</option>
               {cidOptions.map((item) => (
                 <option key={item.code} value={item.code}>
                   {item.code} - {item.description}
                 </option>
               ))}
             </select>
-            <Button onClick={handleAddCid}>Adicionar CID</Button>
+            <Button onClick={handleAddCid} disabled={loadingCids || !selectedCid}>Adicionar CID</Button>
             <div className="space-y-2">
               {caseItem.cids.map((item) => (
                 <div
@@ -1874,7 +1991,7 @@ function JudicialCaseDetailContent({
                   <Button
                     variant="outline"
                     className="bg-transparent"
-                    onClick={() => user && judicial.toggleCid(caseItem.id, item.id, user)}
+                    onClick={() => handleInactivateCid(item.code)}
                   >
                     {item.active === false ? "Ativar" : "Inativar"}
                   </Button>

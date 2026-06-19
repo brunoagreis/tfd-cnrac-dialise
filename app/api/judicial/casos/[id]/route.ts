@@ -169,6 +169,13 @@ function text(value: unknown) {
   return String(value ?? "").trim()
 }
 
+function splitCatalogValues(value: unknown) {
+  return text(value)
+    .split(/[|;\n]+/g)
+    .map((item) => item.trim())
+    .filter(Boolean)
+}
+
 function jsonArray(value: unknown): string[] {
   if (Array.isArray(value)) {
     return value.map((item) => text(item)).filter(Boolean)
@@ -779,21 +786,17 @@ export async function GET(
             ]
           : []
 
-    const cidCode = text(row.cid10 || row.cidCodigoBase)
-    const cidDescription = text(row.cidDescricaoBase)
+    const cidCodes = splitCatalogValues(row.cid10 || row.cidCodigoBase)
+    const cidDescriptions = splitCatalogValues(row.cidDescricaoBase)
 
-    const cids = cidCode
-      ? [
-          {
-            id: `${demandaId || monitoramentoId}-cid`,
-            code: cidCode,
-            description: cidDescription || cidCode,
-            active: true,
-            createdAt: row.createdAtDemanda ?? row.createdAtBase ?? new Date().toISOString(),
-            createdByName: text(row.criadoPorNome || "Sistema"),
-          },
-        ]
-      : []
+    const cids = cidCodes.map((code, index) => ({
+      id: `${demandaId || monitoramentoId}-cid-${index}-${code}`,
+      code,
+      description: cidDescriptions[index] || code,
+      active: true,
+      createdAt: row.createdAtDemanda ?? row.createdAtBase ?? new Date().toISOString(),
+      createdByName: text(row.criadoPorNome || "Sistema"),
+    }))
 
     const fichasFromTable = fichasRows.map((item) => ({
       id: item.id,

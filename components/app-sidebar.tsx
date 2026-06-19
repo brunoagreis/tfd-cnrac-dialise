@@ -178,6 +178,14 @@ export function AppSidebar({
       permissionAction: "visualizar",
     },
     {
+      label: "Dashboard Admin",
+      href: "/admin/dashboard-administrativo",
+      icon: BarChart3,
+      section: "admin",
+      permissionModule: "DASHBOARD_ADMINISTRATIVO",
+      permissionAction: "visualizar",
+    },
+    {
       label: "Meu Perfil",
       href: "/perfil",
       icon: User,

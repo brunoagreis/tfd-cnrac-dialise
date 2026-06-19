@@ -323,25 +323,52 @@ export default function DashboardAdministrativoPage() {
             {(metaChart?.usuarios?.length ?? 0) === 0 ? (
               <p className="text-sm text-muted-foreground">Nenhum monitoramento encontrado no período.</p>
             ) : (
-              <div className="h-[340px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={metaChart?.usuarios ?? []}
-                    margin={{ top: 20, right: 20, left: 0, bottom: 60 }}
-                    onClick={(event) => {
-                      const payload = event?.activePayload?.[0]?.payload as { usuarioId?: string } | undefined
-                      if (payload?.usuarioId) openDetails(payload.usuarioId)
-                    }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="usuarioNome" angle={-35} textAnchor="end" interval={0} height={90} />
-                    <YAxis allowDecimals={false} />
-                    <Tooltip />
-                    <ReferenceLine y={metaChart?.meta ?? 0} stroke="#dc2626" strokeDasharray="6 4" label="Meta" />
-                    <Bar dataKey="quantidade" name="Monitoramentos" fill="#2563eb" radius={[6, 6, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
+<div className="h-[380px]">
+  <ResponsiveContainer width="100%" height="100%">
+    <BarChart
+      layout="vertical"
+      data={metaChart?.usuarios ?? []}
+      margin={{ top: 20, right: 70, left: 30, bottom: 20 }}
+      onClick={(event) => {
+        const payload = event?.activePayload?.[0]?.payload as { usuarioId?: string } | undefined
+        if (payload?.usuarioId) openDetails(payload.usuarioId)
+      }}
+    >
+      <CartesianGrid strokeDasharray="3 3" />
+      <XAxis
+        type="number"
+        allowDecimals={false}
+        domain={[
+          0,
+          Math.max(
+            1,
+            metaChart?.meta ?? 0,
+            ...((metaChart?.usuarios ?? []).map((item) => item.quantidade ?? 0)),
+          ),
+        ]}
+      />
+      <YAxis
+        dataKey="usuarioNome"
+        type="category"
+        width={140}
+        interval={0}
+      />
+      <Tooltip />
+      <ReferenceLine
+        x={metaChart?.meta ?? 0}
+        stroke="#dc2626"
+        strokeDasharray="6 4"
+        label="Meta"
+      />
+      <Bar
+        dataKey="quantidade"
+        name="Monitoramentos"
+        fill="#2563eb"
+        radius={[0, 6, 6, 0]}
+      />
+    </BarChart>
+  </ResponsiveContainer>
+</div>
             )}
           </CardContent>
         </Card>
