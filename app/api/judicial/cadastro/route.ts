@@ -51,10 +51,6 @@ type CidEntry = {
   description: string
 }
 
-type ModuleEnumRow = {
-  value: string
-}
-
 function normalizeText(value: unknown) {
   return String(value ?? "").trim()
 }
@@ -73,7 +69,6 @@ function buildId(prefix: string) {
 
 async function buildProtocol(tx: typeof prisma) {
   const year = new Date().getFullYear()
-
   const rows = await tx.$queryRawUnsafe<Array<{ total: number | bigint }>>(
     `
       SELECT COUNT(*) AS total
@@ -81,51 +76,8 @@ async function buildProtocol(tx: typeof prisma) {
       WHERE LOWER(COALESCE(modulo::text, '')) = 'judicial'
     `,
   )
-
   const total = Number(rows?.[0]?.total ?? 0) + 1
   return `JUD-${year}-${String(total).padStart(5, "0")}`
-}
-
-async function ensureJudicialModuleEnumValue() {
-  await prisma.$executeRawUnsafe(`
-    DO $$
-    BEGIN
-      IF NOT EXISTS (
-        SELECT 1
-        FROM pg_type t
-        INNER JOIN pg_enum e
-          ON e.enumtypid = t.oid
-        WHERE t.typname = 'Module'
-          AND LOWER(e.enumlabel::text) = 'judicial'
-      ) THEN
-        ALTER TYPE public."Module" ADD VALUE 'judicial';
-      END IF;
-    END $$;
-  `)
-}
-
-async function resolveModuleEnumValue(tx: typeof prisma, moduleName: string) {
-  const rows = await tx.$queryRawUnsafe<ModuleEnumRow[]>(
-    `
-      SELECT e.enumlabel::text AS value
-      FROM pg_type t
-      INNER JOIN pg_enum e
-        ON e.enumtypid = t.oid
-      WHERE t.typname = 'Module'
-        AND LOWER(e.enumlabel::text) = LOWER($1)
-      ORDER BY e.enumsortorder
-      LIMIT 1
-    `,
-    moduleName,
-  )
-
-  const value = normalizeText(rows[0]?.value)
-
-  if (!value) {
-    throw new Error(`Valor do mÃ³dulo ${moduleName} nÃ£o existe no enum Module do banco.`)
-  }
-
-  return value
 }
 
 export async function GET() {
@@ -133,8 +85,7 @@ export async function GET() {
     const [municipios, sigtap, cid10, especialidades] = await Promise.all([
       prisma.$queryRawUnsafe<CatalogMunicipioRow[]>(
         `
-          SELECT DISTINCT
-            NULLIF(TRIM(municipio), '') AS municipio
+          SELECT DISTINCT NULLIF(TRIM(municipio), '') AS municipio
           FROM public.pacientes
           WHERE NULLIF(TRIM(municipio), '') IS NOT NULL
           ORDER BY municipio
@@ -142,11 +93,7 @@ export async function GET() {
       ),
       prisma.$queryRawUnsafe<CatalogSigtapRow[]>(
         `
-          SELECT
-            id::text AS id,
-            codigo,
-            descricao,
-            ativo
+          SELECT id::text AS id, codigo, descricao, ativo
           FROM public.admin_judicial_sigtap
           WHERE COALESCE(ativo, TRUE) = TRUE
           ORDER BY descricao
@@ -154,11 +101,7 @@ export async function GET() {
       ),
       prisma.$queryRawUnsafe<CatalogCidRow[]>(
         `
-          SELECT
-            id::text AS id,
-            codigo,
-            descricao,
-            ativo
+          SELECT id::text AS id, codigo, descricao, ativo
           FROM public.admin_judicial_cid10
           WHERE COALESCE(ativo, TRUE) = TRUE
           ORDER BY codigo
@@ -183,9 +126,7 @@ export async function GET() {
 
     return NextResponse.json({
       ok: true,
-      municipios: municipios
-        .map((row) => normalizeUpper(row.municipio))
-        .filter(Boolean),
+      municipios: municipios.map((row) => normalizeUpper(row.municipio)).filter(Boolean),
       sigtap: sigtap.map((row) => ({
         id: row.id,
         sigtapCode: onlyDigits(row.codigo),
@@ -205,9 +146,8 @@ export async function GET() {
     })
   } catch (error) {
     console.error("[GET /api/judicial/cadastro] erro:", error)
-
     return NextResponse.json(
-      { ok: false, error: "Erro ao carregar catÃ¡logos do Judicial." },
+      { ok: false, error: "Erro ao carregar catalogos do Judicial." },
       { status: 500 },
     )
   }
@@ -215,8 +155,6 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    await ensureJudicialModuleEnumValue()
-
     const body = await req.json().catch(() => null)
 
     const pacienteId = normalizeText(body?.patientId)
@@ -232,20 +170,14 @@ export async function POST(req: NextRequest) {
     const criadoPor = normalizeText(body?.criadoPor)
     const criadoPorNome = normalizeUpper(body?.criadoPorNome)
 
-    const procedures = Array.isArray(body?.procedures)
-      ? (body.procedures as ProcedureEntry[])
-      : []
-
-    const cids = Array.isArray(body?.cids)
-      ? (body.cids as CidEntry[])
-      : []
-
+    const procedures = Array.isArray(body?.procedures) ? (body.procedures as ProcedureEntry[]) : []
+    const cids = Array.isArray(body?.cids) ? (body.cids as CidEntry[]) : []
     const primaryProcedure = procedures[0]
     const primaryCid = cids[0]
 
     if (
       !pacienteId ||
-      !oficioNumber ||
+      (isIntimation === "sim" && !oficioNumber) ||
       !receivedAt ||
       !actionRecords ||
       !pgeNetNumber ||
@@ -253,33 +185,21 @@ export async function POST(req: NextRequest) {
       !municipalityName
     ) {
       return NextResponse.json(
-        { ok: false, error: "Preencha os campos obrigatÃ³rios do Judicial." },
+        { ok: false, error: "Preencha os campos obrigatorios do Judicial." },
         { status: 400 },
       )
     }
 
-    if (!primaryProcedure) {
+    if (!primaryProcedure?.sigtapCode || !primaryProcedure?.description || !primaryProcedure?.specialty || !primaryProcedure?.subSpecialty) {
       return NextResponse.json(
-        { ok: false, error: "Informe ao menos 1 procedimento." },
+        { ok: false, error: "Informe ao menos 1 procedimento completo." },
         { status: 400 },
       )
     }
 
-    if (
-      !primaryProcedure.sigtapCode ||
-      !primaryProcedure.description ||
-      !primaryProcedure.specialty ||
-      !primaryProcedure.subSpecialty
-    ) {
+    if (!primaryCid?.code || !primaryCid?.description) {
       return NextResponse.json(
-        { ok: false, error: "O procedimento principal precisa ter SIGTAP, descriÃ§Ã£o, especialidade e subespecialidade." },
-        { status: 400 },
-      )
-    }
-
-    if (!primaryCid || !primaryCid.code || !primaryCid.description) {
-      return NextResponse.json(
-        { ok: false, error: "Informe ao menos 1 CID com cÃ³digo e descriÃ§Ã£o." },
+        { ok: false, error: "Informe ao menos 1 CID completo." },
         { status: 400 },
       )
     }
@@ -287,12 +207,7 @@ export async function POST(req: NextRequest) {
     const result = await prisma.$transaction(async (tx) => {
       const pacienteRows = await tx.$queryRawUnsafe<PacienteRow[]>(
         `
-          SELECT
-            id::text AS id,
-            nome,
-            cpf,
-            "cartaoSus" AS "cartaoSus",
-            municipio
+          SELECT id::text AS id, nome, cpf, "cartaoSus" AS "cartaoSus", municipio
           FROM public.pacientes
           WHERE id::text = $1
           LIMIT 1
@@ -301,31 +216,24 @@ export async function POST(req: NextRequest) {
       )
 
       const paciente = pacienteRows[0]
-
-      if (!paciente) {
-        throw new Error("Paciente nÃ£o encontrado.")
-      }
+      if (!paciente) throw new Error("Paciente nao encontrado.")
 
       const demandaId = buildId("dem_")
       const protocolo = await buildProtocol(tx)
-      const moduleEnumValue = await resolveModuleEnumValue(tx, "judicial")
 
       const observacoesBloco = [
-        `TIPO DE INTIMAÃ‡ÃƒO: ${isIntimation === "sim" ? "SIM" : "NÃƒO"}`,
-        `OFÃCIO/INTIMAÃ‡ÃƒO: ${oficioNumber}`,
+        `TIPO DE INTIMACAO: ${isIntimation === "sim" ? "SIM" : "NAO"}`,
+        oficioNumber ? `OFICIO/INTIMACAO: ${oficioNumber}` : "",
         `DATA DE RECEBIMENTO: ${receivedAt}`,
-        reiterationAt ? `DATA DA REITERAÃ‡ÃƒO: ${reiterationAt}` : "",
-        `AUTOS DA AÃ‡ÃƒO: ${actionRecords}`,
+        reiterationAt ? `DATA DA REITERACAO: ${reiterationAt}` : "",
+        `AUTOS DA ACAO: ${actionRecords}`,
         `PGE.NET: ${pgeNetNumber}`,
         `PRAZO (DIAS): ${deadlineDays}`,
         deadlineAt ? `PRAZO FINAL: ${deadlineAt}` : "",
         procedures.length > 1
           ? `PROCEDIMENTOS ADICIONAIS: ${procedures
               .slice(1)
-              .map(
-                (item) =>
-                  `${onlyDigits(item.sigtapCode)} - ${normalizeUpper(item.description)} - ${normalizeUpper(item.specialty)} - ${normalizeUpper(item.subSpecialty)}`,
-              )
+              .map((item) => `${onlyDigits(item.sigtapCode)} - ${normalizeUpper(item.description)} - ${normalizeUpper(item.specialty)} - ${normalizeUpper(item.subSpecialty)}`)
               .join(" | ")}`
           : "",
         cids.length > 1
@@ -338,48 +246,26 @@ export async function POST(req: NextRequest) {
         .filter(Boolean)
         .join("\n")
 
-      await tx.$executeRawUnsafe(
-        `
-          INSERT INTO public.demandas (
-            id,
-            protocolo,
-            "pacienteId",
-            modulo,
-            "localSolicitante",
-            "emailSolicitante",
-            "acaoJudicial",
-            "codigoSigtap",
-            "descricaoSigtap",
-            cid10,
-            especialidade,
-            subespecialidade,
-            "observacoesUnidade",
-            "localSolicitado",
-            "tipoSolicitacao",
-            "criadoPor",
-            "criadoPorNome",
-            status,
-            "createdAt",
-            "updatedAt"
-          )
-          VALUES (
-            $1, $2, $3, $4::"Module", 'JUDICIAL', 'judicial@sigajus.local', TRUE, $5, $6, $7, $8, $9, $10, $11, NULL, $12, $13, NOW(), NOW()
-          )
-        `,
-        demandaId,
-        protocolo,
-        pacienteId,
-        moduleEnumValue,
-        onlyDigits(primaryProcedure.sigtapCode),
-        normalizeUpper(primaryProcedure.description),
-        normalizeUpper(primaryCid.code),
-        normalizeUpper(primaryProcedure.specialty),
-        normalizeUpper(primaryProcedure.subSpecialty),
-        observacoesBloco,
-        municipalityName,
-        criadoPor || null,
-        criadoPorNome || null,
-      )
+      await tx.demanda.create({
+        data: {
+          id: demandaId,
+          protocolo,
+          pacienteId,
+          modulo: "judicial" as any,
+          localSolicitante: "JUDICIAL",
+          emailSolicitante: "judicial@sigajus.local",
+          acaoJudicial: true,
+          codigoSigtap: onlyDigits(primaryProcedure.sigtapCode),
+          descricaoSigtap: normalizeUpper(primaryProcedure.description),
+          cid10: normalizeUpper(primaryCid.code),
+          especialidade: normalizeUpper(primaryProcedure.specialty),
+          subespecialidade: normalizeUpper(primaryProcedure.subSpecialty),
+          observacoesUnidade: observacoesBloco,
+          localSolicitado: municipalityName,
+          criadoPor: criadoPor || null,
+          criadoPorNome: criadoPorNome || null,
+        },
+      })
 
       await tx.$executeRawUnsafe(
         `
@@ -448,9 +334,7 @@ export async function POST(req: NextRequest) {
             "createdByCpf",
             "assinaturaUrl"
           )
-          VALUES (
-            $1, $2, $3, NULL, NOW(), $4, $5, NULL, NULL
-          )
+          VALUES ($1, $2, $3, NULL, NOW(), $4, $5, NULL, NULL)
         `,
         buildId("int_"),
         demandaId,
@@ -459,19 +343,12 @@ export async function POST(req: NextRequest) {
         criadoPorNome || null,
       )
 
-      return {
-        id: demandaId,
-        protocolo,
-      }
+      return { id: demandaId, protocolo }
     })
 
-    return NextResponse.json({
-      ok: true,
-      item: result,
-    })
+    return NextResponse.json({ ok: true, item: result })
   } catch (error) {
     console.error("[POST /api/judicial/cadastro] erro:", error)
-
     return NextResponse.json(
       { ok: false, error: error instanceof Error ? error.message : "Erro ao salvar cadastro do Judicial." },
       { status: 500 },
