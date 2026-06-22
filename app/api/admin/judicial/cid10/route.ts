@@ -17,21 +17,43 @@ function normalizeText(value: unknown) {
   return String(value ?? "").trim()
 }
 
+function normalizeCidCode(value: unknown) {
+  return normalizeText(value)
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "")
+}
+
 export async function GET(req: NextRequest) {
   try {
-    const q = normalizeText(req.nextUrl.searchParams.get("q")).toLowerCase()
+    const rawQuery = normalizeText(req.nextUrl.searchParams.get("q"))
+    const q = rawQuery.toLowerCase()
+    const qCode = normalizeCidCode(rawQuery)
     const params: unknown[] = []
     const whereParts = [`c.ativo = TRUE`]
 
-    if (q) {
+    if (rawQuery) {
       params.push(`%${q}%`)
-      const idx = params.length
-      whereParts.push(`
-        (
-          LOWER(COALESCE(c.codigo, '')) LIKE $${idx}
-          OR LOWER(COALESCE(c.descricao, '')) LIKE $${idx}
-        )
-      `)
+      const textIndex = params.length
+
+      if (qCode) {
+        params.push(`%${qCode}%`)
+        const codeIndex = params.length
+
+        whereParts.push(`
+          (
+            LOWER(COALESCE(c.codigo, '')) LIKE $${textIndex}
+            OR LOWER(COALESCE(c.descricao, '')) LIKE $${textIndex}
+            OR regexp_replace(UPPER(COALESCE(c.codigo, '')), '[^A-Z0-9]', '', 'g') LIKE $${codeIndex}
+          )
+        `)
+      } else {
+        whereParts.push(`
+          (
+            LOWER(COALESCE(c.codigo, '')) LIKE $${textIndex}
+            OR LOWER(COALESCE(c.descricao, '')) LIKE $${textIndex}
+          )
+        `)
+      }
     }
 
     const rows = await prisma.$queryRawUnsafe<Cid10Row[]>(
@@ -46,7 +68,7 @@ export async function GET(req: NextRequest) {
         FROM public.admin_judicial_cid10 c
         WHERE ${whereParts.join(" AND ")}
         ORDER BY c.codigo ASC
-        LIMIT 30
+        LIMIT 50
       `,
       ...params,
     )
