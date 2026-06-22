@@ -42,10 +42,29 @@ type UserRow = {
   email: string
 }
 
+type Suggestion = {
+  value: string
+  label: string
+}
+
 const filterKeys = ["q", "nome", "cpf", "cns", "processo", "pgenet", "cid", "sigtap", "especialidade", "subespecialidade", "atribuido"] as const
 type FilterKey = typeof filterKeys[number]
 
 const emptyFilters = Object.fromEntries(filterKeys.map((key) => [key, ""])) as Record<FilterKey, string>
+
+const suggestionFieldByLabel: Record<string, string> = {
+  "Busca geral": "q",
+  Nome: "nome",
+  CPF: "cpf",
+  CNS: "cns",
+  Processo: "processo",
+  "PGE.net": "pgenet",
+  CID: "cid",
+  SIGTAP: "sigtap",
+  Especialidade: "especialidade",
+  Subespecialidade: "subespecialidade",
+  "Atribuído para": "atribuido",
+}
 
 function formatDate(value: string) {
   if (!value) return "Não informado"
@@ -235,5 +254,74 @@ export default function JudicialAtribuicaoManualPage() {
 }
 
 function Field({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
-  return <div><Label className="mb-1 block text-xs">{label}</Label><Input value={value} onChange={(event) => onChange(event.target.value)} placeholder={label} /></div>
+  const [options, setOptions] = useState<Suggestion[]>([])
+  const [loading, setLoading] = useState(false)
+  const [open, setOpen] = useState(false)
+  const field = suggestionFieldByLabel[label] || "q"
+
+  useEffect(() => {
+    const q = value.trim()
+    if (q.length < 2) {
+      setOptions([])
+      setOpen(false)
+      return
+    }
+
+    const timer = setTimeout(async () => {
+      try {
+        setLoading(true)
+        const params = new URLSearchParams({ field, q })
+        const response = await fetch(`/api/admin/judicial/atribuicao-manual/sugestoes?${params.toString()}`, { cache: "no-store" })
+        const json = await response.json().catch(() => ({}))
+        const items = response.ok && json?.ok && Array.isArray(json?.items) ? json.items : []
+        setOptions(items)
+        setOpen(true)
+      } catch (error) {
+        console.error("LOAD_MANUAL_ASSIGNMENT_SUGGESTIONS_ERROR", error)
+        setOptions([])
+      } finally {
+        setLoading(false)
+      }
+    }, 250)
+
+    return () => clearTimeout(timer)
+  }, [field, value])
+
+  return (
+    <div className="relative">
+      <Label className="mb-1 block text-xs">{label}</Label>
+      <Input
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        onFocus={() => {
+          if (options.length > 0) setOpen(true)
+        }}
+        placeholder={label}
+      />
+      {open && value.trim().length >= 2 ? (
+        <div className="absolute z-50 mt-1 max-h-56 w-full overflow-auto rounded-md border border-border bg-background p-1 shadow-lg">
+          {loading ? (
+            <p className="px-3 py-2 text-sm text-muted-foreground">Carregando...</p>
+          ) : options.length === 0 ? (
+            <p className="px-3 py-2 text-sm text-muted-foreground">Nenhuma sugestão localizada.</p>
+          ) : (
+            options.map((item) => (
+              <button
+                key={`${field}-${item.value}-${item.label}`}
+                type="button"
+                className="block w-full rounded px-3 py-2 text-left text-sm hover:bg-muted"
+                onClick={() => {
+                  onChange(item.value)
+                  setOpen(false)
+                  setOptions([])
+                }}
+              >
+                {item.label}
+              </button>
+            ))
+          )}
+        </div>
+      ) : null}
+    </div>
+  )
 }
