@@ -17,7 +17,11 @@ export type CidEntry = {
 }
 
 function normalizeText(value: unknown) {
-  return String(value ?? "").trim()
+  return String(value ?? "").trim().replace(/\s+/g, " ")
+}
+
+function normalizeCidCode(value: unknown) {
+  return normalizeText(value).toUpperCase().replace(/[^A-Z0-9]/g, "")
 }
 
 export function CidMultiEntry({
@@ -30,16 +34,29 @@ export function CidMultiEntry({
   onChange: (next: CidEntry[]) => void
 }) {
   const [query, setQuery] = useState("")
-  const [selectedCode, setSelectedCode] = useState("")
+  const [selected, setSelected] = useState<CidCatalogItem | null>(null)
   const [remoteCatalog, setRemoteCatalog] = useState<CidCatalogItem[]>([])
   const [loading, setLoading] = useState(false)
+  const [open, setOpen] = useState(false)
 
   useEffect(() => {
+    const q = query.trim()
+
+    if (!q || selected) {
+      setRemoteCatalog([])
+      setLoading(false)
+      return
+    }
+
     const controller = new AbortController()
     const timer = window.setTimeout(async () => {
       try {
         setLoading(true)
-        const response = await fetch(`/api/judicial/cid10?q=${encodeURIComponent(query.trim())}&limit=50`, {
+
+        const params = new URLSearchParams()
+        params.set("q", q)
+
+        const response = await fetch(`/api/admin/judicial/cid10?${params.toString()}`, {
           cache: "no-store",
           signal: controller.signal,
         })
@@ -54,10 +71,11 @@ export function CidMultiEntry({
           items
             .map((item: any) => ({
               code: normalizeText(item?.code ?? item?.codigo),
-              description: normalizeText(item?.description ?? item?.descricao),
+              description: normalizeText(item?.description ?? item?.descricao).toUpperCase(),
             }))
             .filter((item: CidCatalogItem) => item.code && item.description),
         )
+        setOpen(true)
       } catch (error) {
         if ((error as Error)?.name === "AbortError") return
         console.error("[CidMultiEntry] erro ao carregar CID-10:", error)
@@ -71,31 +89,52 @@ export function CidMultiEntry({
       controller.abort()
       window.clearTimeout(timer)
     }
-  }, [query])
+  }, [query, selected])
 
-  const sourceCatalog = remoteCatalog.length > 0 ? remoteCatalog : catalog
+  const fallbackCatalog = useMemo(
+    () =>
+      catalog
+        .map((item) => ({
+          code: normalizeText(item.code),
+          description: normalizeText(item.description).toUpperCase(),
+        }))
+        .filter((item) => item.code && item.description),
+    [catalog],
+  )
+
+  const sourceCatalog = remoteCatalog.length > 0 ? remoteCatalog : fallbackCatalog
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
+    const qCid = normalizeCidCode(query)
     const items = sourceCatalog.filter((item) => item.code && item.description)
-    if (!q) return items.slice(0, 8)
+
+    if (!q) return []
+
     return items
-      .filter((item) => `${item.code} ${item.description}`.toLowerCase().includes(q))
-      .slice(0, 20)
+      .filter((item) => {
+        const code = normalizeCidCode(item.code)
+        const label = `${item.code} ${item.description}`.toLowerCase()
+        return label.includes(q) || (!!qCid && code.includes(qCid))
+      })
+      .slice(0, 30)
   }, [sourceCatalog, query])
 
-  const selected = sourceCatalog.find((item) => item.code === selectedCode)
-
   function selectItem(item: CidCatalogItem) {
-    setSelectedCode(item.code)
+    setSelected(item)
     setQuery(`${item.code} - ${item.description}`)
+    setOpen(false)
+    setRemoteCatalog([])
   }
 
   function handleAdd() {
     if (!selected) return
+
     onChange([...value, { code: selected.code, description: selected.description }])
     setQuery("")
-    setSelectedCode("")
+    setSelected(null)
+    setRemoteCatalog([])
+    setOpen(false)
   }
 
   function removeAt(index: number) {
@@ -110,11 +149,22 @@ export function CidMultiEntry({
           value={query}
           onChange={(e) => {
             setQuery(e.target.value)
-            setSelectedCode("")
+            setSelected(null)
+            setOpen(true)
+          }}
+          onFocus={() => {
+            if (!selected && query.trim()) setOpen(true)
           }}
           placeholder="Digite o CID ou a descrição"
         />
-        {query && (
+
+        {selected ? (
+          <div className="mt-2 rounded-xl border border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+            Selecionado: <span className="font-medium text-foreground">{selected.code}</span> - {selected.description}
+          </div>
+        ) : null}
+
+        {open && query.trim() && !selected ? (
           <div className="mt-2 max-h-52 overflow-auto rounded-xl border border-border bg-background p-1">
             {loading ? (
               <div className="px-3 py-2 text-sm text-muted-foreground">Carregando CID...</div>
@@ -133,7 +183,7 @@ export function CidMultiEntry({
               <div className="px-3 py-2 text-sm text-muted-foreground">Nenhum CID encontrado.</div>
             )}
           </div>
-        )}
+        ) : null}
 
         <div className="mt-3">
           <Button type="button" onClick={handleAdd} disabled={!selected}>
