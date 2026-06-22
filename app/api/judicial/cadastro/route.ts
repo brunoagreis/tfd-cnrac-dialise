@@ -86,25 +86,22 @@ async function buildProtocol(tx: typeof prisma) {
   return `JUD-${year}-${String(total).padStart(5, "0")}`
 }
 
-async function ensureModuleEnumValue(moduleName: string) {
-  await prisma.$executeRawUnsafe(
-    `
-      DO $$
-      BEGIN
-        IF NOT EXISTS (
-          SELECT 1
-          FROM pg_type t
-          INNER JOIN pg_enum e
-            ON e.enumtypid = t.oid
-          WHERE t.typname = 'Module'
-            AND LOWER(e.enumlabel::text) = LOWER($1)
-        ) THEN
-          EXECUTE format('ALTER TYPE public."Module" ADD VALUE %L', $1);
-        END IF;
-      END $$;
-    `,
-    moduleName,
-  )
+async function ensureJudicialModuleEnumValue() {
+  await prisma.$executeRawUnsafe(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1
+        FROM pg_type t
+        INNER JOIN pg_enum e
+          ON e.enumtypid = t.oid
+        WHERE t.typname = 'Module'
+          AND LOWER(e.enumlabel::text) = 'judicial'
+      ) THEN
+        ALTER TYPE public."Module" ADD VALUE 'judicial';
+      END IF;
+    END $$;
+  `)
 }
 
 async function resolveModuleEnumValue(tx: typeof prisma, moduleName: string) {
@@ -218,7 +215,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    await ensureModuleEnumValue("judicial")
+    await ensureJudicialModuleEnumValue()
 
     const body = await req.json().catch(() => null)
 
