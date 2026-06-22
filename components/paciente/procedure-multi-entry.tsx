@@ -61,6 +61,7 @@ export function ProcedureMultiEntry({
   const [specialtySubItems, setSpecialtySubItems] = useState<SpecialtySubItem[]>([])
   const [loadingSigtap, setLoadingSigtap] = useState(false)
   const [loadingSpecialties, setLoadingSpecialties] = useState(false)
+  const [open, setOpen] = useState(false)
 
   useEffect(() => {
     void fetchSpecialties()
@@ -69,7 +70,7 @@ export function ProcedureMultiEntry({
   useEffect(() => {
     const q = query.trim()
 
-    if (!q) {
+    if (!q || selectedItem) {
       setRemoteCatalog([])
       setLoadingSigtap(false)
       return
@@ -104,6 +105,7 @@ export function ProcedureMultiEntry({
             }))
             .filter((item: ProcedureCatalogItem) => item.sigtapCode && item.description),
         )
+        setOpen(true)
       } catch (error) {
         if ((error as Error)?.name !== "AbortError") {
           console.error("[ProcedureMultiEntry] erro ao carregar SIGTAP:", error)
@@ -118,7 +120,7 @@ export function ProcedureMultiEntry({
       controller.abort()
       window.clearTimeout(timer)
     }
-  }, [query])
+  }, [query, selectedItem])
 
   async function fetchSpecialties() {
     try {
@@ -206,6 +208,8 @@ export function ProcedureMultiEntry({
   function selectItem(item: ProcedureCatalogItem) {
     setSelectedItem(item)
     setQuery(`${item.sigtapCode} - ${item.description}`)
+    setOpen(false)
+    setRemoteCatalog([])
 
     if (item.specialty) setSpecialty(item.specialty)
     if (item.subSpecialty) setSubSpecialty(item.subSpecialty)
@@ -230,6 +234,7 @@ export function ProcedureMultiEntry({
     setSubSpecialty("")
     setSituation("determinado")
     setRemoteCatalog([])
+    setOpen(false)
   }
 
   function removeAt(index: number) {
@@ -247,10 +252,21 @@ export function ProcedureMultiEntry({
               onChange={(e) => {
                 setQuery(e.target.value)
                 setSelectedItem(null)
+                setOpen(true)
+              }}
+              onFocus={() => {
+                if (!selectedItem && query.trim()) setOpen(true)
               }}
               placeholder="Digite código ou descrição do procedimento"
             />
-            {query.trim() ? (
+
+            {selectedItem ? (
+              <div className="mt-2 rounded-xl border border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+                Selecionado: <span className="font-medium text-foreground">{selectedItem.sigtapCode}</span> - {selectedItem.description}
+              </div>
+            ) : null}
+
+            {open && query.trim() && !selectedItem ? (
               <div className="mt-2 max-h-52 overflow-auto rounded-xl border border-border bg-background p-1">
                 {loadingSigtap ? (
                   <div className="px-3 py-2 text-sm text-muted-foreground">Carregando SIGTAP...</div>
