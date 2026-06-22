@@ -28,6 +28,19 @@ type PriorityFocusItem = {
   createdAt?: string
 }
 
+type SigTapCadastroItem = {
+  id: string
+  codigo: string
+  descricao: string
+  ativo?: boolean
+  updatedAt?: string
+}
+
+type CidCatalogItem = {
+  code: string
+  description: string
+}
+
 type EspecialidadeSubItem = {
   especialidadeNome: string
   subespecialidadeNome: string
@@ -66,7 +79,12 @@ function normalizeName(value: string) {
 }
 
 function countCriteria(criteria: CombinedCriteria) {
-  return [criteria.cid, criteria.procedure, criteria.specialty, criteria.subspecialty].filter(Boolean).length
+  return [
+    criteria.cid,
+    criteria.procedure,
+    criteria.specialty,
+    criteria.subspecialty,
+  ].filter(Boolean).length
 }
 
 function buildCombinedLabel(criteria: CombinedCriteria) {
@@ -122,35 +140,63 @@ function describePriorityItem(item: PriorityFocusItem) {
     : `${base} • sem prazo final`
 }
 
+function sigtapLabel(item: SigTapCadastroItem) {
+  return `${normalizeProcedureCode(item.codigo)} - ${item.descricao}`
+}
+
+function cidLabel(item: CidCatalogItem) {
+  return `${item.code} - ${item.description}`
+}
+
 function upsertPriorityItem(prev: PriorityFocusItem[], nextItem: PriorityFocusItem) {
   const existingIndex = prev.findIndex((entry) => {
     if (entry.mode !== nextItem.mode) return false
-    if (entry.mode === "procedure") return normalizeProcedureCode(entry.value) === normalizeProcedureCode(nextItem.value)
-    if (entry.mode === "cid") return normalizeCidCode(entry.value) === normalizeCidCode(nextItem.value)
+    if (entry.mode === "procedure") {
+      return normalizeProcedureCode(entry.value) === normalizeProcedureCode(nextItem.value)
+    }
+    if (entry.mode === "cid") {
+      return normalizeCidCode(entry.value) === normalizeCidCode(nextItem.value)
+    }
     return entry.value === nextItem.value
   })
 
   if (existingIndex < 0) return [...prev, nextItem]
 
   const next = [...prev]
-  next[existingIndex] = { ...next[existingIndex], ...nextItem, id: next[existingIndex].id }
+  next[existingIndex] = {
+    ...next[existingIndex],
+    ...nextItem,
+    id: next[existingIndex].id,
+  }
   return next
 }
 
 export function JudicialPrioritiesPanel() {
-  const [focusMode, setFocusMode] = useState<FocusMode>("procedure")
+  const [focusMode, setFocusMode] = useState<FocusMode>("combined")
   const [priorityProcedureQuery, setPriorityProcedureQuery] = useState("")
   const [priorityCidQuery, setPriorityCidQuery] = useState("")
   const [priorityExpiresAt, setPriorityExpiresAt] = useState("")
   const [focusItems, setFocusItems] = useState<PriorityFocusItem[]>([])
   const [loadingPriorities, setLoadingPriorities] = useState(false)
   const [savingPriorities, setSavingPriorities] = useState(false)
+
+  const [priorityProcedureOptions, setPriorityProcedureOptions] = useState<SigTapCadastroItem[]>([])
+  const [loadingPriorityProcedureOptions, setLoadingPriorityProcedureOptions] = useState(false)
+  const [priorityCidOptions, setPriorityCidOptions] = useState<CidCatalogItem[]>([])
+  const [loadingPriorityCidOptions, setLoadingPriorityCidOptions] = useState(false)
+
   const [especialidadeSubItems, setEspecialidadeSubItems] = useState<EspecialidadeSubItem[]>([])
 
-  const [priorityCombinedCid, setPriorityCombinedCid] = useState("")
-  const [priorityCombinedProcedure, setPriorityCombinedProcedure] = useState("")
+  const [priorityCombinedCidQuery, setPriorityCombinedCidQuery] = useState("")
+  const [priorityCombinedCidItem, setPriorityCombinedCidItem] = useState<CidCatalogItem | null>(null)
+  const [priorityCombinedProcedureQuery, setPriorityCombinedProcedureQuery] = useState("")
+  const [priorityCombinedProcedureItem, setPriorityCombinedProcedureItem] = useState<SigTapCadastroItem | null>(null)
   const [priorityCombinedSpecialty, setPriorityCombinedSpecialty] = useState("")
   const [priorityCombinedSubspecialty, setPriorityCombinedSubspecialty] = useState("")
+  const [combinedProcedureOptions, setCombinedProcedureOptions] = useState<SigTapCadastroItem[]>([])
+  const [loadingCombinedProcedureOptions, setLoadingCombinedProcedureOptions] = useState(false)
+  const [combinedCidOptions, setCombinedCidOptions] = useState<CidCatalogItem[]>([])
+  const [loadingCombinedCidOptions, setLoadingCombinedCidOptions] = useState(false)
 
   const specialtyOptions = useMemo(
     () =>
@@ -186,6 +232,54 @@ export function JudicialPrioritiesPanel() {
     void fetchEspecialidadeSub()
   }, [])
 
+  useEffect(() => {
+    if (focusMode !== "procedure") return
+
+    const timer = setTimeout(() => {
+      void fetchSigtapOptions(
+        priorityProcedureQuery,
+        setPriorityProcedureOptions,
+        setLoadingPriorityProcedureOptions,
+      )
+    }, 250)
+
+    return () => clearTimeout(timer)
+  }, [focusMode, priorityProcedureQuery])
+
+  useEffect(() => {
+    if (focusMode !== "cid") return
+
+    const timer = setTimeout(() => {
+      void fetchCidOptions(priorityCidQuery, setPriorityCidOptions, setLoadingPriorityCidOptions)
+    }, 250)
+
+    return () => clearTimeout(timer)
+  }, [focusMode, priorityCidQuery])
+
+  useEffect(() => {
+    if (focusMode !== "combined") return
+
+    const timer = setTimeout(() => {
+      void fetchSigtapOptions(
+        priorityCombinedProcedureQuery,
+        setCombinedProcedureOptions,
+        setLoadingCombinedProcedureOptions,
+      )
+    }, 250)
+
+    return () => clearTimeout(timer)
+  }, [focusMode, priorityCombinedProcedureQuery])
+
+  useEffect(() => {
+    if (focusMode !== "combined") return
+
+    const timer = setTimeout(() => {
+      void fetchCidOptions(priorityCombinedCidQuery, setCombinedCidOptions, setLoadingCombinedCidOptions)
+    }, 250)
+
+    return () => clearTimeout(timer)
+  }, [focusMode, priorityCombinedCidQuery])
+
   async function fetchPriorityFocus() {
     try {
       setLoadingPriorities(true)
@@ -201,13 +295,7 @@ export function JudicialPrioritiesPanel() {
         return
       }
 
-      const items = Array.isArray(json?.items) ? json.items : []
-      setFocusItems(items)
-
-      const lastMode = items[items.length - 1]?.mode
-      if (lastMode === "procedure" || lastMode === "cid" || lastMode === "combined") {
-        setFocusMode(lastMode)
-      }
+      setFocusItems(Array.isArray(json?.items) ? json.items : [])
     } catch (error) {
       console.error("LOAD_PRIORIDADES_ERROR", error)
       toast.error("Erro ao carregar prioridades.")
@@ -231,56 +319,224 @@ export function JudicialPrioritiesPanel() {
     }
   }
 
-  function addManualProcedurePriority() {
-    const code = normalizeProcedureCode(priorityProcedureQuery)
+  async function fetchSigtapOptions(
+    query: string,
+    setOptions: (items: SigTapCadastroItem[]) => void,
+    setLoading: (value: boolean) => void,
+  ) {
+    const normalized = normalizeProcedureCode(query)
 
-    if (!code) {
-      toast.error("Informe o procedimento SIGTAP.")
+    if (!normalized) {
+      setOptions([])
       return
     }
 
+    try {
+      setLoading(true)
+
+      const params = new URLSearchParams()
+      params.set("q", normalized)
+
+      const response = await fetch(
+        `/api/admin/judicial/sigtap?${params.toString()}`,
+        { method: "GET", cache: "no-store" },
+      )
+      const json = await response.json().catch(() => ({}))
+
+      if (!response.ok || !json?.ok) {
+        setOptions([])
+        return
+      }
+
+      const items = Array.isArray(json?.items) ? json.items : []
+      setOptions(
+        items
+          .map((item: Record<string, unknown>) => ({
+            id: String(item?.id ?? `${item?.codigo ?? ""}-${item?.descricao ?? ""}`),
+            codigo: normalizeProcedureCode(String(item?.codigo ?? "")),
+            descricao: normalizeName(String(item?.descricao ?? "")),
+            ativo: Boolean(item?.ativo ?? true),
+            updatedAt: String(item?.updatedAt ?? ""),
+          }))
+          .filter((item: SigTapCadastroItem) => item.codigo && item.descricao),
+      )
+    } catch (error) {
+      console.error("LOAD_PRIORITY_SIGTAP_ERROR", error)
+      setOptions([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function fetchCidOptions(
+    query: string,
+    setOptions: (items: CidCatalogItem[]) => void,
+    setLoading: (value: boolean) => void,
+  ) {
+    const normalized = normalizeCidCode(query)
+
+    if (!normalized) {
+      setOptions([])
+      return
+    }
+
+    try {
+      setLoading(true)
+
+      const params = new URLSearchParams()
+      params.set("q", normalized)
+      params.set("limit", "50")
+
+      const response = await fetch(`/api/judicial/cid10?${params.toString()}`, {
+        method: "GET",
+        cache: "no-store",
+      })
+      const json = await response.json().catch(() => ({}))
+
+      if (!response.ok || !json?.ok) {
+        setOptions([])
+        return
+      }
+
+      const items = Array.isArray(json?.items) ? json.items : []
+      setOptions(
+        items
+          .map((item: Record<string, unknown>) => ({
+            code: String(item?.code ?? item?.codigo ?? "").trim(),
+            description: normalizeName(String(item?.description ?? item?.descricao ?? "")),
+          }))
+          .filter((item: CidCatalogItem) => item.code && item.description),
+      )
+    } catch (error) {
+      console.error("LOAD_PRIORITY_CID_ERROR", error)
+      setOptions([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  function addProcedurePriority(item: SigTapCadastroItem) {
     const nextItem: PriorityFocusItem = {
       id: makeUiId("prio"),
       mode: "procedure",
-      value: code,
-      label: `${code} - PROCEDIMENTO PRIORITÁRIO`,
+      value: normalizeProcedureCode(item.codigo),
+      label: sigtapLabel(item),
       expiresAt: priorityExpiresAt || undefined,
       createdAt: new Date().toISOString(),
     }
 
     setFocusItems((prev) => upsertPriorityItem(prev, nextItem))
     setPriorityProcedureQuery("")
+    setPriorityProcedureOptions([])
     setPriorityExpiresAt("")
     toast.success("Procedimento adicionado à lista de prioridade.")
   }
 
-  function addManualCidPriority() {
-    const code = formatCidCode(priorityCidQuery)
+  function addManualProcedurePriority() {
+    const code = normalizeProcedureCode(priorityProcedureQuery)
+    const item = priorityProcedureOptions.find(
+      (option) => normalizeProcedureCode(option.codigo) === code,
+    )
 
-    if (!code) {
-      toast.error("Informe o CID.")
+    if (!code || !item) {
+      toast.error("Digite e selecione um procedimento SIGTAP da lista.")
       return
     }
 
+    addProcedurePriority(item)
+  }
+
+  function addCidPriority(item: CidCatalogItem) {
     const nextItem: PriorityFocusItem = {
       id: makeUiId("prio"),
       mode: "cid",
-      value: code,
-      label: `${code} - CID prioritário`,
+      value: item.code,
+      label: cidLabel(item),
       expiresAt: priorityExpiresAt || undefined,
       createdAt: new Date().toISOString(),
     }
 
     setFocusItems((prev) => upsertPriorityItem(prev, nextItem))
     setPriorityCidQuery("")
+    setPriorityCidOptions([])
     setPriorityExpiresAt("")
     toast.success("CID adicionado à lista de prioridade.")
   }
 
+  function addManualCidPriority() {
+    const code = normalizeCidCode(priorityCidQuery)
+    const item = priorityCidOptions.find(
+      (option) => normalizeCidCode(option.code) === code,
+    )
+
+    if (!code || !item) {
+      toast.error("Digite e selecione um CID da lista.")
+      return
+    }
+
+    addCidPriority(item)
+  }
+
+  function selectCombinedProcedure(item: SigTapCadastroItem) {
+    setPriorityCombinedProcedureItem(item)
+    setPriorityCombinedProcedureQuery(normalizeProcedureCode(item.codigo))
+    setCombinedProcedureOptions([])
+  }
+
+  function selectCombinedCid(item: CidCatalogItem) {
+    setPriorityCombinedCidItem(item)
+    setPriorityCombinedCidQuery(formatCidCode(item.code))
+    setCombinedCidOptions([])
+  }
+
+  function resolveCombinedProcedure() {
+    const code = normalizeProcedureCode(priorityCombinedProcedureQuery)
+    if (!code) return null
+
+    if (
+      priorityCombinedProcedureItem &&
+      normalizeProcedureCode(priorityCombinedProcedureItem.codigo) === code
+    ) {
+      return priorityCombinedProcedureItem
+    }
+
+    return (
+      combinedProcedureOptions.find(
+        (item) => normalizeProcedureCode(item.codigo) === code,
+      ) ?? null
+    )
+  }
+
+  function resolveCombinedCid() {
+    const code = normalizeCidCode(priorityCombinedCidQuery)
+    if (!code) return null
+
+    if (priorityCombinedCidItem && normalizeCidCode(priorityCombinedCidItem.code) === code) {
+      return priorityCombinedCidItem
+    }
+
+    return combinedCidOptions.find((item) => normalizeCidCode(item.code) === code) ?? null
+  }
+
   function addCombinedPriority() {
+    const typedCid = normalizeCidCode(priorityCombinedCidQuery)
+    const typedProcedure = normalizeProcedureCode(priorityCombinedProcedureQuery)
+    const cidItem = resolveCombinedCid()
+    const procedureItem = resolveCombinedProcedure()
+
+    if (typedCid && !cidItem) {
+      toast.error("Selecione o CID na lista antes de adicionar a combinação.")
+      return
+    }
+
+    if (typedProcedure && !procedureItem) {
+      toast.error("Selecione o procedimento SIGTAP na lista antes de adicionar a combinação.")
+      return
+    }
+
     const criteria: CombinedCriteria = {
-      cid: normalizeCidCode(priorityCombinedCid),
-      procedure: normalizeProcedureCode(priorityCombinedProcedure),
+      cid: cidItem ? normalizeCidCode(cidItem.code) : "",
+      procedure: procedureItem ? normalizeProcedureCode(procedureItem.codigo) : "",
       specialty: normalizeName(priorityCombinedSpecialty),
       subspecialty: normalizeName(priorityCombinedSubspecialty),
     }
@@ -300,8 +556,12 @@ export function JudicialPrioritiesPanel() {
     }
 
     setFocusItems((prev) => upsertPriorityItem(prev, nextItem))
-    setPriorityCombinedCid("")
-    setPriorityCombinedProcedure("")
+    setPriorityCombinedCidQuery("")
+    setPriorityCombinedCidItem(null)
+    setCombinedCidOptions([])
+    setPriorityCombinedProcedureQuery("")
+    setPriorityCombinedProcedureItem(null)
+    setCombinedProcedureOptions([])
     setPriorityCombinedSpecialty("")
     setPriorityCombinedSubspecialty("")
     setPriorityExpiresAt("")
@@ -348,7 +608,7 @@ export function JudicialPrioritiesPanel() {
       <CardHeader className="pb-3">
         <CardTitle className="text-base">Prioridades do monitoramento</CardTitle>
         <CardDescription>
-          Adicione procedimentos, CIDs ou combinações. Na prioridade combinada, todos os campos preenchidos precisam bater; campos vazios são ignorados.
+          A prioridade combinada abre como padrão. Nela, CID e SIGTAP precisam ser selecionados das tabelas oficiais; todos os campos preenchidos precisam bater e campos vazios são ignorados.
         </CardDescription>
       </CardHeader>
 
@@ -360,70 +620,92 @@ export function JudicialPrioritiesPanel() {
             onChange={(e) => setFocusMode(e.target.value as FocusMode)}
             className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
           >
+            <option value="combined">Prioridade combinada</option>
             <option value="procedure">Priorizar por procedimento</option>
             <option value="cid">Priorizar por CID</option>
-            <option value="combined">Prioridade combinada</option>
             <option value="none">Somente visualizar lista</option>
           </select>
         </div>
 
-        {focusMode === "procedure" && (
-          <div className="space-y-3 rounded-xl border border-border p-4">
-            <div>
-              <Label className="mb-1 block text-xs">Procedimento SIGTAP</Label>
-              <Input
-                value={priorityProcedureQuery}
-                onChange={(e) => setPriorityProcedureQuery(normalizeProcedureCode(e.target.value))}
-                placeholder="0000000000"
-              />
-            </div>
-            <PriorityExpiresInput value={priorityExpiresAt} onChange={setPriorityExpiresAt} />
-            <Button type="button" variant="outline" onClick={addManualProcedurePriority}>
-              Adicionar procedimento à lista
-            </Button>
-          </div>
-        )}
-
-        {focusMode === "cid" && (
-          <div className="space-y-3 rounded-xl border border-border p-4">
-            <div>
-              <Label className="mb-1 block text-xs">CID</Label>
-              <Input
-                value={priorityCidQuery}
-                onChange={(e) => setPriorityCidQuery(formatCidCode(e.target.value))}
-                placeholder="A00.0"
-              />
-            </div>
-            <PriorityExpiresInput value={priorityExpiresAt} onChange={setPriorityExpiresAt} />
-            <Button type="button" variant="outline" onClick={addManualCidPriority}>
-              Adicionar CID à lista
-            </Button>
-          </div>
-        )}
-
         {focusMode === "combined" && (
           <div className="space-y-3 rounded-xl border border-border p-4">
             <div className="rounded-lg border border-dashed border-border bg-muted/20 p-3 text-sm text-muted-foreground">
-              Preencha pelo menos dois critérios. Exemplo: CID + SIGTAP exige que os dois batam. SIGTAP + especialidade + subespecialidade exige que os três batam.
+              Preencha pelo menos dois critérios. Se preencher CID + SIGTAP, os dois precisam bater. Se preencher SIGTAP + especialidade + subespecialidade, os três precisam bater.
             </div>
 
             <div className="grid gap-3 md:grid-cols-2">
               <div>
                 <Label className="mb-1 block text-xs">CID</Label>
                 <Input
-                  value={priorityCombinedCid}
-                  onChange={(e) => setPriorityCombinedCid(formatCidCode(e.target.value))}
-                  placeholder="M16.0"
+                  value={priorityCombinedCidQuery}
+                  onChange={(e) => {
+                    setPriorityCombinedCidItem(null)
+                    setPriorityCombinedCidQuery(formatCidCode(e.target.value))
+                  }}
+                  placeholder="Digite o CID e selecione na lista"
                 />
+
+                {priorityCombinedCidItem ? (
+                  <p className="mt-2 rounded-lg border border-border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+                    Selecionado: {cidLabel(priorityCombinedCidItem)}
+                  </p>
+                ) : priorityCombinedCidQuery.trim() ? (
+                  <div className="mt-2 max-h-56 overflow-auto rounded-xl border border-border bg-background p-1">
+                    {loadingCombinedCidOptions ? (
+                      <p className="px-3 py-2 text-sm text-muted-foreground">Carregando CID...</p>
+                    ) : combinedCidOptions.length === 0 ? (
+                      <p className="px-3 py-2 text-sm text-muted-foreground">Nenhum CID localizado.</p>
+                    ) : (
+                      combinedCidOptions.map((item) => (
+                        <button
+                          key={`${item.code}-${item.description}`}
+                          type="button"
+                          className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-muted"
+                          onClick={() => selectCombinedCid(item)}
+                        >
+                          <span className="font-medium">{item.code}</span> - {item.description}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                ) : null}
               </div>
 
               <div>
                 <Label className="mb-1 block text-xs">Procedimento SIGTAP</Label>
                 <Input
-                  value={priorityCombinedProcedure}
-                  onChange={(e) => setPriorityCombinedProcedure(normalizeProcedureCode(e.target.value))}
-                  placeholder="0302050043"
+                  value={priorityCombinedProcedureQuery}
+                  onChange={(e) => {
+                    setPriorityCombinedProcedureItem(null)
+                    setPriorityCombinedProcedureQuery(normalizeProcedureCode(e.target.value))
+                  }}
+                  placeholder="Digite o SIGTAP e selecione na lista"
                 />
+
+                {priorityCombinedProcedureItem ? (
+                  <p className="mt-2 rounded-lg border border-border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+                    Selecionado: {sigtapLabel(priorityCombinedProcedureItem)}
+                  </p>
+                ) : priorityCombinedProcedureQuery.trim() ? (
+                  <div className="mt-2 max-h-56 overflow-auto rounded-xl border border-border bg-background p-1">
+                    {loadingCombinedProcedureOptions ? (
+                      <p className="px-3 py-2 text-sm text-muted-foreground">Carregando procedimentos...</p>
+                    ) : combinedProcedureOptions.length === 0 ? (
+                      <p className="px-3 py-2 text-sm text-muted-foreground">Nenhum procedimento localizado.</p>
+                    ) : (
+                      combinedProcedureOptions.map((item) => (
+                        <button
+                          key={`${item.id}-${item.codigo}`}
+                          type="button"
+                          className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-muted"
+                          onClick={() => selectCombinedProcedure(item)}
+                        >
+                          <span className="font-medium">{normalizeProcedureCode(item.codigo)}</span> - {item.descricao}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                ) : null}
               </div>
 
               <div>
@@ -461,6 +743,84 @@ export function JudicialPrioritiesPanel() {
             <PriorityExpiresInput value={priorityExpiresAt} onChange={setPriorityExpiresAt} />
             <Button type="button" variant="outline" onClick={addCombinedPriority}>
               Adicionar combinação à lista
+            </Button>
+          </div>
+        )}
+
+        {focusMode === "procedure" && (
+          <div className="space-y-3 rounded-xl border border-border p-4">
+            <div>
+              <Label className="mb-1 block text-xs">Procedimento SIGTAP</Label>
+              <Input
+                value={priorityProcedureQuery}
+                onChange={(e) => setPriorityProcedureQuery(normalizeProcedureCode(e.target.value))}
+                placeholder="Digite o SIGTAP e selecione na lista"
+              />
+
+              {priorityProcedureQuery.trim() && (
+                <div className="mt-2 max-h-56 overflow-auto rounded-xl border border-border bg-background p-1">
+                  {loadingPriorityProcedureOptions ? (
+                    <p className="px-3 py-2 text-sm text-muted-foreground">Carregando procedimentos...</p>
+                  ) : priorityProcedureOptions.length === 0 ? (
+                    <p className="px-3 py-2 text-sm text-muted-foreground">Nenhum procedimento localizado.</p>
+                  ) : (
+                    priorityProcedureOptions.map((item) => (
+                      <button
+                        key={`${item.id}-${item.codigo}`}
+                        type="button"
+                        className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-muted"
+                        onClick={() => addProcedurePriority(item)}
+                      >
+                        <span className="font-medium">{normalizeProcedureCode(item.codigo)}</span> - {item.descricao}
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+
+            <PriorityExpiresInput value={priorityExpiresAt} onChange={setPriorityExpiresAt} />
+            <Button type="button" variant="outline" onClick={addManualProcedurePriority}>
+              Adicionar procedimento selecionado
+            </Button>
+          </div>
+        )}
+
+        {focusMode === "cid" && (
+          <div className="space-y-3 rounded-xl border border-border p-4">
+            <div>
+              <Label className="mb-1 block text-xs">CID</Label>
+              <Input
+                value={priorityCidQuery}
+                onChange={(e) => setPriorityCidQuery(formatCidCode(e.target.value))}
+                placeholder="Digite o CID e selecione na lista"
+              />
+
+              {priorityCidQuery.trim() && (
+                <div className="mt-2 max-h-56 overflow-auto rounded-xl border border-border bg-background p-1">
+                  {loadingPriorityCidOptions ? (
+                    <p className="px-3 py-2 text-sm text-muted-foreground">Carregando CID...</p>
+                  ) : priorityCidOptions.length === 0 ? (
+                    <p className="px-3 py-2 text-sm text-muted-foreground">Nenhum CID localizado.</p>
+                  ) : (
+                    priorityCidOptions.map((item) => (
+                      <button
+                        key={`${item.code}-${item.description}`}
+                        type="button"
+                        className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-muted"
+                        onClick={() => addCidPriority(item)}
+                      >
+                        <span className="font-medium">{item.code}</span> - {item.description}
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+
+            <PriorityExpiresInput value={priorityExpiresAt} onChange={setPriorityExpiresAt} />
+            <Button type="button" variant="outline" onClick={addManualCidPriority}>
+              Adicionar CID selecionado
             </Button>
           </div>
         )}
