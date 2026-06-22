@@ -133,15 +133,17 @@ export function JudicialDemandForm({
   async function handleSubmit() {
     if (!user) return
 
-    if (
-      (oficioRequired && !oficioNumber.trim()) ||
-      !receivedAt ||
-      !actionRecords.trim() ||
-      !pgeNetNumber.trim() ||
-      !deadlineDays ||
-      !municipalityName
-    ) {
-      toast.error("Preencha os campos obrigatórios do Judicial.")
+    const missingFields: string[] = []
+
+    if (oficioRequired && !oficioNumber.trim()) missingFields.push("Número do ofício/intimação")
+    if (!receivedAt) missingFields.push("Data do recebimento")
+    if (!actionRecords.trim()) missingFields.push("Autos da ação")
+    if (!pgeNetNumber.trim()) missingFields.push("Número do PGE.net")
+    if (!deadlineDays) missingFields.push("Prazo em dias")
+    if (!municipalityName.trim()) missingFields.push("Município envolvido")
+
+    if (missingFields.length > 0) {
+      toast.error(`Preencha: ${missingFields.join(", ")}.`)
       return
     }
 
