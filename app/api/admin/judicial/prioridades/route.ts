@@ -4,7 +4,14 @@ import { prisma } from "@/lib/prisma"
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-type PriorityMode = "procedure" | "cid" | "specialty" | "subspecialty"
+type PriorityMode = "procedure" | "cid" | "specialty" | "subspecialty" | "combined"
+
+type CombinedPriorityCriteria = {
+  cid: string
+  procedure: string
+  specialty: string
+  subspecialty: string
+}
 
 type PriorityRow = {
   id: string
@@ -53,8 +60,68 @@ function normalizeName(value: unknown) {
   return normalizeText(value).toUpperCase()
 }
 
+function emptyCombinedCriteria(): CombinedPriorityCriteria {
+  return {
+    cid: "",
+    procedure: "",
+    specialty: "",
+    subspecialty: "",
+  }
+}
+
+function parseCombinedPriorityValue(value: unknown): CombinedPriorityCriteria {
+  let source: unknown = value
+
+  if (typeof value === "string") {
+    try {
+      source = JSON.parse(value)
+    } catch {
+      source = {}
+    }
+  }
+
+  if (!source || typeof source !== "object") {
+    return emptyCombinedCriteria()
+  }
+
+  const record = source as Record<string, unknown>
+
+  return {
+    cid: normalizeCid(record.cid),
+    procedure: normalizeCode(record.procedure ?? record.sigtap ?? record.procedimento),
+    specialty: normalizeName(record.specialty ?? record.especialidade),
+    subspecialty: normalizeName(record.subspecialty ?? record.subespecialidade),
+  }
+}
+
+function countCombinedCriteria(criteria: CombinedPriorityCriteria) {
+  return [
+    criteria.cid,
+    criteria.procedure,
+    criteria.specialty,
+    criteria.subspecialty,
+  ].filter(Boolean).length
+}
+
+function buildCombinedPriorityLabel(criteria: CombinedPriorityCriteria) {
+  return [
+    criteria.cid ? `CID ${criteria.cid}` : "",
+    criteria.procedure ? `SIGTAP ${criteria.procedure}` : "",
+    criteria.specialty,
+    criteria.subspecialty,
+  ]
+    .filter(Boolean)
+    .join(" + ")
+}
+
 function isMode(value: unknown): value is PriorityMode {
-  return value === "procedure" || value === "cid" || value === "specialty" || value === "subspecialty"
+  return (
+    value === "procedure" ||
+    value === "cid" ||
+    value === "specialty" ||
+    value === "subspecialty" ||
+    value === "combined"
+  )
 }
 
 function isActiveItem(item: SanitizedPriorityItem) {
@@ -68,17 +135,31 @@ function sanitizeItems(items: PriorityItemInput[]) {
     .map((item) => {
       const mode = isMode(item?.mode) ? item.mode : null
       const rawValue = normalizeText(item?.value)
-      const value =
-        mode === "procedure"
-          ? normalizeCode(rawValue)
-          : mode === "cid"
-            ? normalizeCid(rawValue)
-            : normalizeName(rawValue)
+
+      let value = ""
+      let label = normalizeText(item?.label)
+
+      if (mode === "procedure") {
+        value = normalizeCode(rawValue)
+      } else if (mode === "cid") {
+        value = normalizeCid(rawValue)
+      } else if (mode === "specialty" || mode === "subspecialty") {
+        value = normalizeName(rawValue)
+      } else if (mode === "combined") {
+        const criteria = parseCombinedPriorityValue(rawValue)
+
+        if (countCombinedCriteria(criteria) < 2) {
+          value = ""
+        } else {
+          value = JSON.stringify(criteria)
+          label = buildCombinedPriorityLabel(criteria)
+        }
+      }
 
       return {
         mode,
         value,
-        label: normalizeText(item?.label),
+        label,
         expiresAt: normalizeText(item?.expiresAt),
         createdAt: normalizeText(item?.createdAt),
       }
@@ -238,6 +319,84 @@ async function applyPriorityEffects(items: SanitizedPriorityItem[]) {
                   WHERE jp.monitoramento_id = jm.id
                     AND COALESCE(jp.active, TRUE) = TRUE
                     AND UPPER(COALESCE(jp.subespecialidade, '')) = $1
+                )
+              )
+          `,
+          item.value,
+          reason,
+        )
+      }
+
+      if (item.mode === "combined") {
+        await tx.$executeRawUnsafe(
+          `
+            UPDATE public.judicial_monitoramento_base jm
+            SET ${prioritySetSql()}
+            WHERE COALESCE(jm.ativo_monitoramento, TRUE) = TRUE
+              AND UPPER(COALESCE(jm.origem_modulo, '')) = 'JUDICIAL'
+              AND (
+                NULLIF($1::jsonb ->> 'procedure', '') IS NULL
+                OR regexp_replace(COALESCE(jm.procedimento_codigo, ''), '\\D', '', 'g') = NULLIF($1::jsonb ->> 'procedure', '')
+                OR EXISTS (
+                  SELECT 1
+                  FROM public.demandas d
+                  WHERE d.id = jm.demanda_id
+                    AND regexp_replace(COALESCE(d."codigoSigtap", ''), '\\D', '', 'g') = NULLIF($1::jsonb ->> 'procedure', '')
+                )
+                OR EXISTS (
+                  SELECT 1
+                  FROM public.judicial_procedimentos jp
+                  WHERE jp.monitoramento_id = jm.id
+                    AND COALESCE(jp.active, TRUE) = TRUE
+                    AND regexp_replace(COALESCE(jp.sigtap_codigo, ''), '\\D', '', 'g') = NULLIF($1::jsonb ->> 'procedure', '')
+                )
+              )
+              AND (
+                NULLIF($1::jsonb ->> 'cid', '') IS NULL
+                OR strpos(
+                  regexp_replace(UPPER(COALESCE(jm.cid_codigo, '')), '[^A-Z0-9]', '', 'g'),
+                  NULLIF($1::jsonb ->> 'cid', '')
+                ) > 0
+                OR EXISTS (
+                  SELECT 1
+                  FROM public.demandas d
+                  WHERE d.id = jm.demanda_id
+                    AND strpos(
+                      regexp_replace(UPPER(COALESCE(d.cid10, '')), '[^A-Z0-9]', '', 'g'),
+                      NULLIF($1::jsonb ->> 'cid', '')
+                    ) > 0
+                )
+              )
+              AND (
+                NULLIF($1::jsonb ->> 'specialty', '') IS NULL
+                OR EXISTS (
+                  SELECT 1
+                  FROM public.demandas d
+                  WHERE d.id = jm.demanda_id
+                    AND UPPER(COALESCE(d.especialidade, '')) = NULLIF($1::jsonb ->> 'specialty', '')
+                )
+                OR EXISTS (
+                  SELECT 1
+                  FROM public.judicial_procedimentos jp
+                  WHERE jp.monitoramento_id = jm.id
+                    AND COALESCE(jp.active, TRUE) = TRUE
+                    AND UPPER(COALESCE(jp.especialidade, '')) = NULLIF($1::jsonb ->> 'specialty', '')
+                )
+              )
+              AND (
+                NULLIF($1::jsonb ->> 'subspecialty', '') IS NULL
+                OR EXISTS (
+                  SELECT 1
+                  FROM public.demandas d
+                  WHERE d.id = jm.demanda_id
+                    AND UPPER(COALESCE(d.subespecialidade, '')) = NULLIF($1::jsonb ->> 'subspecialty', '')
+                )
+                OR EXISTS (
+                  SELECT 1
+                  FROM public.judicial_procedimentos jp
+                  WHERE jp.monitoramento_id = jm.id
+                    AND COALESCE(jp.active, TRUE) = TRUE
+                    AND UPPER(COALESCE(jp.subespecialidade, '')) = NULLIF($1::jsonb ->> 'subspecialty', '')
                 )
               )
           `,
