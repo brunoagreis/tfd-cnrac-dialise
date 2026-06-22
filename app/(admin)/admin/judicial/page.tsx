@@ -35,6 +35,13 @@ export default function JudicialAdminPage() {
 
         <div className="flex flex-wrap gap-2">
           <Button asChild variant="outline" className="bg-transparent">
+            <Link href="/admin/judicial/atribuicao-manual">
+              <Settings2 className="mr-2 h-4 w-4" />
+              Atribuição manual
+            </Link>
+          </Button>
+
+          <Button asChild variant="outline" className="bg-transparent">
             <Link href="/admin/judicial/prioridades-v2">
               <Settings2 className="mr-2 h-4 w-4" />
               Prioridades
