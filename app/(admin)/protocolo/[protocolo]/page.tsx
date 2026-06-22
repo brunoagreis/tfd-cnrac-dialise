@@ -86,7 +86,7 @@ const STATUS_CONFIG: Record<string, { icon: typeof AlertTriangle; color: string 
 
 function moduleLabel(value: string) {
   const key = String(value ?? "").toLowerCase()
-  return MODULE_LABELS[key] ?? key.toUpperCase() || "Módulo"
+  return MODULE_LABELS[key] ?? (key ? key.toUpperCase() : "Módulo")
 }
 
 function statusLabel(value: string) {
