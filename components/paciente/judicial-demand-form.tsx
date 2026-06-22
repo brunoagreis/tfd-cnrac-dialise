@@ -34,8 +34,8 @@ function calculateDeadlineAt(receivedAt: string, deadlineDays: number) {
   return d.toISOString().slice(0, 10)
 }
 
-function normalizeUpper(value: string) {
-  return value.toUpperCase()
+function normalizeUpper(value: unknown) {
+  return String(value ?? "").trim().replace(/\s+/g, " ").toUpperCase()
 }
 
 export function JudicialDemandForm({
@@ -92,9 +92,34 @@ export function JudicialDemandForm({
         return
       }
 
-      setProcedureCatalog(Array.isArray(json?.sigtap) ? json.sigtap : [])
-      setCidCatalog(Array.isArray(json?.cid10) ? json.cid10 : [])
-      setEspecialidadeSubItems(Array.isArray(json?.especialidades) ? json.especialidades : [])
+      setProcedureCatalog(
+        Array.isArray(json?.sigtap)
+          ? json.sigtap.map((item: Record<string, unknown>) => ({
+              sigtapCode: String(item?.sigtapCode ?? ""),
+              description: normalizeUpper(item?.description),
+              specialty: normalizeUpper(item?.specialty),
+              subSpecialty: normalizeUpper(item?.subSpecialty),
+            }))
+          : [],
+      )
+      setCidCatalog(
+        Array.isArray(json?.cid10)
+          ? json.cid10.map((item: Record<string, unknown>) => ({
+              code: normalizeUpper(item?.code),
+              description: normalizeUpper(item?.description),
+            }))
+          : [],
+      )
+      setEspecialidadeSubItems(
+        Array.isArray(json?.especialidades)
+          ? json.especialidades.map((item: Record<string, unknown>) => ({
+              especialidadeId: String(item?.especialidadeId ?? ""),
+              especialidadeNome: normalizeUpper(item?.especialidadeNome),
+              subespecialidadeId: String(item?.subespecialidadeId ?? ""),
+              subespecialidadeNome: normalizeUpper(item?.subespecialidadeNome),
+            }))
+          : [],
+      )
     } catch (error) {
       console.error("LOAD_JUDICIAL_CATALOGS_ERROR", error)
       toast.error("Erro ao carregar catálogos do Judicial.")
@@ -102,24 +127,6 @@ export function JudicialDemandForm({
       setLoadingCatalogs(false)
     }
   }
-
-  useEffect(() => {
-    if (especialidadeSubItems.length === 0) return
-
-    setProcedureCatalog((prev) =>
-      prev.map((item) => {
-        const found = especialidadeSubItems.find(
-          (row) =>
-            normalizeUpper(row.especialidadeNome) === normalizeUpper(item.specialty) &&
-            normalizeUpper(row.subespecialidadeNome) === normalizeUpper(item.subSpecialty),
-        )
-
-        if (found) return item
-
-        return item
-      }),
-    )
-  }, [especialidadeSubItems])
 
   async function handleSubmit() {
     if (!user) return
