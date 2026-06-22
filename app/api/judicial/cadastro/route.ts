@@ -122,7 +122,7 @@ async function resolveModuleEnumValue(tx: typeof prisma, moduleName: string) {
   const value = normalizeText(rows[0]?.value)
 
   if (!value) {
-    throw new Error(`Valor do módulo ${moduleName} não existe no enum Module do banco.`)
+    throw new Error(`Valor do mÃ³dulo ${moduleName} nÃ£o existe no enum Module do banco.`)
   }
 
   return value
@@ -207,7 +207,7 @@ export async function GET() {
     console.error("[GET /api/judicial/cadastro] erro:", error)
 
     return NextResponse.json(
-      { ok: false, error: "Erro ao carregar catálogos do Judicial." },
+      { ok: false, error: "Erro ao carregar catÃ¡logos do Judicial." },
       { status: 500 },
     )
   }
@@ -253,7 +253,7 @@ export async function POST(req: NextRequest) {
       !municipalityName
     ) {
       return NextResponse.json(
-        { ok: false, error: "Preencha os campos obrigatórios do Judicial." },
+        { ok: false, error: "Preencha os campos obrigatÃ³rios do Judicial." },
         { status: 400 },
       )
     }
@@ -272,14 +272,14 @@ export async function POST(req: NextRequest) {
       !primaryProcedure.subSpecialty
     ) {
       return NextResponse.json(
-        { ok: false, error: "O procedimento principal precisa ter SIGTAP, descrição, especialidade e subespecialidade." },
+        { ok: false, error: "O procedimento principal precisa ter SIGTAP, descriÃ§Ã£o, especialidade e subespecialidade." },
         { status: 400 },
       )
     }
 
     if (!primaryCid || !primaryCid.code || !primaryCid.description) {
       return NextResponse.json(
-        { ok: false, error: "Informe ao menos 1 CID com código e descrição." },
+        { ok: false, error: "Informe ao menos 1 CID com cÃ³digo e descriÃ§Ã£o." },
         { status: 400 },
       )
     }
@@ -303,7 +303,7 @@ export async function POST(req: NextRequest) {
       const paciente = pacienteRows[0]
 
       if (!paciente) {
-        throw new Error("Paciente não encontrado.")
+        throw new Error("Paciente nÃ£o encontrado.")
       }
 
       const demandaId = buildId("dem_")
@@ -311,11 +311,11 @@ export async function POST(req: NextRequest) {
       const moduleEnumValue = await resolveModuleEnumValue(tx, "judicial")
 
       const observacoesBloco = [
-        `TIPO DE INTIMAÇÃO: ${isIntimation === "sim" ? "SIM" : "NÃO"}`,
-        `OFÍCIO/INTIMAÇÃO: ${oficioNumber}`,
+        `TIPO DE INTIMAÃ‡ÃƒO: ${isIntimation === "sim" ? "SIM" : "NÃƒO"}`,
+        `OFÃCIO/INTIMAÃ‡ÃƒO: ${oficioNumber}`,
         `DATA DE RECEBIMENTO: ${receivedAt}`,
-        reiterationAt ? `DATA DA REITERAÇÃO: ${reiterationAt}` : "",
-        `AUTOS DA AÇÃO: ${actionRecords}`,
+        reiterationAt ? `DATA DA REITERAÃ‡ÃƒO: ${reiterationAt}` : "",
+        `AUTOS DA AÃ‡ÃƒO: ${actionRecords}`,
         `PGE.NET: ${pgeNetNumber}`,
         `PRAZO (DIAS): ${deadlineDays}`,
         deadlineAt ? `PRAZO FINAL: ${deadlineAt}` : "",
@@ -363,7 +363,7 @@ export async function POST(req: NextRequest) {
             "updatedAt"
           )
           VALUES (
-            $1, $2, $3, $4::"Module", 'JUDICIAL', 'judicial@sigajus.local', TRUE, $5, $6, $7, $8, $9, $10, $11, 'nao_se_aplica', $12, $13, 'pendente', NOW(), NOW()
+            $1, $2, $3, $4::"Module", 'JUDICIAL', 'judicial@sigajus.local', TRUE, $5, $6, $7, $8, $9, $10, $11, NULL, $12, $13, NOW(), NOW()
           )
         `,
         demandaId,
