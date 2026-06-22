@@ -358,11 +358,12 @@ export async function POST(req: NextRequest) {
             "tipoSolicitacao",
             "criadoPor",
             "criadoPorNome",
+            status,
             "createdAt",
             "updatedAt"
           )
           VALUES (
-            $1, $2, $3, $4::"Module", 'JUDICIAL', NULL, TRUE, $5, $6, $7, $8, $9, $10, $11, 'nao_se_aplica', $12, $13, NOW(), NOW()
+            $1, $2, $3, $4::"Module", 'JUDICIAL', 'judicial@sigajus.local', TRUE, $5, $6, $7, $8, $9, $10, $11, 'nao_se_aplica', $12, $13, 'pendente', NOW(), NOW()
           )
         `,
         demandaId,
