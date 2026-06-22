@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto"
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { sendMunicipalityDemandNotification } from "@/lib/municipality-notifications"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -246,6 +247,16 @@ export async function POST(req: NextRequest) {
       const protocolo = await buildProtocol(tx)
       const moduleEnumValue = await resolveModuleEnumValue(tx, "judicial")
 
+      const codigoSigtap = onlyDigits(primaryProcedure.sigtapCode)
+      const descricaoSigtap = normalizeUpper(primaryProcedure.description)
+      const cid10 = normalizeUpper(primaryCid.code)
+      const cidDescricao = normalizeUpper(primaryCid.description)
+      const especialidade = normalizeUpper(primaryProcedure.specialty)
+      const subespecialidade = normalizeUpper(primaryProcedure.subSpecialty)
+      const pacienteNome = normalizeUpper(paciente.nome)
+      const pacienteCpf = normalizeText(paciente.cpf)
+      const pacienteCns = normalizeText(paciente.cartaoSus)
+
       const observacoesBloco = [
         `TIPO DE INTIMACAO: ${isIntimation === "sim" ? "SIM" : "NAO"}`,
         oficioNumber ? `OFICIO/INTIMACAO: ${oficioNumber}` : "",
@@ -302,11 +313,11 @@ export async function POST(req: NextRequest) {
         protocolo,
         pacienteId,
         moduleEnumValue,
-        onlyDigits(primaryProcedure.sigtapCode),
-        normalizeUpper(primaryProcedure.description),
-        normalizeUpper(primaryCid.code),
-        normalizeUpper(primaryProcedure.specialty),
-        normalizeUpper(primaryProcedure.subSpecialty),
+        codigoSigtap,
+        descricaoSigtap,
+        cid10,
+        especialidade,
+        subespecialidade,
         observacoesBloco,
         municipalityName,
         criadoPor || null,
@@ -357,13 +368,13 @@ export async function POST(req: NextRequest) {
         `,
         demandaId,
         pacienteId,
-        normalizeUpper(paciente.nome),
-        normalizeText(paciente.cpf),
-        normalizeText(paciente.cartaoSus),
-        onlyDigits(primaryProcedure.sigtapCode),
-        normalizeUpper(primaryProcedure.description),
-        normalizeUpper(primaryCid.code),
-        normalizeUpper(primaryCid.description),
+        pacienteNome,
+        pacienteCpf,
+        pacienteCns,
+        codigoSigtap,
+        descricaoSigtap,
+        cid10,
+        cidDescricao,
         demandaId,
       )
 
@@ -389,10 +400,40 @@ export async function POST(req: NextRequest) {
         criadoPorNome || null,
       )
 
-      return { id: demandaId, protocolo }
+      return {
+        id: demandaId,
+        protocolo,
+        pacienteNome,
+        pacienteCpf,
+        pacienteCns,
+        municipio: municipalityName,
+        codigoSigtap,
+        descricaoSigtap,
+        cid10,
+        especialidade,
+        subespecialidade,
+      }
     })
 
-    return NextResponse.json({ ok: true, item: result })
+    const emailResult = await sendMunicipalityDemandNotification({
+      module: "judicial",
+      protocolo: result.protocolo,
+      pacienteNome: result.pacienteNome,
+      pacienteCpf: result.pacienteCpf,
+      pacienteCns: result.pacienteCns,
+      municipio: result.municipio,
+      codigoSigtap: result.codigoSigtap,
+      descricaoSigtap: result.descricaoSigtap,
+      cid10: result.cid10,
+      especialidade: result.especialidade,
+      subespecialidade: result.subespecialidade,
+    })
+
+    if (!emailResult.ok) {
+      console.warn("JUDICIAL_MUNICIPALITY_EMAIL_SKIPPED", emailResult)
+    }
+
+    return NextResponse.json({ ok: true, item: { id: result.id, protocolo: result.protocolo, emailMunicipio: emailResult } })
   } catch (error) {
     console.error("[POST /api/judicial/cadastro] erro:", error)
     return NextResponse.json(
