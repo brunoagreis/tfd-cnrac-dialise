@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
@@ -43,6 +43,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { JudicialBloqueioSequestroPanel } from "@/components/modules/judicial-bloqueio-sequestro-panel"
+import { JudicialPrioritiesPanelCombined } from "@/components/modules/judicial-priorities-panel-combined"
 import { JudicialPriorityReportShortcuts } from "@/app/(admin)/admin/judicial/page"
 
 type EspecialidadeSubItem = {
@@ -153,11 +154,13 @@ function describePriorityItem(item: PriorityFocusItem) {
   const base =
     item.mode === "procedure"
       ? `Procedimento ${item.label}`
-      : `CID ${item.label}`
+      : item.mode === "combined"
+        ? `CombinaÃ§Ã£o ${item.label}`
+        : `CID ${item.label}`
 
   return item.expiresAt
-    ? `${base} • até ${new Date(`${item.expiresAt}T00:00:00`).toLocaleDateString("pt-BR")}`
-    : `${base} • sem prazo final`
+    ? `${base} â€¢ atÃ© ${new Date(`${item.expiresAt}T00:00:00`).toLocaleDateString("pt-BR")}`
+    : `${base} â€¢ sem prazo final`
 }
 
 export function JudicialAdminPanel() {
@@ -168,13 +171,17 @@ export function JudicialAdminPanel() {
   const [selectedCoreFile, setSelectedCoreFile] = useState<File | null>(null)
   const coreFileInputRef = useRef<HTMLInputElement | null>(null)
 
-  const [focusMode, setFocusMode] = useState<"none" | "procedure" | "cid">(
+  const [focusMode, setFocusMode] = useState<"none" | "procedure" | "cid" | "combined">(
     judicial.priorityFocus.mode === "none"
       ? "procedure"
       : judicial.priorityFocus.mode,
   )
   const [priorityProcedureQuery, setPriorityProcedureQuery] = useState("")
   const [priorityCidQuery, setPriorityCidQuery] = useState("")
+  const [priorityCombinedCid, setPriorityCombinedCid] = useState("")
+  const [priorityCombinedProcedure, setPriorityCombinedProcedure] = useState("")
+  const [priorityCombinedSpecialty, setPriorityCombinedSpecialty] = useState("")
+  const [priorityCombinedSubspecialty, setPriorityCombinedSubspecialty] = useState("")
   const [priorityExpiresAt, setPriorityExpiresAt] = useState("")
   const [focusItems, setFocusItems] = useState<PriorityFocusItem[]>(
     judicial.priorityFocus.items ?? [],
@@ -257,6 +264,20 @@ export function JudicialAdminPanel() {
 
   const filteredPriorityCidOptions = useMemo(() => priorityCidOptions, [priorityCidOptions])
 
+  const combinedSubspecialtyOptions = useMemo(() => {
+    const specialty = normalizeUpperInput(priorityCombinedSpecialty.trim())
+
+    if (!specialty) return []
+
+    return especialidadeSubItems
+      .filter(
+        (item) => normalizeUpperInput(item.especialidadeNome.trim()) === specialty,
+      )
+      .sort((a, b) =>
+        a.subespecialidadeNome.localeCompare(b.subespecialidadeNome, "pt-BR"),
+      )
+  }, [especialidadeSubItems, priorityCombinedSpecialty])
+
   useEffect(() => {
     setFocusItems(judicial.priorityFocus.items ?? [])
   }, [judicial.priorityFocus.items])
@@ -264,7 +285,8 @@ export function JudicialAdminPanel() {
   useEffect(() => {
     if (
       judicial.priorityFocus.mode === "procedure" ||
-      judicial.priorityFocus.mode === "cid"
+      judicial.priorityFocus.mode === "cid" ||
+      judicial.priorityFocus.mode === "combined"
     ) {
       setFocusMode(judicial.priorityFocus.mode)
     }
@@ -407,7 +429,7 @@ export function JudicialAdminPanel() {
       const json = await response.json().catch(() => ({}))
 
       if (!response.ok || !json?.ok) {
-        toast.error(json?.error || "Erro ao carregar municípios.")
+        toast.error(json?.error || "Erro ao carregar municÃ­pios.")
         return
       }
 
@@ -423,7 +445,7 @@ export function JudicialAdminPanel() {
       )
     } catch (error) {
       console.error("LOAD_MUNICIPIOS_ERROR", error)
-      toast.error("Erro ao carregar municípios.")
+      toast.error("Erro ao carregar municÃ­pios.")
     } finally {
       setLoadingMunicipalities(false)
     }
@@ -431,7 +453,7 @@ export function JudicialAdminPanel() {
 
   async function handleSaveMunicipality() {
     if (!municipalityName.trim()) {
-      toast.error("Informe o município.")
+      toast.error("Informe o municÃ­pio.")
       return
     }
 
@@ -464,7 +486,7 @@ export function JudicialAdminPanel() {
       const json = await response.json().catch(() => ({}))
 
       if (!response.ok || !json?.ok || !json?.item) {
-        toast.error(json?.error || "Erro ao salvar município.")
+        toast.error(json?.error || "Erro ao salvar municÃ­pio.")
         return
       }
 
@@ -484,7 +506,7 @@ export function JudicialAdminPanel() {
 
       judicial.upsertMunicipalityContact(savedItem)
 
-      toast.success("Contatos do município salvos.")
+      toast.success("Contatos do municÃ­pio salvos.")
       setEditingMunicipalityId("")
       setMunicipalityName("")
       setEmails("")
@@ -492,7 +514,7 @@ export function JudicialAdminPanel() {
       setContacts("")
     } catch (error) {
       console.error("SAVE_MUNICIPIO_ERROR", error)
-      toast.error("Erro ao salvar município.")
+      toast.error("Erro ao salvar municÃ­pio.")
     } finally {
       setSavingMunicipality(false)
     }
@@ -565,7 +587,7 @@ export function JudicialAdminPanel() {
       !templateSubject.trim() ||
       !htmlHasContent(html)
     ) {
-      toast.error("Título, assunto e corpo são obrigatórios.")
+      toast.error("TÃ­tulo, assunto e corpo sÃ£o obrigatÃ³rios.")
       return
     }
 
@@ -667,7 +689,7 @@ export function JudicialAdminPanel() {
 
       if (items.length > 0) {
         const lastMode = items[items.length - 1]?.mode
-        if (lastMode === "procedure" || lastMode === "cid") {
+        if (lastMode === "procedure" || lastMode === "cid" || lastMode === "combined") {
           setFocusMode(lastMode)
         }
       }
@@ -838,12 +860,12 @@ export function JudicialAdminPanel() {
 
   async function handleSaveSigTapCadastro() {
     if (!sigtapCodigoCadastro.trim()) {
-      toast.error("Informe o código do SIGTAP.")
+      toast.error("Informe o cÃ³digo do SIGTAP.")
       return
     }
 
     if (!sigtapDescricaoCadastro.trim()) {
-      toast.error("Informe a descrição do SIGTAP.")
+      toast.error("Informe a descriÃ§Ã£o do SIGTAP.")
       return
     }
 
@@ -926,7 +948,7 @@ export function JudicialAdminPanel() {
     setPriorityProcedureQuery("")
     setPriorityExpiresAt("")
     setPriorityProcedureOptions([])
-    toast.success("Procedimento adicionado à lista de prioridade.")
+    toast.success("Procedimento adicionado Ã  lista de prioridade.")
   }
 
   function addManualProcedurePriority() {
@@ -951,7 +973,7 @@ export function JudicialAdminPanel() {
       value: code,
       label: exactMatch
         ? `${normalizeProcedureCode(exactMatch.codigo)} - ${exactMatch.descricao}`
-        : `${code} - PROCEDIMENTO PRIORITÁRIO`,
+        : `${code} - PROCEDIMENTO PRIORITÃRIO`,
       expiresAt: priorityExpiresAt || undefined,
       createdAt: new Date().toISOString(),
     }
@@ -980,7 +1002,7 @@ export function JudicialAdminPanel() {
     setPriorityProcedureQuery("")
     setPriorityExpiresAt("")
     setPriorityProcedureOptions([])
-    toast.success("Procedimento adicionado à lista de prioridade.")
+    toast.success("Procedimento adicionado Ã  lista de prioridade.")
   }
 
   function addCidPriority(item: CidCatalogItem) {
@@ -1016,7 +1038,7 @@ export function JudicialAdminPanel() {
 
     setPriorityCidQuery("")
     setPriorityExpiresAt("")
-    toast.success("CID adicionado à lista de prioridade.")
+    toast.success("CID adicionado Ã  lista de prioridade.")
   }
 
   function addManualCidPriority() {
@@ -1037,7 +1059,7 @@ export function JudicialAdminPanel() {
       value: code,
       label: exactMatch
         ? `${exactMatch.code} - ${exactMatch.description}`
-        : `${code} - CID prioritário`,
+        : `${code} - CID prioritÃ¡rio`,
       expiresAt: priorityExpiresAt || undefined,
       createdAt: new Date().toISOString(),
     }
@@ -1065,7 +1087,69 @@ export function JudicialAdminPanel() {
 
     setPriorityCidQuery("")
     setPriorityExpiresAt("")
-    toast.success("CID adicionado à lista de prioridade.")
+    toast.success("CID adicionado Ã  lista de prioridade.")
+  }
+
+  function addCombinedPriority() {
+    const cid = normalizeCidCode(priorityCombinedCid)
+    const procedure = normalizeProcedureCode(priorityCombinedProcedure)
+    const specialty = normalizeUpperInput(priorityCombinedSpecialty.trim())
+    const subspecialty = normalizeUpperInput(priorityCombinedSubspecialty.trim())
+
+    const filledCriteria = [cid, procedure, specialty, subspecialty].filter(Boolean)
+
+    if (filledCriteria.length < 2) {
+      toast.error("Informe pelo menos dois parÃ¢metros para a prioridade combinada.")
+      return
+    }
+
+    const value = JSON.stringify({
+      cid,
+      procedure,
+      specialty,
+      subspecialty,
+    })
+
+    const label = [
+      cid ? `CID ${cid}` : "",
+      procedure ? `SIGTAP ${procedure}` : "",
+      specialty,
+      subspecialty,
+    ].filter(Boolean).join(" + ")
+
+    const nextItem: PriorityFocusItem = {
+      id: makeUiId("prio"),
+      mode: "combined",
+      value,
+      label,
+      expiresAt: priorityExpiresAt || undefined,
+      createdAt: new Date().toISOString(),
+    }
+
+    setFocusItems((prev) => {
+      const existingIndex = prev.findIndex(
+        (entry) => entry.mode === "combined" && entry.value === value,
+      )
+
+      if (existingIndex >= 0) {
+        const next = [...prev]
+        next[existingIndex] = {
+          ...next[existingIndex],
+          ...nextItem,
+          id: next[existingIndex].id,
+        }
+        return next
+      }
+
+      return [...prev, nextItem]
+    })
+
+    setPriorityCombinedCid("")
+    setPriorityCombinedProcedure("")
+    setPriorityCombinedSpecialty("")
+    setPriorityCombinedSubspecialty("")
+    setPriorityExpiresAt("")
+    toast.success("CombinaÃ§Ã£o adicionada Ã  lista de prioridade.")
   }
 
   function removePriorityItem(itemId: string) {
@@ -1074,7 +1158,7 @@ export function JudicialAdminPanel() {
 
   async function applyPriorityFocus() {
     if (focusItems.length === 0) {
-      toast.error("Adicione pelo menos um procedimento ou CID antes de aplicar.")
+      toast.error("Adicione pelo menos um procedimento, CID ou combinaÃ§Ã£o antes de aplicar.")
       return
     }
 
@@ -1145,8 +1229,8 @@ export function JudicialAdminPanel() {
   return (
     <Tabs defaultValue="core" className="space-y-4">
       <TabsList className="flex w-full flex-wrap justify-start gap-2 bg-transparent p-0">
-        <TabsTrigger value="core">Importações CORE</TabsTrigger>
-        <TabsTrigger value="municipios">Municípios</TabsTrigger>
+        <TabsTrigger value="core">ImportaÃ§Ãµes CORE</TabsTrigger>
+        <TabsTrigger value="municipios">MunicÃ­pios</TabsTrigger>
         <TabsTrigger value="emails">E-mails</TabsTrigger>
         <TabsTrigger value="prioridade">Prioridades</TabsTrigger>
         <TabsTrigger value="bloqueio-sequestro">Bloqueio / Sequestro</TabsTrigger>
@@ -1157,25 +1241,25 @@ export function JudicialAdminPanel() {
       <TabsContent value="core" className="mt-0 space-y-4">
         <Card className="border-border">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Importações CORE</CardTitle>
+            <CardTitle className="text-base">ImportaÃ§Ãµes CORE</CardTitle>
             <CardDescription>
-              Selecione o tipo de importação e envie o arquivo Excel correspondente.
+              Selecione o tipo de importaÃ§Ã£o e envie o arquivo Excel correspondente.
             </CardDescription>
           </CardHeader>
 
           <CardContent className="space-y-4">
             <div className="rounded-xl border border-border bg-muted/20 p-4">
-              <p className="text-sm font-medium text-foreground">Regras de atualização</p>
+              <p className="text-sm font-medium text-foreground">Regras de atualizaÃ§Ã£o</p>
               <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-muted-foreground">
                 <li>
                   <strong>CORE Ambulatorial Finalizados</strong>: apaga apenas os registros
                   do lote <strong>finalizados</strong> em <strong>core_ambulatorial</strong> e
-                  mantém os de <strong>em atendimento</strong>.
+                  mantÃ©m os de <strong>em atendimento</strong>.
                 </li>
                 <li>
                   <strong>CORE Ambulatorial Em Atendimento</strong>: apaga apenas os registros
                   do lote <strong>em_atendimento</strong> em <strong>core_ambulatorial</strong> e
-                  mantém os de <strong>finalizados</strong>.
+                  mantÃ©m os de <strong>finalizados</strong>.
                 </li>
                 <li>
                   <strong>CORE Leitos</strong>: apaga todos os dados de <strong>core_leitos</strong> e
@@ -1186,7 +1270,7 @@ export function JudicialAdminPanel() {
 
             <div className="grid gap-3 md:grid-cols-[340px_1fr]">
               <div>
-                <Label className="mb-1 block text-xs">Tipo de importação</Label>
+                <Label className="mb-1 block text-xs">Tipo de importaÃ§Ã£o</Label>
                 <select
                   value={table}
                   onChange={(e) => setTable(e.target.value as CoreTable)}
@@ -1245,7 +1329,7 @@ export function JudicialAdminPanel() {
             <Input
               value={municipalityName}
               onChange={(e) => setMunicipalityName(e.target.value)}
-              placeholder="Município"
+              placeholder="MunicÃ­pio"
             />
             <Input
               value={emails}
@@ -1260,27 +1344,27 @@ export function JudicialAdminPanel() {
             <Input
               value={contacts}
               onChange={(e) => setContacts(e.target.value)}
-              placeholder="Nome do responsável, outro responsável"
+              placeholder="Nome do responsÃ¡vel, outro responsÃ¡vel"
             />
             <Button onClick={handleSaveMunicipality} disabled={savingMunicipality}>
               <Save className="mr-2 h-4 w-4" />
-              {savingMunicipality ? "Salvando..." : "Salvar município"}
+              {savingMunicipality ? "Salvando..." : "Salvar municÃ­pio"}
             </Button>
           </CardContent>
         </Card>
 
         <Card className="border-border">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Municípios cadastrados</CardTitle>
+            <CardTitle className="text-base">MunicÃ­pios cadastrados</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
             {loadingMunicipalities ? (
               <div className="rounded-xl border border-border p-3 text-sm text-muted-foreground">
-                Carregando municípios...
+                Carregando municÃ­pios...
               </div>
             ) : municipalityItems.length === 0 ? (
               <div className="rounded-xl border border-border p-3 text-sm text-muted-foreground">
-                Nenhum município cadastrado.
+                Nenhum municÃ­pio cadastrado.
               </div>
             ) : (
               municipalityItems.map((item) => (
@@ -1331,30 +1415,30 @@ export function JudicialAdminPanel() {
                 Demanda judicial cadastrada
               </option>
               <option value="solicitar_inclusao_ficha">
-                Solicitar inclusão de ficha
+                Solicitar inclusÃ£o de ficha
               </option>
               <option value="reiteracao_municipio">
-                Reiteração ao município
+                ReiteraÃ§Ã£o ao municÃ­pio
               </option>
               <option value="agendamento_informado">
                 Agendamento informado
               </option>
-              <option value="inercia_municipio">Inércia do município</option>
+              <option value="inercia_municipio">InÃ©rcia do municÃ­pio</option>
               <option value="demanda_prejudicial_cadastrada">
-                Demanda pré judicial cadastrada
+                Demanda prÃ© judicial cadastrada
               </option>
               <option value="prazo_prejudicial_vencendo">
-                Prazo do pré judicial vencendo
+                Prazo do prÃ© judicial vencendo
               </option>
               <option value="prazo_prejudicial_vencido">
-                Prazo do pré judicial vencido
+                Prazo do prÃ© judicial vencido
               </option>
             </select>
 
             <Input
               value={templateTitle}
               onChange={(e) => setTemplateTitle(e.target.value)}
-              placeholder="Título interno"
+              placeholder="TÃ­tulo interno"
             />
             <Input
               value={templateSubject}
@@ -1363,7 +1447,7 @@ export function JudicialAdminPanel() {
             />
 
             <div className="rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground">
-              Placeholders disponíveis: $ficha_core, $cpf, $nome_paciente,
+              Placeholders disponÃ­veis: $ficha_core, $cpf, $nome_paciente,
               $numero_processo, $protocolo_judicial, $protocolo_prejudicial,
               $data_agendamento e $user_sistema.
             </div>
@@ -1414,7 +1498,7 @@ export function JudicialAdminPanel() {
                   size="icon"
                   variant="outline"
                   className="bg-transparent"
-                  title="Itálico"
+                  title="ItÃ¡lico"
                   onClick={() => runTemplateEditorCommand("italic")}
                 >
                   <Italic className="h-4 w-4" />
@@ -1447,7 +1531,7 @@ export function JudicialAdminPanel() {
                   size="icon"
                   variant="outline"
                   className="bg-transparent"
-                  title="Alinhar à esquerda"
+                  title="Alinhar Ã  esquerda"
                   onClick={() => runTemplateEditorCommand("justifyLeft")}
                 >
                   <AlignLeft className="h-4 w-4" />
@@ -1469,7 +1553,7 @@ export function JudicialAdminPanel() {
                   size="icon"
                   variant="outline"
                   className="bg-transparent"
-                  title="Alinhar à direita"
+                  title="Alinhar Ã  direita"
                   onClick={() => runTemplateEditorCommand("justifyRight")}
                 >
                   <AlignRight className="h-4 w-4" />
@@ -1480,7 +1564,7 @@ export function JudicialAdminPanel() {
                   size="icon"
                   variant="outline"
                   className="bg-transparent"
-                  title="Lista não ordenada"
+                  title="Lista nÃ£o ordenada"
                   onClick={() => runTemplateEditorCommand("insertUnorderedList")}
                 >
                   <List className="h-4 w-4" />
@@ -1502,7 +1586,7 @@ export function JudicialAdminPanel() {
                   size="icon"
                   variant="outline"
                   className="bg-transparent"
-                  title="Formato padrão"
+                  title="Formato padrÃ£o"
                   onClick={() => runTemplateEditorCommand("formatBlock", "<p>")}
                 >
                   <Type className="h-4 w-4" />
@@ -1514,7 +1598,7 @@ export function JudicialAdminPanel() {
                   className="bg-transparent text-xs"
                   onClick={() => runTemplateEditorCommand("removeFormat")}
                 >
-                  Limpar formatação
+                  Limpar formataÃ§Ã£o
                 </Button>
               </div>
 
@@ -1581,19 +1665,19 @@ export function JudicialAdminPanel() {
           <CardHeader className="pb-3">
             <CardTitle className="text-base">Cadastro de SIGTAP</CardTitle>
             <CardDescription>
-              O SIGTAP é cadastrado apenas com código e descrição.
+              O SIGTAP Ã© cadastrado apenas com cÃ³digo e descriÃ§Ã£o.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <Input
               value={sigtapCodigoCadastro}
               onChange={(e) => setSigTapCodigoCadastro(normalizeDigitsOnlyInput(e.target.value))}
-              placeholder="Código do SIGTAP"
+              placeholder="CÃ³digo do SIGTAP"
             />
             <Input
               value={sigtapDescricaoCadastro}
               onChange={(e) => setSigTapDescricaoCadastro(normalizeUpperInput(e.target.value))}
-              placeholder="Descrição do SIGTAP"
+              placeholder="DescriÃ§Ã£o do SIGTAP"
             />
             <Button onClick={handleSaveSigTapCadastro} disabled={savingSigTapCadastro}>
               <Save className="mr-2 h-4 w-4" />
@@ -1611,7 +1695,7 @@ export function JudicialAdminPanel() {
               <Input
                 value={sigtapBuscaCadastro}
                 onChange={(e) => setSigTapBuscaCadastro(e.target.value)}
-                placeholder="Buscar SIGTAP por código ou descrição"
+                placeholder="Buscar SIGTAP por cÃ³digo ou descriÃ§Ã£o"
               />
               <Button type="button" variant="outline" onClick={fetchSigTapCadastro}>
                 <Search className="mr-2 h-4 w-4" />
@@ -1711,210 +1795,13 @@ export function JudicialAdminPanel() {
             )}
           </CardContent>
         </Card>
+      </TabsContent>      <TabsContent value="prioridade" className="mt-0 space-y-4">
+        <JudicialPrioritiesPanelCombined />
       </TabsContent>
-
-      <TabsContent
-        value="prioridade"
-        className="mt-0 grid gap-4 lg:grid-cols-[0.9fr_1.1fr]"
-      >
-        <Card className="border-border">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">
-              Prioridades do monitoramento
-            </CardTitle>
-            <CardDescription>
-              Adicione múltiplos procedimentos e CIDs com vigência. O destaque sai
-              automaticamente da fila quando o prazo expira ou quando o item é removido.
-            </CardDescription>
-          </CardHeader>
-
-          <CardContent className="space-y-4">
-            <div>
-              <Label className="mb-1 block text-xs">Tipo de prioridade</Label>
-              <select
-                value={focusMode}
-                onChange={(e) =>
-                  setFocusMode(
-                    e.target.value as "none" | "procedure" | "cid",
-                  )
-                }
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              >
-                <option value="procedure">Priorizar por procedimento</option>
-                <option value="cid">Priorizar por CID</option>
-                <option value="none">Somente visualizar lista</option>
-              </select>
-            </div>
-
-            {focusMode === "procedure" && (
-              <div className="space-y-3 rounded-xl border border-border p-4">
-                <div>
-                  <Label className="mb-1 block text-xs">
-                    Procedimento SIGTAP
-                  </Label>
-                  <Input
-                    value={priorityProcedureQuery}
-                    onChange={(e) =>
-                      setPriorityProcedureQuery(normalizeDigitsOnlyInput(e.target.value))
-                    }
-                    placeholder="0000000000"
-                  />
-
-                  {priorityProcedureQuery.trim() && (
-                    <div className="mt-2 max-h-56 overflow-auto rounded-xl border border-border bg-background p-1">
-                      {loadingPriorityProcedureOptions ? (
-                        <p className="px-3 py-2 text-sm text-muted-foreground">
-                          Carregando procedimentos...
-                        </p>
-                      ) : priorityProcedureOptions.length === 0 ? (
-                        <p className="px-3 py-2 text-sm text-muted-foreground">
-                          Nenhum procedimento localizado.
-                        </p>
-                      ) : (
-                        priorityProcedureOptions.map((item) => (
-                          <button
-                            key={`${item.id}-${item.codigo}`}
-                            type="button"
-                            className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-muted"
-                            onClick={() => addProcedurePriority(item)}
-                          >
-                            <span className="font-medium">{normalizeProcedureCode(item.codigo)}</span> -{" "}
-                            {item.descricao}
-                          </button>
-                        ))
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                <div>
-                  <Label className="mb-1 block text-xs">Vigente até</Label>
-                  <Input
-                    type="date"
-                    value={priorityExpiresAt}
-                    onChange={(e) => setPriorityExpiresAt(e.target.value)}
-                  />
-                </div>
-
-                <Button type="button" variant="outline" onClick={addManualProcedurePriority}>
-                  Adicionar procedimento à lista
-                </Button>
-              </div>
-            )}
-
-            {focusMode === "cid" && (
-              <div className="space-y-3 rounded-xl border border-border p-4">
-                <div>
-                  <Label className="mb-1 block text-xs">CID</Label>
-                  <Input
-                    value={priorityCidQuery}
-                    onChange={(e) =>
-                      setPriorityCidQuery(formatCidCode(e.target.value))
-                    }
-                    placeholder="A00.0"
-                  />
-
-                  {priorityCidQuery.trim() && (
-                    <div className="mt-2 max-h-56 overflow-auto rounded-xl border border-border bg-background p-1">
-                      {filteredPriorityCidOptions.length === 0 ? (
-                        <p className="px-3 py-2 text-sm text-muted-foreground">
-                          Nenhum CID localizado.
-                        </p>
-                      ) : (
-                        filteredPriorityCidOptions.map((item) => (
-                          <button
-                            key={`${item.code}-${item.description}`}
-                            type="button"
-                            className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-muted"
-                            onClick={() => addCidPriority(item)}
-                          >
-                            <span className="font-medium">{item.code}</span> -{" "}
-                            {item.description}
-                          </button>
-                        ))
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                <div>
-                  <Label className="mb-1 block text-xs">Vigente até</Label>
-                  <Input
-                    type="date"
-                    value={priorityExpiresAt}
-                    onChange={(e) => setPriorityExpiresAt(e.target.value)}
-                  />
-                </div>
-
-                <Button type="button" variant="outline" onClick={addManualCidPriority}>
-                  Adicionar CID à lista
-                </Button>
-              </div>
-            )}
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label className="text-xs">Itens priorizados</Label>
-                <Badge variant="outline">{focusItems.length}</Badge>
-              </div>
-
-              {loadingPriorities ? (
-                <div className="rounded-xl border border-border p-3 text-sm text-muted-foreground">
-                  Carregando prioridades...
-                </div>
-              ) : focusItems.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  Nenhum procedimento ou CID incluído na lista.
-                </p>
-              ) : (
-                focusItems.map((item) => (
-                  <div
-                    key={item.id}
-                    className="flex flex-col gap-3 rounded-xl border border-border p-3 md:flex-row md:items-center md:justify-between"
-                  >
-                    <div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge
-                          variant={item.mode === "procedure" ? "default" : "secondary"}
-                        >
-                          {item.mode === "procedure" ? "Procedimento" : "CID"}
-                        </Badge>
-                        {!isPriorityItemActive(item) && (
-                          <Badge variant="destructive">Expirado</Badge>
-                        )}
-                      </div>
-
-                      <p className="mt-2 text-sm font-medium">{item.label}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {describePriorityItem(item)}
-                      </p>
-                    </div>
-
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="bg-transparent"
-                      onClick={() => removePriorityItem(item.id)}
-                    >
-                      Remover
-                    </Button>
-                  </div>
-                ))
-              )}
-            </div>
-
-            <Button onClick={applyPriorityFocus} disabled={savingPriorities}>
-              <Settings2 className="mr-2 h-4 w-4" />
-              {savingPriorities ? "Salvando..." : "Aplicar prioridades"}
-            </Button>
-          </CardContent>
-        </Card>
-
-        </TabsContent>
-
-      <TabsContent value="bloqueio-sequestro" className="mt-0 space-y-4">
+<TabsContent value="bloqueio-sequestro" className="mt-0 space-y-4">
         <JudicialBloqueioSequestroPanel />
       </TabsContent>
     </Tabs>
   )
 }
+
