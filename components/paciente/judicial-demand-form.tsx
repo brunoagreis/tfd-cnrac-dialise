@@ -67,6 +67,8 @@ export function JudicialDemandForm({
   const [procedures, setProcedures] = useState<ProcedureEntry[]>([])
   const [cids, setCids] = useState<CidEntry[]>([])
 
+  const oficioRequired = isIntimation === "sim"
+
   const deadlineAt = useMemo(
     () => calculateDeadlineAt(receivedAt, Number(deadlineDays || 0)),
     [receivedAt, deadlineDays],
@@ -132,7 +134,7 @@ export function JudicialDemandForm({
     if (!user) return
 
     if (
-      !oficioNumber.trim() ||
+      (oficioRequired && !oficioNumber.trim()) ||
       !receivedAt ||
       !actionRecords.trim() ||
       !pgeNetNumber.trim() ||
@@ -236,10 +238,13 @@ export function JudicialDemandForm({
           </div>
 
           <div>
-            <Label className="mb-1 block text-xs">Número do ofício ou intimação *</Label>
+            <Label className="mb-1 block text-xs">
+              Número do ofício ou intimação{oficioRequired ? " *" : ""}
+            </Label>
             <Input
               value={oficioNumber}
               onChange={(e) => setOficioNumber(normalizeUpper(e.target.value))}
+              placeholder={oficioRequired ? "Obrigatório quando for intimação" : "Opcional quando não for intimação"}
             />
           </div>
 
@@ -329,7 +334,7 @@ export function JudicialDemandForm({
       </Card>
 
       <div className="rounded-lg border border-border bg-muted/30 p-3 text-sm">
-        Campos obrigatórios: número do ofício/intimação, data do recebimento, autos da ação, número do PGE.net, prazo em dias, município envolvido, ao menos 1 procedimento e ao menos 1 CID. A data da reiteração não é obrigatória.
+        Campos obrigatórios: data do recebimento, autos da ação, número do PGE.net, prazo em dias, município envolvido, ao menos 1 procedimento e ao menos 1 CID. O número do ofício/intimação só é obrigatório quando “É intimação?” for Sim. A data da reiteração não é obrigatória.
       </div>
 
       <div className="flex justify-between gap-2">
