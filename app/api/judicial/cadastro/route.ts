@@ -38,6 +38,10 @@ type PacienteRow = {
   municipio: string | null
 }
 
+type ModuleEnumRow = {
+  value: string
+}
+
 type ProcedureEntry = {
   sigtapCode: string
   description: string
@@ -78,6 +82,26 @@ async function buildProtocol(tx: typeof prisma) {
   )
   const total = Number(rows?.[0]?.total ?? 0) + 1
   return `JUD-${year}-${String(total).padStart(5, "0")}`
+}
+
+async function resolveModuleEnumValue(tx: typeof prisma, moduleName: string) {
+  const rows = await tx.$queryRawUnsafe<ModuleEnumRow[]>(
+    `
+      SELECT e.enumlabel::text AS value
+      FROM pg_type t
+      INNER JOIN pg_enum e
+        ON e.enumtypid = t.oid
+      WHERE t.typname = 'Module'
+        AND LOWER(e.enumlabel::text) = LOWER($1)
+      ORDER BY e.enumsortorder
+      LIMIT 1
+    `,
+    moduleName,
+  )
+
+  const value = normalizeText(rows[0]?.value)
+  if (!value) throw new Error(`Valor do modulo ${moduleName} nao existe no enum Module do banco.`)
+  return value
 }
 
 export async function GET() {
@@ -220,6 +244,7 @@ export async function POST(req: NextRequest) {
 
       const demandaId = buildId("dem_")
       const protocolo = await buildProtocol(tx)
+      const moduleEnumValue = await resolveModuleEnumValue(tx, "judicial")
 
       const observacoesBloco = [
         `TIPO DE INTIMACAO: ${isIntimation === "sim" ? "SIM" : "NAO"}`,
@@ -246,26 +271,47 @@ export async function POST(req: NextRequest) {
         .filter(Boolean)
         .join("\n")
 
-      await tx.demanda.create({
-        data: {
-          id: demandaId,
-          protocolo,
-          pacienteId,
-          modulo: "judicial" as any,
-          localSolicitante: "JUDICIAL",
-          emailSolicitante: "judicial@sigajus.local",
-          acaoJudicial: true,
-          codigoSigtap: onlyDigits(primaryProcedure.sigtapCode),
-          descricaoSigtap: normalizeUpper(primaryProcedure.description),
-          cid10: normalizeUpper(primaryCid.code),
-          especialidade: normalizeUpper(primaryProcedure.specialty),
-          subespecialidade: normalizeUpper(primaryProcedure.subSpecialty),
-          observacoesUnidade: observacoesBloco,
-          localSolicitado: municipalityName,
-          criadoPor: criadoPor || null,
-          criadoPorNome: criadoPorNome || null,
-        },
-      })
+      await tx.$executeRawUnsafe(
+        `
+          INSERT INTO public.demandas (
+            id,
+            protocolo,
+            "pacienteId",
+            modulo,
+            "localSolicitante",
+            "emailSolicitante",
+            "acaoJudicial",
+            "codigoSigtap",
+            "descricaoSigtap",
+            cid10,
+            especialidade,
+            subespecialidade,
+            "observacoesUnidade",
+            "localSolicitado",
+            "tipoSolicitacao",
+            "criadoPor",
+            "criadoPorNome",
+            "createdAt",
+            "updatedAt"
+          )
+          VALUES (
+            $1, $2, $3, $4::"Module", 'JUDICIAL', 'judicial@sigajus.local', TRUE, $5, $6, $7, $8, $9, $10, $11, NULL, $12, $13, NOW(), NOW()
+          )
+        `,
+        demandaId,
+        protocolo,
+        pacienteId,
+        moduleEnumValue,
+        onlyDigits(primaryProcedure.sigtapCode),
+        normalizeUpper(primaryProcedure.description),
+        normalizeUpper(primaryCid.code),
+        normalizeUpper(primaryProcedure.specialty),
+        normalizeUpper(primaryProcedure.subSpecialty),
+        observacoesBloco,
+        municipalityName,
+        criadoPor || null,
+        criadoPorNome || null,
+      )
 
       await tx.$executeRawUnsafe(
         `
