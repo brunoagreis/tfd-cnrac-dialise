@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { BarChart3, CalendarClock, Settings } from "lucide-react"
+import { BarChart3, CalendarClock, Settings, Settings2 } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { canAccessJudicialAdmin } from "@/lib/judicial-access"
 import { JudicialAdminPanel } from "@/components/modules/judicial-admin-panel"
@@ -34,6 +34,13 @@ export default function JudicialAdminPage() {
         </div>
 
         <div className="flex flex-wrap gap-2">
+          <Button asChild variant="outline" className="bg-transparent">
+            <Link href="/admin/judicial/prioridades">
+              <Settings2 className="mr-2 h-4 w-4" />
+              Prioridades
+            </Link>
+          </Button>
+
           <Button asChild variant="outline" className="bg-transparent">
             <Link href="/admin/dashboard-administrativo">
               <BarChart3 className="mr-2 h-4 w-4" />
