@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { MunicipalitySelectField } from "@/components/paciente/municipality-select-field"
 import {
   ProcedureMultiEntry,
   type ProcedureCatalogItem,
@@ -51,7 +52,6 @@ export function JudicialDemandForm({
   const [loadingCatalogs, setLoadingCatalogs] = useState(true)
   const [saving, setSaving] = useState(false)
 
-  const [municipios, setMunicipios] = useState<string[]>([])
   const [procedureCatalog, setProcedureCatalog] = useState<ProcedureCatalogItem[]>([])
   const [cidCatalog, setCidCatalog] = useState<CidCatalogItem[]>([])
   const [especialidadeSubItems, setEspecialidadeSubItems] = useState<EspecialidadeSubItem[]>([])
@@ -92,7 +92,6 @@ export function JudicialDemandForm({
         return
       }
 
-      setMunicipios(Array.isArray(json?.municipios) ? json.municipios : [])
       setProcedureCatalog(Array.isArray(json?.sigtap) ? json.sigtap : [])
       setCidCatalog(Array.isArray(json?.cid10) ? json.cid10 : [])
       setEspecialidadeSubItems(Array.isArray(json?.especialidades) ? json.especialidades : [])
@@ -287,22 +286,11 @@ export function JudicialDemandForm({
           </div>
 
           <div className="md:col-span-2">
-            <Label className="mb-1 block text-xs">Município envolvido *</Label>
-            <select
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            <MunicipalitySelectField
               value={municipalityName}
-              onChange={(e) => setMunicipalityName(e.target.value)}
-              disabled={loadingCatalogs}
-            >
-              <option value="">
-                {loadingCatalogs ? "Carregando..." : "Selecione"}
-              </option>
-              {municipios.map((item) => (
-                <option key={item} value={item}>
-                  {item}
-                </option>
-              ))}
-            </select>
+              onChange={setMunicipalityName}
+              label="Município envolvido *"
+            />
           </div>
         </CardContent>
       </Card>
