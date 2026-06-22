@@ -12,11 +12,11 @@ import {
   UserRound,
 } from "lucide-react"
 
-import { useStore } from "@/lib/store-context"
 import { ModuleChooser, type DemandModuleChoice } from "@/components/paciente/module-chooser"
 import { StandardDemandForm } from "@/components/paciente/standard-demand-form"
 import { JudicialDemandForm } from "@/components/paciente/judicial-demand-form"
 import { PreJudicialDemandForm } from "@/components/paciente/pre-judicial-demand-form"
+import { MunicipalitySelectField } from "@/components/paciente/municipality-select-field"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -145,8 +145,6 @@ function normalizeApiPatient(item: any): ApiPatientItem {
 }
 
 export default function PacientesPage() {
-  const store = useStore() as any
-
   const [search, setSearch] = useState("")
   const [page, setPage] = useState(1)
 
@@ -186,18 +184,12 @@ export default function PacientesPage() {
       setLoadingPatients(true)
 
       const params = new URLSearchParams()
-      if (query.trim()) {
-        params.set("q", query.trim())
-      }
+      if (query.trim()) params.set("q", query.trim())
 
       const response = await fetch(
         `/api/pacientes${params.toString() ? `?${params.toString()}` : ""}`,
-        {
-          method: "GET",
-          cache: "no-store",
-        },
+        { method: "GET", cache: "no-store" },
       )
-
       const json = await response.json().catch(() => ({}))
 
       if (!response.ok || !json?.ok) {
@@ -219,14 +211,10 @@ export default function PacientesPage() {
     try {
       setLoadingHistory(true)
 
-      const response = await fetch(
-        `/api/pacientes/${encodeURIComponent(patientId)}/historico`,
-        {
-          method: "GET",
-          cache: "no-store",
-        },
-      )
-
+      const response = await fetch(`/api/pacientes/${encodeURIComponent(patientId)}/historico`, {
+        method: "GET",
+        cache: "no-store",
+      })
       const json = await response.json().catch(() => ({}))
 
       if (!response.ok || !json?.ok) {
@@ -276,10 +264,7 @@ export default function PacientesPage() {
   }, [filteredPatients, page])
 
   function patientDemandCount(patient: ApiPatientItem) {
-    if (typeof patient.totalDemandas === "number") {
-      return patient.totalDemandas
-    }
-    return 0
+    return typeof patient.totalDemandas === "number" ? patient.totalDemandas : 0
   }
 
   function openDemand(patient: Paciente) {
@@ -345,7 +330,7 @@ export default function PacientesPage() {
     }
 
     if (!createPatientForm.cidade.trim()) {
-      window.alert("Informe a cidade.")
+      window.alert("Selecione a cidade cadastrada em Admin Judicial > Municípios.")
       return false
     }
 
@@ -357,11 +342,41 @@ export default function PacientesPage() {
     return true
   }
 
-  function handleSaveNewPatient() {
+  async function handleSaveNewPatient() {
     if (savingPatient) return
     if (!validateNewPatientForm()) return
 
-    window.alert("O cadastro de novo paciente ainda não foi ligado ao banco de dados.")
+    try {
+      setSavingPatient(true)
+
+      const response = await fetch("/api/pacientes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(createPatientForm),
+      })
+      const json = await response.json().catch(() => ({}))
+
+      if (!response.ok || !json?.ok) {
+        toast.error(json?.error || "Erro ao salvar paciente.")
+        return
+      }
+
+      const patient = normalizeApiPatient(json.item)
+      setApiPatients((current) => {
+        const exists = current.some((item) => item.id === patient.id)
+        if (exists) return current.map((item) => (item.id === patient.id ? patient : item))
+        return [patient, ...current]
+      })
+      setCreatePatientOpen(false)
+      setCreatePatientForm(initialNewPatientForm())
+      toast.success("Paciente salvo com município padronizado.")
+      openDemand(patient)
+    } catch (error) {
+      console.error("SAVE_PATIENT_ERROR", error)
+      toast.error("Erro ao salvar paciente.")
+    } finally {
+      setSavingPatient(false)
+    }
   }
 
   function renderDemandForm() {
@@ -720,14 +735,11 @@ export default function PacientesPage() {
               </div>
             </div>
 
-            <div>
-              <Label className="mb-1 block text-xs">Cidade</Label>
-              <Input
-                value={createPatientForm.cidade}
-                onChange={(e) => updateCreatePatientField("cidade", e.target.value)}
-                placeholder="Cidade"
-              />
-            </div>
+            <MunicipalitySelectField
+              value={createPatientForm.cidade}
+              onChange={(value) => updateCreatePatientField("cidade", value)}
+              label="Cidade"
+            />
 
             <div className="flex flex-wrap gap-2 pt-2">
               <Button type="button" onClick={handleSaveNewPatient} disabled={savingPatient}>
