@@ -51,6 +51,10 @@ type CidEntry = {
   description: string
 }
 
+type ModuleEnumRow = {
+  value: string
+}
+
 function normalizeText(value: unknown) {
   return String(value ?? "").trim()
 }
@@ -80,6 +84,30 @@ async function buildProtocol(tx: typeof prisma) {
 
   const total = Number(rows?.[0]?.total ?? 0) + 1
   return `JUD-${year}-${String(total).padStart(5, "0")}`
+}
+
+async function resolveModuleEnumValue(tx: typeof prisma, moduleName: string) {
+  const rows = await tx.$queryRawUnsafe<ModuleEnumRow[]>(
+    `
+      SELECT e.enumlabel::text AS value
+      FROM pg_type t
+      INNER JOIN pg_enum e
+        ON e.enumtypid = t.oid
+      WHERE t.typname = 'Module'
+        AND LOWER(e.enumlabel::text) = LOWER($1)
+      ORDER BY e.enumsortorder
+      LIMIT 1
+    `,
+    moduleName,
+  )
+
+  const value = normalizeText(rows[0]?.value)
+
+  if (!value) {
+    throw new Error(`Valor do módulo ${moduleName} não existe no enum Module do banco.`)
+  }
+
+  return value
 }
 
 export async function GET() {
@@ -121,12 +149,16 @@ export async function GET() {
       prisma.$queryRawUnsafe<CatalogEspecialidadeRow[]>(
         `
           SELECT
-            especialidade_id::text AS "especialidadeId",
-            especialidade_nome AS "especialidadeNome",
-            subespecialidade_id::text AS "subespecialidadeId",
-            subespecialidade_nome AS "subespecialidadeNome"
-          FROM public.admin_judicial_especialidades
-          ORDER BY especialidade_nome, subespecialidade_nome
+            esp.id::text AS "especialidadeId",
+            esp.nome AS "especialidadeNome",
+            sub.id::text AS "subespecialidadeId",
+            sub.nome AS "subespecialidadeNome"
+          FROM public.admin_judicial_subespecialidades sub
+          INNER JOIN public.admin_judicial_especialidades esp
+            ON esp.id = sub.especialidade_id
+          WHERE COALESCE(esp.ativo, TRUE) = TRUE
+            AND COALESCE(sub.ativo, TRUE) = TRUE
+          ORDER BY esp.nome, sub.nome
         `,
       ),
     ])
@@ -256,6 +288,7 @@ export async function POST(req: NextRequest) {
 
       const demandaId = buildId("dem_")
       const protocolo = await buildProtocol(tx)
+      const moduleEnumValue = await resolveModuleEnumValue(tx, "judicial")
 
       const observacoesBloco = [
         `TIPO DE INTIMAÇÃO: ${isIntimation === "sim" ? "SIM" : "NÃO"}`,
@@ -309,12 +342,13 @@ export async function POST(req: NextRequest) {
             "updatedAt"
           )
           VALUES (
-            $1, $2, $3, 'judicial', 'JUDICIAL', NULL, TRUE, $4, $5, $6, $7, $8, $9, $10, 'nao_se_aplica', $11, $12, NOW(), NOW()
+            $1, $2, $3, $4::"Module", 'JUDICIAL', NULL, TRUE, $5, $6, $7, $8, $9, $10, $11, 'nao_se_aplica', $12, $13, NOW(), NOW()
           )
         `,
         demandaId,
         protocolo,
         pacienteId,
+        moduleEnumValue,
         onlyDigits(primaryProcedure.sigtapCode),
         normalizeUpper(primaryProcedure.description),
         normalizeUpper(primaryCid.code),
