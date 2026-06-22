@@ -29,7 +29,7 @@ export default function JudicialPrioridadesPage() {
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Prioridades do monitoramento</h1>
             <p className="text-sm text-muted-foreground">
-              Página exclusiva para configurar prioridades por procedimento SIGTAP e CID.
+              Configure a prioridade combinada, procedimentos SIGTAP e CIDs usando as tabelas oficiais do sistema.
             </p>
           </div>
         </div>
