@@ -10,11 +10,19 @@ type TemplateRow = {
   title: string
   subject: string
   body: string
+  dispatchModule: string | null
+  automaticDispatch: boolean | null
   updatedAt: string
 }
 
 function normalizeText(value: unknown) {
   return String(value ?? "").trim()
+}
+
+function normalizeModule(value: unknown) {
+  const module = normalizeText(value).toLowerCase().replace(/\s+/g, "_").replace("-", "_")
+  if (["tfd", "cnrac", "hemodialise", "judicial", "pre_judicial"].includes(module)) return module
+  return ""
 }
 
 function mapRow(row: TemplateRow) {
@@ -24,12 +32,34 @@ function mapRow(row: TemplateRow) {
     title: row.title,
     subject: row.subject,
     body: row.body,
+    dispatchModule: row.dispatchModule ?? "",
+    automaticDispatch: Boolean(row.automaticDispatch),
     updatedAt: row.updatedAt,
   }
 }
 
+async function ensureEmailDispatchColumns() {
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE public.admin_judicial_modelos_email
+      ADD COLUMN IF NOT EXISTS modulo_disparo TEXT
+  `)
+
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE public.admin_judicial_modelos_email
+      ADD COLUMN IF NOT EXISTS disparo_automatico BOOLEAN NOT NULL DEFAULT FALSE
+  `)
+
+  await prisma.$executeRawUnsafe(`
+    CREATE UNIQUE INDEX IF NOT EXISTS admin_judicial_modelos_email_auto_modulo_uniq
+    ON public.admin_judicial_modelos_email (LOWER(modulo_disparo))
+    WHERE disparo_automatico = TRUE AND NULLIF(TRIM(modulo_disparo), '') IS NOT NULL
+  `)
+}
+
 export async function GET() {
   try {
+    await ensureEmailDispatchColumns()
+
     const rows = await prisma.$queryRawUnsafe<TemplateRow[]>(`
       SELECT
         id::text AS id,
@@ -37,6 +67,8 @@ export async function GET() {
         titulo AS title,
         assunto AS subject,
         corpo_html AS body,
+        modulo_disparo AS "dispatchModule",
+        disparo_automatico AS "automaticDispatch",
         updated_at::text AS "updatedAt"
       FROM public.admin_judicial_modelos_email
       ORDER BY titulo
@@ -58,6 +90,8 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
+    await ensureEmailDispatchColumns()
+
     const body = await req.json().catch(() => null)
 
     const id = normalizeText(body?.id)
@@ -65,11 +99,33 @@ export async function POST(req: Request) {
     const title = normalizeText(body?.title)
     const subject = normalizeText(body?.subject)
     const bodyHtml = String(body?.body ?? "").trim()
+    const dispatchModule = normalizeModule(body?.dispatchModule ?? body?.moduloDisparo ?? body?.module)
+    const automaticDispatch = Boolean(body?.automaticDispatch ?? body?.disparoAutomatico)
 
     if (!type || !title || !subject || !bodyHtml) {
       return NextResponse.json(
         { ok: false, error: "Tipo, título, assunto e corpo são obrigatórios." },
         { status: 400 },
+      )
+    }
+
+    if (automaticDispatch && !dispatchModule) {
+      return NextResponse.json(
+        { ok: false, error: "Informe o módulo do disparo automático." },
+        { status: 400 },
+      )
+    }
+
+    if (automaticDispatch && dispatchModule) {
+      await prisma.$executeRawUnsafe(
+        `
+          UPDATE public.admin_judicial_modelos_email
+          SET disparo_automatico = FALSE
+          WHERE LOWER(COALESCE(modulo_disparo, '')) = LOWER($1)
+            AND ($2 = '' OR id::text <> $2)
+        `,
+        dispatchModule,
+        id,
       )
     }
 
@@ -83,20 +139,27 @@ export async function POST(req: Request) {
             tipo_template = $1,
             titulo = $2,
             assunto = $3,
-            corpo_html = $4
-          WHERE id = $5::bigint
+            corpo_html = $4,
+            modulo_disparo = NULLIF($5, ''),
+            disparo_automatico = $6,
+            updated_at = NOW()
+          WHERE id = $7::bigint
           RETURNING
             id::text AS id,
             tipo_template AS type,
             titulo AS title,
             assunto AS subject,
             corpo_html AS body,
+            modulo_disparo AS "dispatchModule",
+            disparo_automatico AS "automaticDispatch",
             updated_at::text AS "updatedAt"
         `,
         type,
         title,
         subject,
         bodyHtml,
+        dispatchModule,
+        automaticDispatch,
         id,
       )
 
@@ -120,20 +183,27 @@ export async function POST(req: Request) {
               tipo_template = $1,
               titulo = $2,
               assunto = $3,
-              corpo_html = $4
-            WHERE id = $5::bigint
+              corpo_html = $4,
+              modulo_disparo = NULLIF($5, ''),
+              disparo_automatico = $6,
+              updated_at = NOW()
+            WHERE id = $7::bigint
             RETURNING
               id::text AS id,
               tipo_template AS type,
               titulo AS title,
               assunto AS subject,
               corpo_html AS body,
+              modulo_disparo AS "dispatchModule",
+              disparo_automatico AS "automaticDispatch",
               updated_at::text AS "updatedAt"
           `,
           type,
           title,
           subject,
           bodyHtml,
+          dispatchModule,
+          automaticDispatch,
           existing[0].id,
         )
 
@@ -145,21 +215,28 @@ export async function POST(req: Request) {
               tipo_template,
               titulo,
               assunto,
-              corpo_html
+              corpo_html,
+              modulo_disparo,
+              disparo_automatico,
+              updated_at
             )
-            VALUES ($1, $2, $3, $4)
+            VALUES ($1, $2, $3, $4, NULLIF($5, ''), $6, NOW())
             RETURNING
               id::text AS id,
               tipo_template AS type,
               titulo AS title,
               assunto AS subject,
               corpo_html AS body,
+              modulo_disparo AS "dispatchModule",
+              disparo_automatico AS "automaticDispatch",
               updated_at::text AS "updatedAt"
           `,
           type,
           title,
           subject,
           bodyHtml,
+          dispatchModule,
+          automaticDispatch,
         )
 
         saved = inserted[0]
