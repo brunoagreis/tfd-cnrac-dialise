@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState, type ComponentType } from "react"
 import Link from "next/link"
 import {
   AlertTriangle,
@@ -56,7 +56,7 @@ type DashboardCard = {
   label: string
   description: string
   href: string
-  icon: React.ComponentType<{ className?: string }>
+  icon: ComponentType<{ className?: string }>
   badge: string
 }
 
@@ -67,7 +67,7 @@ const EMPTY_MODULE: DashboardModuleSummary = {
   fila: 0,
 }
 
-const MODULE_ICONS: Record<Module, React.ComponentType<{ className?: string }>> = {
+const MODULE_ICONS: Record<Module, ComponentType<{ className?: string }>> = {
   tfd: FileText,
   cnrac: ClipboardList,
   hemodialise: Stethoscope,
@@ -369,7 +369,7 @@ function QuickLink({
   label,
 }: {
   href: string
-  icon: React.ComponentType<{ className?: string }>
+  icon: ComponentType<{ className?: string }>
   label: string
 }) {
   return (
