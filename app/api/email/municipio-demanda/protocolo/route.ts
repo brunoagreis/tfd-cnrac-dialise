@@ -17,6 +17,8 @@ type DemandRow = {
   cid10: string | null
   especialidade: string | null
   subespecialidade: string | null
+  observacoesUnidade: string | null
+  userSistema: string | null
 }
 
 function text(value: unknown) {
@@ -27,6 +29,16 @@ function normalizeModule(value: unknown) {
   const module = text(value).toLowerCase().replace(/\s+/g, "_").replace("-", "_")
   if (["tfd", "cnrac", "hemodialise", "judicial", "pre_judicial"].includes(module)) return module
   return ""
+}
+
+function observationValue(observacoes: unknown, label: string) {
+  const lines = text(observacoes).split(/\r?\n/)
+  const normalizedLabel = label.toUpperCase()
+
+  const line = lines.find((item) => item.trim().toUpperCase().startsWith(`${normalizedLabel}:`))
+  if (!line) return ""
+
+  return line.slice(line.indexOf(":") + 1).trim()
 }
 
 export async function POST(req: NextRequest) {
@@ -51,7 +63,9 @@ export async function POST(req: NextRequest) {
           d."descricaoSigtap" AS "descricaoSigtap",
           d.cid10 AS cid10,
           d.especialidade AS especialidade,
-          d.subespecialidade AS subespecialidade
+          d.subespecialidade AS subespecialidade,
+          d."observacoesUnidade" AS "observacoesUnidade",
+          d."criadoPorNome" AS "userSistema"
         FROM public.demandas d
         INNER JOIN public.pacientes p
           ON p.id = d."pacienteId"
@@ -84,6 +98,15 @@ export async function POST(req: NextRequest) {
       cid10: text(demand.cid10),
       especialidade: text(demand.especialidade),
       subespecialidade: text(demand.subespecialidade),
+      numeroProcesso: observationValue(demand.observacoesUnidade, "AUTOS DA ACAO"),
+      pgeNet: observationValue(demand.observacoesUnidade, "PGE.NET"),
+      numeroOficio: observationValue(demand.observacoesUnidade, "OFICIO/INTIMACAO"),
+      tipoIntimacao: observationValue(demand.observacoesUnidade, "TIPO DE INTIMACAO"),
+      dataRecebimento: observationValue(demand.observacoesUnidade, "DATA DE RECEBIMENTO"),
+      dataReiteracao: observationValue(demand.observacoesUnidade, "DATA DA REITERACAO"),
+      prazoDias: observationValue(demand.observacoesUnidade, "PRAZO (DIAS)"),
+      prazoFinal: observationValue(demand.observacoesUnidade, "PRAZO FINAL"),
+      userSistema: text(demand.userSistema),
     })
 
     return NextResponse.json({ ok: true, result })
