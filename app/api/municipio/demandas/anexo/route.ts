@@ -3,6 +3,11 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { getMunicipalitySession } from "@/lib/municipality-portal-session"
 import { safeFlagDemandForMunicipalityInteraction } from "@/lib/municipality-portal-safe-signal"
+import {
+  buildMunicipalityUploadDownloadUrl,
+  createMunicipalityUploadToken,
+  ensureMunicipalityUploadTable,
+} from "@/lib/municipality-portal-uploads"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -13,24 +18,6 @@ function text(value: unknown) {
 
 function buildId(prefix: string) {
   return `${prefix}${randomUUID().replace(/-/g, "")}`
-}
-
-async function ensureUploadTable() {
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS public.municipio_portal_anexos (
-      id BIGSERIAL PRIMARY KEY,
-      protocolo TEXT NOT NULL,
-      demanda_id TEXT NOT NULL,
-      municipio_id BIGINT NOT NULL,
-      municipio_nome TEXT NOT NULL,
-      email TEXT NOT NULL,
-      nome_arquivo TEXT NOT NULL,
-      mime_type TEXT,
-      tamanho INTEGER,
-      conteudo BYTEA NOT NULL,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `)
 }
 
 async function findDemand(protocolo: string, municipio: string) {
@@ -54,7 +41,7 @@ export async function POST(req: NextRequest) {
     const session = await getMunicipalitySession()
     if (!session) return NextResponse.json({ ok: false, error: "Nao autenticado." }, { status: 401 })
 
-    await ensureUploadTable()
+    await ensureMunicipalityUploadTable()
 
     const form = await req.formData()
     const protocolo = text(form.get("protocolo"))
@@ -74,6 +61,8 @@ export async function POST(req: NextRequest) {
     }
 
     const bytes = Buffer.from(await file.arrayBuffer())
+    const token = createMunicipalityUploadToken()
+    const downloadUrl = buildMunicipalityUploadDownloadUrl(token)
 
     await prisma.$executeRawUnsafe(
       `
@@ -87,9 +76,10 @@ export async function POST(req: NextRequest) {
           mime_type,
           tamanho,
           conteudo,
+          download_token,
           created_at
         )
-        VALUES ($1, $2, $3::bigint, $4, $5, $6, $7, $8, $9, NOW())
+        VALUES ($1, $2, $3::bigint, $4, $5, $6, $7, $8, $9, $10, NOW())
       `,
       protocolo,
       demand.id,
@@ -100,9 +90,10 @@ export async function POST(req: NextRequest) {
       file.type || "application/octet-stream",
       file.size,
       bytes,
+      token,
     )
 
-    const interactionText = `ANEXO DO MUNICIPIO\nArquivo: ${file.name}\nTamanho: ${Math.round(file.size / 1024)} KB`
+    const interactionText = `ANEXO DO MUNICIPIO\nArquivo: ${file.name}\nTamanho: ${Math.round(file.size / 1024)} KB\nLink: ${downloadUrl}`
 
     await prisma.$executeRawUnsafe(
       `
@@ -117,18 +108,19 @@ export async function POST(req: NextRequest) {
           "createdByCpf",
           "assinaturaUrl"
         )
-        VALUES ($1, $2, $3, NULL, NOW(), $4, $5, NULL, NULL)
+        VALUES ($1, $2, $3, NULL, NOW(), $4, $5, NULL, $6)
       `,
       buildId("int_"),
       demand.id,
       interactionText,
       `municipio:${session.municipalityId}`,
       `Municipio: ${session.municipalityName}`,
+      downloadUrl,
     )
 
     await safeFlagDemandForMunicipalityInteraction({ demandaId: demand.id, protocolo })
 
-    return NextResponse.json({ ok: true })
+    return NextResponse.json({ ok: true, downloadUrl })
   } catch (error) {
     console.error("[POST /api/municipio/demandas/anexo] erro:", error)
     return NextResponse.json({ ok: false, error: "Erro ao anexar arquivo." }, { status: 500 })
