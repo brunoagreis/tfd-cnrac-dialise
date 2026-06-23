@@ -5,7 +5,6 @@ import { BarChart3, CalendarClock, Mail, Settings, Settings2 } from "lucide-reac
 import { useAuth } from "@/lib/auth-context"
 import { canAccessJudicialAdmin } from "@/lib/judicial-access"
 import { JudicialAdminPanel } from "@/components/modules/judicial-admin-panel"
-import { JudicialEmailPlaceholdersInline } from "@/components/modules/judicial-email-placeholders-inline"
 import { Button } from "@/components/ui/button"
 
 export default function JudicialAdminPage() {
@@ -72,7 +71,6 @@ export default function JudicialAdminPage() {
         </div>
       </div>
 
-      <JudicialEmailPlaceholdersInline />
       <JudicialAdminPanel />
     </div>
   )
