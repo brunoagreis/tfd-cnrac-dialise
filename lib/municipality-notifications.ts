@@ -23,6 +23,17 @@ type DemandNotificationInput = {
   cid10?: string | null
   especialidade?: string | null
   subespecialidade?: string | null
+  fichaCore?: string | null
+  numeroProcesso?: string | null
+  pgeNet?: string | null
+  numeroOficio?: string | null
+  tipoIntimacao?: string | null
+  dataRecebimento?: string | null
+  dataReiteracao?: string | null
+  prazoDias?: string | number | null
+  prazoFinal?: string | null
+  dataAgendamento?: string | null
+  userSistema?: string | null
 }
 
 function text(value: unknown) {
@@ -31,6 +42,27 @@ function text(value: unknown) {
 
 function normalizeModule(value: string) {
   return text(value).toLowerCase().replace(/\s+/g, "_").replace("-", "_")
+}
+
+function moduleLabel(value: string) {
+  const module = normalizeModule(value)
+  const labels: Record<string, string> = {
+    tfd: "TFD",
+    cnrac: "CNRAC",
+    hemodialise: "Hemodiálise",
+    judicial: "Judicial",
+    pre_judicial: "Pré Judicial",
+  }
+  return labels[module] ?? module.toUpperCase()
+}
+
+function escapeHtml(value: unknown) {
+  return text(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;")
 }
 
 function normalizeEmails(value: unknown) {
@@ -51,22 +83,145 @@ function parseBoolean(value: string | undefined, fallback: boolean) {
   return ["1", "true", "yes", "on"].includes(value.trim().toLowerCase())
 }
 
-function replaceTokens(template: string, input: DemandNotificationInput) {
-  const values: Record<string, string> = {
-    protocolo: input.protocolo,
-    modulo: input.module.toUpperCase(),
-    paciente_nome: input.pacienteNome,
-    paciente_cpf: input.pacienteCpf || "",
-    paciente_cns: input.pacienteCns || "",
-    municipio: input.municipio,
-    sigtap: input.codigoSigtap || "",
-    sigtap_descricao: input.descricaoSigtap || "",
-    cid: input.cid10 || "",
-    especialidade: input.especialidade || "",
-    subespecialidade: input.subespecialidade || "",
-  }
+function tokenValues(input: DemandNotificationInput) {
+  const protocolo = text(input.protocolo)
+  const pacienteNome = text(input.pacienteNome)
+  const pacienteCpf = text(input.pacienteCpf)
+  const pacienteCns = text(input.pacienteCns)
+  const numeroProcesso = text(input.numeroProcesso)
+  const pgeNet = text(input.pgeNet)
+  const numeroOficio = text(input.numeroOficio)
+  const fichaCore = text(input.fichaCore)
+  const userSistema = text(input.userSistema) || "SIGAJUS"
+  const dataAgendamento = text(input.dataAgendamento)
 
-  return template.replace(/\$([a-zA-Z0-9_]+)/g, (_match, key) => values[String(key)] ?? "")
+  return {
+    modulo: moduleLabel(input.module),
+    modulo_codigo: normalizeModule(input.module),
+    protocolo,
+    protocolo_judicial: protocolo,
+    protocolo_prejudicial: protocolo,
+    nome_paciente: pacienteNome,
+    paciente_nome: pacienteNome,
+    requerente: pacienteNome,
+    cpf: pacienteCpf,
+    paciente_cpf: pacienteCpf,
+    cns: pacienteCns,
+    cartao_sus: pacienteCns,
+    paciente_cns: pacienteCns,
+    ficha_core: fichaCore,
+    municipio: text(input.municipio),
+    numero_processo: numeroProcesso,
+    autos_acao: numeroProcesso,
+    processo: numeroProcesso,
+    pge_net: pgeNet,
+    numero_pge_net: pgeNet,
+    numero_oficio: numeroOficio,
+    oficio: numeroOficio,
+    tipo_intimacao: text(input.tipoIntimacao),
+    data_recebimento: text(input.dataRecebimento),
+    data_reiteracao: text(input.dataReiteracao),
+    prazo_dias: text(input.prazoDias),
+    prazo_final: text(input.prazoFinal),
+    data_agendamento: dataAgendamento,
+    user_sistema: userSistema,
+    sigtap: text(input.codigoSigtap),
+    codigo_sigtap: text(input.codigoSigtap),
+    sigtap_descricao: text(input.descricaoSigtap),
+    descricao_sigtap: text(input.descricaoSigtap),
+    cid: text(input.cid10),
+    cid10: text(input.cid10),
+    especialidade: text(input.especialidade),
+    subespecialidade: text(input.subespecialidade),
+  } satisfies Record<string, string>
+}
+
+function replaceTokens(template: string, input: DemandNotificationInput) {
+  const values = tokenValues(input)
+  return template.replace(/\$([a-zA-Z0-9_]+)/g, (match, key) => {
+    const value = values[String(key)]
+    return value !== undefined ? value : match
+  })
+}
+
+function detailRow(label: string, value: unknown) {
+  const content = text(value) || "-"
+  return `
+    <tr>
+      <td style="padding:8px 0;color:#64748b;font-size:13px;width:160px;vertical-align:top;">${escapeHtml(label)}</td>
+      <td style="padding:8px 0;color:#0f172a;font-size:14px;font-weight:600;vertical-align:top;">${escapeHtml(content)}</td>
+    </tr>
+  `
+}
+
+function wrapEmailHtml(bodyHtml: string, input: DemandNotificationInput) {
+  const values = tokenValues(input)
+
+  return `
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>${escapeHtml(values.protocolo || "SIGAJUS")}</title>
+  </head>
+  <body style="margin:0;padding:0;background:#eef3f8;font-family:Arial,Helvetica,sans-serif;color:#0f172a;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#eef3f8;padding:28px 12px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:720px;background:#ffffff;border-radius:18px;overflow:hidden;border:1px solid #dbe4ef;box-shadow:0 12px 30px rgba(15,23,42,.08);">
+            <tr>
+              <td style="background:linear-gradient(135deg,#0f4c81,#1976a3);padding:22px 28px;color:#ffffff;">
+                <div style="font-size:22px;font-weight:800;letter-spacing:.5px;">SIGAJUS</div>
+                <div style="font-size:13px;opacity:.9;margin-top:4px;">Sistema de Gestão de Ações Judiciais na Saúde</div>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:26px 28px 8px 28px;">
+                <div style="display:inline-block;border-radius:999px;background:#e0f2fe;color:#075985;padding:6px 12px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;">${escapeHtml(values.modulo)}</div>
+                <h1 style="margin:14px 0 6px 0;font-size:22px;line-height:1.25;color:#0f172a;">Demanda registrada</h1>
+                <p style="margin:0;color:#64748b;font-size:14px;line-height:1.5;">Protocolo ${escapeHtml(values.protocolo || "-")}</p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:14px 28px;">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;">
+                  <tr>
+                    <td style="padding:14px 18px;">
+                      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;">
+                        ${detailRow("Paciente", values.nome_paciente)}
+                        ${detailRow("CPF", values.cpf)}
+                        ${detailRow("Município", values.municipio)}
+                        ${detailRow("Nº processo", values.numero_processo)}
+                        ${detailRow("PGE.net", values.pge_net)}
+                        ${detailRow("SIGTAP", values.sigtap ? `${values.sigtap} - ${values.sigtap_descricao}` : values.sigtap_descricao)}
+                        ${detailRow("CID", values.cid)}
+                      </table>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:14px 28px 28px 28px;">
+                <div style="font-size:15px;line-height:1.65;color:#0f172a;">
+                  ${bodyHtml}
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:18px 28px;background:#f8fafc;border-top:1px solid #e2e8f0;color:#64748b;font-size:12px;line-height:1.5;">
+                <strong style="color:#334155;">${escapeHtml(values.user_sistema)}</strong><br />
+                E-mail disparado automaticamente. Por favor, não responda esta mensagem.
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>
+  `
 }
 
 async function ensureEmailDispatchColumns() {
@@ -153,6 +308,9 @@ export async function sendMunicipalityDemandNotification(input: DemandNotificati
       return { ok: false, skipped: true, reason: `SMTP não configurado: ${config.missing.join(", ")}` }
     }
 
+    const subject = replaceTokens(template.subject, input)
+    const html = wrapEmailHtml(replaceTokens(template.body, input), input)
+
     const transporter = nodemailer.createTransport({
       host: config.host,
       port: config.port,
@@ -166,8 +324,8 @@ export async function sendMunicipalityDemandNotification(input: DemandNotificati
     const info = await transporter.sendMail({
       from: `"${config.fromName}" <${config.fromAddress}>`,
       to: recipients.join(", "),
-      subject: replaceTokens(template.subject, input),
-      html: replaceTokens(template.body, input),
+      subject,
+      html,
     })
 
     return { ok: true, skipped: false, messageId: info.messageId, accepted: info.accepted, rejected: info.rejected }
