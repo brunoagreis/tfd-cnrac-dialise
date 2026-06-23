@@ -112,22 +112,19 @@ function tipoSolicitacaoLabel(value: unknown) {
 function tokenValues(input: DemandNotificationInput) {
   const moduloCodigo = normalizeModule(input.module)
   const protocolo = text(input.protocolo)
-  const pacienteNome = text(input.pacienteNome)
-  const pacienteCpf = text(input.pacienteCpf)
-  const pacienteCns = text(input.pacienteCns)
   const numeroProcesso = text(input.numeroProcesso)
   const pgeNet = text(input.pgeNet)
   const numeroOficio = text(input.numeroOficio)
-  const fichaCore = text(input.fichaCore)
   const userSistema = text(input.userSistema) || "SIGAJUS"
   const dataAgendamento = text(input.dataAgendamento)
   const localSolicitante = text(input.localSolicitante)
   const localSolicitado = text(input.localSolicitado)
   const tipoSolicitacao = tipoSolicitacaoLabel(input.tipoSolicitacao)
-  const codigoSigtap = text(input.codigoSigtap)
-  const descricaoSigtap = text(input.descricaoSigtap)
-  const cid10 = text(input.cid10)
   const municipio = text(input.municipio)
+
+  // E-mail municipal é comunicação externa. Dados identificáveis e clínicos
+  // não são substituídos por segurança/LGPD, mesmo que o token esteja no modelo.
+  const protectedValue = ""
 
   return {
     modulo: moduleLabel(input.module),
@@ -140,17 +137,17 @@ function tokenValues(input: DemandNotificationInput) {
     protocolo_judicial: moduloCodigo === "judicial" ? protocolo : "",
     protocolo_prejudicial: moduloCodigo === "pre_judicial" ? protocolo : "",
 
-    nome_paciente: pacienteNome,
-    paciente_nome: pacienteNome,
-    requerente: pacienteNome,
-    cpf: pacienteCpf,
-    paciente_cpf: pacienteCpf,
-    cns: pacienteCns,
-    cartao_sus: pacienteCns,
-    paciente_cns: pacienteCns,
-    email_paciente: text(input.pacienteEmail),
-    data_nascimento: text(input.pacienteDataNascimento),
-    endereco_paciente: text(input.pacienteEndereco),
+    nome_paciente: protectedValue,
+    paciente_nome: protectedValue,
+    requerente: protectedValue,
+    cpf: protectedValue,
+    paciente_cpf: protectedValue,
+    cns: protectedValue,
+    cartao_sus: protectedValue,
+    paciente_cns: protectedValue,
+    email_paciente: protectedValue,
+    data_nascimento: protectedValue,
+    endereco_paciente: protectedValue,
 
     municipio,
     municipio_paciente: municipio,
@@ -162,7 +159,7 @@ function tokenValues(input: DemandNotificationInput) {
     destino: localSolicitado,
     tipo_solicitacao: tipoSolicitacao,
 
-    ficha_core: fichaCore,
+    ficha_core: protectedValue,
     numero_processo: numeroProcesso,
     autos_acao: numeroProcesso,
     processo: numeroProcesso,
@@ -178,24 +175,24 @@ function tokenValues(input: DemandNotificationInput) {
     data_agendamento: dataAgendamento,
     user_sistema: userSistema,
 
-    sigtap: codigoSigtap,
-    codigo_sigtap: codigoSigtap,
-    procedimento: descricaoSigtap,
-    procedimento_sigtap: codigoSigtap,
-    procedimento_cnrac: descricaoSigtap,
-    sigtap_descricao: descricaoSigtap,
-    descricao_sigtap: descricaoSigtap,
-    cid: cid10,
-    cid10,
-    cid_cnrac: cid10,
-    especialidade: text(input.especialidade),
-    subespecialidade: text(input.subespecialidade),
+    sigtap: protectedValue,
+    codigo_sigtap: protectedValue,
+    procedimento: protectedValue,
+    procedimento_sigtap: protectedValue,
+    procedimento_cnrac: protectedValue,
+    sigtap_descricao: protectedValue,
+    descricao_sigtap: protectedValue,
+    cid: protectedValue,
+    cid10: protectedValue,
+    cid_cnrac: protectedValue,
+    especialidade: protectedValue,
+    subespecialidade: protectedValue,
 
-    peso: text(input.peso),
-    altura: text(input.altura),
-    tipo_sanguineo: text(input.tipoSanguineo),
-    observacoes: text(input.observacoes),
-    observacoes_unidade: text(input.observacoes),
+    peso: protectedValue,
+    altura: protectedValue,
+    tipo_sanguineo: protectedValue,
+    observacoes: protectedValue,
+    observacoes_unidade: protectedValue,
   } satisfies Record<string, string>
 }
 
@@ -211,10 +208,17 @@ function detailRow(label: string, value: unknown) {
   const content = text(value) || "-"
   return `
     <tr>
-      <td style="padding:8px 0;color:#64748b;font-size:13px;width:160px;vertical-align:top;">${escapeHtml(label)}</td>
-      <td style="padding:8px 0;color:#0f172a;font-size:14px;font-weight:600;vertical-align:top;">${escapeHtml(content)}</td>
+      <td style="padding:8px 0;color:#1d4ed8;font-size:13px;width:160px;vertical-align:top;">${escapeHtml(label)}</td>
+      <td style="padding:8px 0;color:#0f172a;font-size:14px;font-weight:700;vertical-align:top;">${escapeHtml(content)}</td>
     </tr>
   `
+}
+
+function automaticSummaryRows(values: ReturnType<typeof tokenValues>) {
+  return [
+    detailRow("Município", values.municipio),
+    values.numero_processo ? detailRow("Nº processo", values.numero_processo) : "",
+  ].join("")
 }
 
 function wrapEmailHtml(bodyHtml: string, input: DemandNotificationInput) {
@@ -248,19 +252,11 @@ function wrapEmailHtml(bodyHtml: string, input: DemandNotificationInput) {
             </tr>
             <tr>
               <td style="padding:14px 28px;">
-                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;overflow:hidden;">
                   <tr>
                     <td style="padding:14px 18px;">
                       <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;">
-                        ${detailRow("Paciente", values.nome_paciente)}
-                        ${detailRow("CPF", values.cpf)}
-                        ${detailRow("Município", values.municipio)}
-                        ${detailRow("Solicitante", values.local_solicitante)}
-                        ${detailRow("Destino", values.local_solicitado)}
-                        ${detailRow("Nº processo", values.numero_processo)}
-                        ${detailRow("PGE.net", values.pge_net)}
-                        ${detailRow("SIGTAP", values.sigtap ? `${values.sigtap} - ${values.sigtap_descricao}` : values.sigtap_descricao)}
-                        ${detailRow("CID", values.cid)}
+                        ${automaticSummaryRows(values)}
                       </table>
                     </td>
                   </tr>
