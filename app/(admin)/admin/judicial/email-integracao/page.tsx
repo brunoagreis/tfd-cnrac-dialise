@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
-import { ArrowLeft, Inbox, MailCheck, RefreshCcw, Save, Search } from "lucide-react"
+import { ArrowLeft, Inbox, MailCheck, Play, RefreshCcw, Save, Search } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
@@ -84,6 +84,7 @@ export default function EmailIntegracaoPage() {
   const [connection, setConnection] = useState<ConnectionResult | null>(null)
   const [items, setItems] = useState<PreviewItem[]>([])
   const [loading, setLoading] = useState(false)
+  const [running, setRunning] = useState(false)
   const [rules, setRules] = useState<RuleItem[]>([])
   const [users, setUsers] = useState<UserItem[]>([])
   const [ruleName, setRuleName] = useState("")
@@ -172,6 +173,22 @@ export default function EmailIntegracaoPage() {
     }
   }
 
+  async function runTriageNow() {
+    try {
+      setRunning(true)
+      const response = await fetch("/api/admin/judicial/email-integracao/processar?limit=50", { method: "POST", cache: "no-store" })
+      const json = await response.json().catch(() => ({}))
+      if (!response.ok || !json?.ok) {
+        toast.error(json?.error || "Falha ao executar triagem.")
+        return
+      }
+      toast.success(`${json.processed || 0} mensagem(ns) nova(s) tratada(s).`)
+      await previewEmails()
+    } finally {
+      setRunning(false)
+    }
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -186,14 +203,15 @@ export default function EmailIntegracaoPage() {
 
       <Card className="border-border">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base"><Inbox className="h-4 w-4" /> Teste de conexão</CardTitle>
-          <CardDescription>Nesta área você valida a caixa e confere a prévia da triagem.</CardDescription>
+          <CardTitle className="flex items-center gap-2 text-base"><Inbox className="h-4 w-4" /> Teste e execução</CardTitle>
+          <CardDescription>A prévia não altera dados. A execução trata apenas mensagens não lidas, grava movimentações/anexos, cria OS quando necessário e marca o e-mail como lido.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-wrap gap-2">
-            <Button type="button" onClick={testConnection} disabled={loading}><MailCheck className="mr-2 h-4 w-4" /> Testar conexão</Button>
-            <Button type="button" variant="outline" className="bg-transparent" onClick={previewEmails} disabled={loading}><Search className="mr-2 h-4 w-4" /> Ler últimas 10 mensagens</Button>
-            {loading ? <Badge variant="outline"><RefreshCcw className="mr-1 h-3 w-3 animate-spin" /> Processando</Badge> : null}
+            <Button type="button" onClick={testConnection} disabled={loading || running}><MailCheck className="mr-2 h-4 w-4" /> Testar conexão</Button>
+            <Button type="button" variant="outline" className="bg-transparent" onClick={previewEmails} disabled={loading || running}><Search className="mr-2 h-4 w-4" /> Ler últimas 10 mensagens</Button>
+            <Button type="button" onClick={runTriageNow} disabled={loading || running}><Play className="mr-2 h-4 w-4" /> Executar triagem agora</Button>
+            {loading || running ? <Badge variant="outline"><RefreshCcw className="mr-1 h-3 w-3 animate-spin" /> Processando</Badge> : null}
           </div>
 
           {connection ? (
