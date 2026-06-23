@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { ArrowLeft } from "lucide-react"
+import { ArrowLeft, Copy } from "lucide-react"
 import { toast } from "sonner"
 
 import { useAuth } from "@/lib/auth-context"
@@ -29,58 +29,105 @@ const modules = [
   { value: "pre_judicial", label: "Pré Judicial" },
 ]
 
-const commonPlaceholders = [
-  "$protocolo",
-  "$modulo",
-  "$municipio",
-  "$local_solicitante",
-  "$email_solicitante",
-  "$telefone_solicitante",
-  "$local_solicitado",
-  "$tipo_solicitacao",
-  "$user_sistema",
+const placeholderGroups = [
+  {
+    title: "Dados pessoais do paciente",
+    description: "Use quando o modelo precisar identificar o paciente.",
+    items: [
+      "$nome_paciente",
+      "$paciente_nome",
+      "$requerente",
+      "$cpf",
+      "$paciente_cpf",
+      "$cns",
+      "$paciente_cns",
+      "$cartao_sus",
+      "$telefone_paciente",
+      "$paciente_telefone",
+      "$email_paciente",
+      "$paciente_email",
+      "$data_nascimento",
+      "$nascimento_paciente",
+      "$endereco_paciente",
+    ],
+  },
+  {
+    title: "Comuns a todos os módulos",
+    description: "Informações administrativas e de protocolo.",
+    items: [
+      "$protocolo",
+      "$modulo",
+      "$municipio",
+      "$municipio_paciente",
+      "$local_solicitante",
+      "$email_solicitante",
+      "$telefone_solicitante",
+      "$local_solicitado",
+      "$tipo_solicitacao",
+      "$observacoes",
+      "$observacoes_unidade",
+      "$user_sistema",
+    ],
+  },
+  {
+    title: "Dados clínicos/procedimento",
+    description: "Dados do procedimento, CID e classificação clínica.",
+    items: [
+      "$sigtap",
+      "$codigo_sigtap",
+      "$sigtap_descricao",
+      "$descricao_sigtap",
+      "$procedimento",
+      "$procedimento_sigtap",
+      "$cid",
+      "$cid10",
+      "$especialidade",
+      "$subespecialidade",
+      "$peso",
+      "$altura",
+      "$tipo_sanguineo",
+    ],
+  },
+  {
+    title: "TFD",
+    description: "Tokens específicos para modelos de TFD.",
+    items: ["$protocolo_tfd", "$origem", "$destino", "$tipo_solicitacao", "$data_agendamento"],
+  },
+  {
+    title: "CNRAC",
+    description: "Tokens específicos para modelos de CNRAC.",
+    items: ["$protocolo_cnrac", "$procedimento_cnrac", "$cid_cnrac", "$ficha_core", "$origem", "$destino"],
+  },
+  {
+    title: "Hemodiálise",
+    description: "Tokens específicos para modelos de Hemodiálise.",
+    items: ["$protocolo_hemodialise", "$peso", "$altura", "$tipo_sanguineo", "$origem", "$destino"],
+  },
+  {
+    title: "Judicial",
+    description: "Tokens específicos para demandas judiciais.",
+    items: [
+      "$protocolo_judicial",
+      "$numero_processo",
+      "$autos_acao",
+      "$processo",
+      "$pge_net",
+      "$numero_pge_net",
+      "$numero_oficio",
+      "$oficio",
+      "$tipo_intimacao",
+      "$data_recebimento",
+      "$data_reiteracao",
+      "$prazo_dias",
+      "$prazo_final",
+    ],
+  },
+  {
+    title: "Pré Judicial",
+    description: "Tokens específicos para pré judicial.",
+    items: ["$protocolo_prejudicial", "$data_agendamento", "$numero_processo", "$pge_net", "$prazo_dias", "$prazo_final"],
+  },
 ]
-
-const placeholdersByModule: Record<string, string[]> = {
-  tfd: [
-    "$protocolo_tfd",
-    "$origem",
-    "$destino",
-    "$tipo_solicitacao",
-    "$data_agendamento",
-  ],
-  cnrac: [
-    "$protocolo_cnrac",
-    "$origem",
-    "$destino",
-  ],
-  hemodialise: [
-    "$protocolo_hemodialise",
-    "$origem",
-    "$destino",
-  ],
-  judicial: [
-    "$protocolo_judicial",
-    "$numero_processo",
-    "$autos_acao",
-    "$pge_net",
-    "$numero_oficio",
-    "$oficio",
-    "$tipo_intimacao",
-    "$data_recebimento",
-    "$data_reiteracao",
-    "$prazo_dias",
-    "$prazo_final",
-  ],
-  pre_judicial: [
-    "$protocolo_prejudicial",
-    "$data_agendamento",
-    "$numero_processo",
-    "$pge_net",
-    "$prazo_dias",
-    "$prazo_final",
-  ],
-}
 
 export default function JudicialEmailsDisparoPage() {
   const { user } = useAuth()
@@ -108,6 +155,17 @@ export default function JudicialEmailsDisparoPage() {
       next[module.value] = selected?.id || ""
     }
     setChoices(next)
+  }
+
+  async function copyText(value: string) {
+    await navigator.clipboard.writeText(value)
+    toast.success(`Copiado: ${value}`)
+  }
+
+  async function copyGroup(items: string[]) {
+    const value = items.join(" ")
+    await navigator.clipboard.writeText(value)
+    toast.success("Placeholders copiados.")
   }
 
   async function saveModule(module: string) {
@@ -150,9 +208,13 @@ export default function JudicialEmailsDisparoPage() {
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Modelos de disparo automático</h1>
-          <p className="text-sm text-muted-foreground">Escolha qual modelo de e-mail será usado automaticamente em cada módulo.</p>
+          <p className="text-sm text-muted-foreground">Escolha qual modelo de e-mail será usado automaticamente em cada módulo e copie os placeholders disponíveis.</p>
         </div>
-        <Button asChild variant="outline" className="bg-transparent"><Link href="/admin/judicial"><ArrowLeft className="mr-2 h-4 w-4" /> Voltar</Link></Button>
+        <Button asChild variant="outline" className="bg-transparent">
+          <Link href="/admin/judicial">
+            <ArrowLeft className="mr-2 h-4 w-4" /> Voltar
+          </Link>
+        </Button>
       </div>
 
       <Card className="border-border">
@@ -182,24 +244,28 @@ export default function JudicialEmailsDisparoPage() {
 
       <Card className="border-border">
         <CardHeader>
-          <CardTitle className="text-base">Placeholders seguros por módulo</CardTitle>
-          <CardDescription>Estes tokens são próprios para disparo municipal. Dados identificáveis ou clínicos, como nome, CPF, CNS, SIGTAP e CID, não são exibidos no e-mail externo.</CardDescription>
+          <CardTitle className="text-base">Placeholders copiáveis</CardTitle>
+          <CardDescription>Clique em um placeholder para copiar individualmente, ou copie um grupo inteiro.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
           <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950">
-            O cabeçalho automático do SIGAJUS mostra somente módulo, protocolo, município e número do processo quando existir. O texto abaixo dele respeita o modelo cadastrado.
-          </div>
-
-          <div className="rounded-xl border border-border p-4">
-            <h2 className="mb-3 text-sm font-semibold">Comuns a todos os módulos</h2>
-            <PlaceholderList items={commonPlaceholders} />
+            O cabeçalho automático do SIGAJUS mostra apenas módulo, protocolo, município e número do processo quando existir. Qualquer outro dado só aparece se você inserir o placeholder no modelo cadastrado.
           </div>
 
           <div className="grid gap-4 lg:grid-cols-2">
-            {modules.map((module) => (
-              <div key={module.value} className="rounded-xl border border-border p-4">
-                <h2 className="mb-3 text-sm font-semibold">{module.label}</h2>
-                <PlaceholderList items={placeholdersByModule[module.value] || []} />
+            {placeholderGroups.map((group) => (
+              <div key={group.title} className="rounded-xl border border-border bg-card p-4 shadow-sm">
+                <div className="mb-3 flex items-start justify-between gap-3">
+                  <div>
+                    <h2 className="text-sm font-semibold">{group.title}</h2>
+                    <p className="mt-1 text-xs text-muted-foreground">{group.description}</p>
+                  </div>
+                  <Button type="button" size="sm" variant="outline" className="bg-transparent" onClick={() => copyGroup(group.items)}>
+                    <Copy className="mr-1 h-3.5 w-3.5" />
+                    Copiar grupo
+                  </Button>
+                </div>
+                <PlaceholderList items={group.items} onCopy={copyText} />
               </div>
             ))}
           </div>
@@ -209,13 +275,19 @@ export default function JudicialEmailsDisparoPage() {
   )
 }
 
-function PlaceholderList({ items }: { items: string[] }) {
+function PlaceholderList({ items, onCopy }: { items: string[]; onCopy: (value: string) => void }) {
   return (
     <div className="flex flex-wrap gap-2">
       {items.map((item) => (
-        <code key={item} className="rounded-md border border-border bg-muted px-2 py-1 text-xs text-foreground">
+        <button
+          key={item}
+          type="button"
+          onClick={() => onCopy(item)}
+          className="rounded-md border border-border bg-muted px-2.5 py-1.5 font-mono text-xs text-foreground transition-colors hover:bg-primary hover:text-primary-foreground"
+          title={`Copiar ${item}`}
+        >
           {item}
-        </code>
+        </button>
       ))}
     </div>
   )
