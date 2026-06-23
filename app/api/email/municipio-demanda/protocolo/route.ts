@@ -11,6 +11,7 @@ type DemandRow = {
   pacienteNome: string | null
   pacienteCpf: string | null
   pacienteCns: string | null
+  pacienteTelefone: string | null
   pacienteEmail: string | null
   pacienteDataNascimento: string | null
   pacienteEndereco: string | null
@@ -69,6 +70,11 @@ export async function POST(req: NextRequest) {
           p.nome AS "pacienteNome",
           p.cpf AS "pacienteCpf",
           p."cartaoSus" AS "pacienteCns",
+          COALESCE((
+            SELECT string_agg(NULLIF(TRIM(tp.value), ''), ', ' ORDER BY tp.id)
+            FROM public.telefone_paciente tp
+            WHERE tp."pacienteId" = p.id
+          ), '') AS "pacienteTelefone",
           p.email AS "pacienteEmail",
           p."dataNascimento"::text AS "pacienteDataNascimento",
           p.endereco AS "pacienteEndereco",
@@ -118,6 +124,7 @@ export async function POST(req: NextRequest) {
       pacienteNome: text(demand.pacienteNome),
       pacienteCpf: text(demand.pacienteCpf),
       pacienteCns: text(demand.pacienteCns),
+      pacienteTelefone: text(demand.pacienteTelefone),
       pacienteEmail: text(demand.pacienteEmail),
       pacienteDataNascimento: text(demand.pacienteDataNascimento),
       pacienteEndereco: text(demand.pacienteEndereco),
