@@ -29,6 +29,74 @@ const modules = [
   { value: "pre_judicial", label: "Pré Judicial" },
 ]
 
+const commonPlaceholders = [
+  "$protocolo",
+  "$modulo",
+  "$nome_paciente",
+  "$cpf",
+  "$cns",
+  "$municipio",
+  "$local_solicitante",
+  "$email_solicitante",
+  "$telefone_solicitante",
+  "$local_solicitado",
+  "$tipo_solicitacao",
+  "$sigtap",
+  "$sigtap_descricao",
+  "$cid",
+  "$especialidade",
+  "$subespecialidade",
+  "$observacoes",
+  "$user_sistema",
+]
+
+const placeholdersByModule: Record<string, string[]> = {
+  tfd: [
+    "$protocolo_tfd",
+    "$origem",
+    "$destino",
+    "$tipo_solicitacao",
+    "$data_agendamento",
+  ],
+  cnrac: [
+    "$protocolo_cnrac",
+    "$procedimento_cnrac",
+    "$cid_cnrac",
+    "$ficha_core",
+    "$origem",
+    "$destino",
+  ],
+  hemodialise: [
+    "$protocolo_hemodialise",
+    "$peso",
+    "$altura",
+    "$tipo_sanguineo",
+    "$origem",
+    "$destino",
+  ],
+  judicial: [
+    "$protocolo_judicial",
+    "$numero_processo",
+    "$autos_acao",
+    "$pge_net",
+    "$numero_oficio",
+    "$oficio",
+    "$tipo_intimacao",
+    "$data_recebimento",
+    "$data_reiteracao",
+    "$prazo_dias",
+    "$prazo_final",
+  ],
+  pre_judicial: [
+    "$protocolo_prejudicial",
+    "$data_agendamento",
+    "$numero_processo",
+    "$pge_net",
+    "$prazo_dias",
+    "$prazo_final",
+  ],
+}
+
 export default function JudicialEmailsDisparoPage() {
   const { user } = useAuth()
   const [templates, setTemplates] = useState<Template[]>([])
@@ -126,6 +194,40 @@ export default function JudicialEmailsDisparoPage() {
           ))}
         </CardContent>
       </Card>
+
+      <Card className="border-border">
+        <CardHeader>
+          <CardTitle className="text-base">Placeholders por módulo</CardTitle>
+          <CardDescription>Use estes códigos no assunto e no corpo do modelo. O sistema substitui automaticamente no envio.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <div className="rounded-xl border border-border p-4">
+            <h2 className="mb-3 text-sm font-semibold">Comuns a todos os módulos</h2>
+            <PlaceholderList items={commonPlaceholders} />
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            {modules.map((module) => (
+              <div key={module.value} className="rounded-xl border border-border p-4">
+                <h2 className="mb-3 text-sm font-semibold">{module.label}</h2>
+                <PlaceholderList items={placeholdersByModule[module.value] || []} />
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
+function PlaceholderList({ items }: { items: string[] }) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {items.map((item) => (
+        <code key={item} className="rounded-md border border-border bg-muted px-2 py-1 text-xs text-foreground">
+          {item}
+        </code>
+      ))}
     </div>
   )
 }
