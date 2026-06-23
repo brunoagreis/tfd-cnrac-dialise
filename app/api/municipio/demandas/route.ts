@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { getMunicipalitySession } from "@/lib/municipality-portal-session"
+import {
+  ensureMunicipalityPortalNotificationTables,
+  markMunicipalityDemandRead,
+} from "@/lib/municipality-portal-notifications"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -19,6 +23,8 @@ type DemandRow = {
   subespecialidade: string | null
   observacoes: string | null
   createdAt: string | null
+  naoLidoMunicipio: boolean | null
+  ultimaInteracaoInterna: string | null
 }
 
 type InteractionRow = {
@@ -49,6 +55,32 @@ function processoSql() {
   `
 }
 
+function unreadSql() {
+  return `
+    EXISTS (
+      SELECT 1
+      FROM public.interacoes i_unread
+      LEFT JOIN public.municipio_portal_leituras l_unread
+        ON l_unread.protocolo = d.protocolo
+       AND l_unread.municipio_id = $1::bigint
+      WHERE i_unread."demandaId" = d.id
+        AND COALESCE(i_unread."createdBy", '') NOT LIKE 'municipio:%'
+        AND i_unread."createdAt" > COALESCE(l_unread.lido_em, '1970-01-01'::timestamptz)
+    )
+  `
+}
+
+function lastInternalInteractionSql() {
+  return `
+    (
+      SELECT MAX(i_last."createdAt")::text
+      FROM public.interacoes i_last
+      WHERE i_last."demandaId" = d.id
+        AND COALESCE(i_last."createdBy", '') NOT LIKE 'municipio:%'
+    )
+  `
+}
+
 async function ensureUploadTable() {
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS public.municipio_portal_anexos (
@@ -72,7 +104,7 @@ async function ensureUploadTable() {
   `)
 }
 
-async function getDemandForMunicipality(protocolo: string, municipio: string) {
+async function getDemandForMunicipality(protocolo: string, municipio: string, municipioId: string) {
   const rows = await prisma.$queryRawUnsafe<DemandRow[]>(
     `
       SELECT
@@ -88,13 +120,16 @@ async function getDemandForMunicipality(protocolo: string, municipio: string) {
         d.especialidade,
         d.subespecialidade,
         d."observacoesUnidade" AS observacoes,
-        d."createdAt"::text AS "createdAt"
+        d."createdAt"::text AS "createdAt",
+        ${unreadSql()} AS "naoLidoMunicipio",
+        ${lastInternalInteractionSql()} AS "ultimaInteracaoInterna"
       FROM public.demandas d
       INNER JOIN public.pacientes p ON p.id = d."pacienteId"
-      WHERE d.protocolo = $1
-        AND LOWER(TRIM(COALESCE(NULLIF(TRIM(d."localSolicitado"), ''), p.municipio, ''))) = LOWER(TRIM($2))
+      WHERE d.protocolo = $2
+        AND LOWER(TRIM(COALESCE(NULLIF(TRIM(d."localSolicitado"), ''), p.municipio, ''))) = LOWER(TRIM($3))
       LIMIT 1
     `,
+    municipioId,
     protocolo,
     municipio,
   )
@@ -117,6 +152,8 @@ function mapDemand(row: DemandRow) {
     subespecialidade: text(row.subespecialidade),
     observacoes: text(row.observacoes),
     createdAt: row.createdAt,
+    naoLidoMunicipio: Boolean(row.naoLidoMunicipio),
+    ultimaInteracaoInterna: row.ultimaInteracaoInterna,
   }
 }
 
@@ -126,12 +163,13 @@ export async function GET(req: NextRequest) {
     if (!session) return NextResponse.json({ ok: false, error: "Não autenticado." }, { status: 401 })
 
     await ensureUploadTable()
+    await ensureMunicipalityPortalNotificationTables()
 
     const url = new URL(req.url)
     const protocolo = text(url.searchParams.get("protocolo"))
 
     if (protocolo) {
-      const demand = await getDemandForMunicipality(protocolo, session.municipalityName)
+      const demand = await getDemandForMunicipality(protocolo, session.municipalityName, session.municipalityId)
       if (!demand) return NextResponse.json({ ok: false, error: "Protocolo não encontrado para este município." }, { status: 404 })
 
       const interactions = await prisma.$queryRawUnsafe<InteractionRow[]>(
@@ -156,9 +194,16 @@ export async function GET(req: NextRequest) {
         session.municipalityId,
       )
 
+      await markMunicipalityDemandRead({
+        protocolo,
+        municipioId: session.municipalityId,
+        municipioNome: session.municipalityName,
+        email: session.email,
+      })
+
       return NextResponse.json({
         ok: true,
-        item: mapDemand(demand),
+        item: { ...mapDemand(demand), naoLidoMunicipio: false },
         interactions: interactions.map((item) => ({
           id: item.id,
           texto: text(item.texto),
@@ -175,12 +220,12 @@ export async function GET(req: NextRequest) {
     }
 
     const q = text(url.searchParams.get("q"))
-    const params: unknown[] = [session.municipalityName]
-    const conditions = [`LOWER(TRIM(COALESCE(NULLIF(TRIM(d."localSolicitado"), ''), p.municipio, ''))) = LOWER(TRIM($1))`]
+    const params: unknown[] = [session.municipalityId, session.municipalityName]
+    const conditions = [`LOWER(TRIM(COALESCE(NULLIF(TRIM(d."localSolicitado"), ''), p.municipio, ''))) = LOWER(TRIM($2))`]
 
     if (q) {
       params.push(`%${q}%`)
-      conditions.push(`(p.nome ILIKE $2 OR d.protocolo ILIKE $2 OR ${processoSql()} ILIKE $2)`)
+      conditions.push(`(p.nome ILIKE $3 OR d.protocolo ILIKE $3 OR ${processoSql()} ILIKE $3)`)
     }
 
     const rows = await prisma.$queryRawUnsafe<DemandRow[]>(
@@ -198,11 +243,13 @@ export async function GET(req: NextRequest) {
           d.especialidade,
           d.subespecialidade,
           d."observacoesUnidade" AS observacoes,
-          d."createdAt"::text AS "createdAt"
+          d."createdAt"::text AS "createdAt",
+          ${unreadSql()} AS "naoLidoMunicipio",
+          ${lastInternalInteractionSql()} AS "ultimaInteracaoInterna"
         FROM public.demandas d
         INNER JOIN public.pacientes p ON p.id = d."pacienteId"
         WHERE ${conditions.join(" AND ")}
-        ORDER BY d."createdAt" DESC
+        ORDER BY ${unreadSql()} DESC, d."createdAt" DESC
         LIMIT 300
       `,
       ...params,
