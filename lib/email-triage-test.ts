@@ -16,6 +16,8 @@ type MailAddress = {
 
 type ParsedMailLike = {
   subject?: string
+  text?: string
+  html?: string | false
   from?: { value?: MailAddress[]; text?: string }
   date?: Date
   messageId?: string
@@ -41,6 +43,21 @@ function envText(...keys: string[]) {
   return ""
 }
 
+function stripHtml(value: unknown) {
+  return text(value)
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<br\s*\/?\s*>/gi, "\n")
+    .replace(/<\/p>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/\s+/g, " ")
+    .trim()
+}
+
 export function getEmailTriageConfig() {
   const config: EmailTriageConfig = {
     host: envText("EMAIL_TRIAGEM_HOST") || "imap.gmail.com",
@@ -57,19 +74,26 @@ export function getEmailTriageConfig() {
   }
 }
 
-export function extractEmailTriageFields(subject: string) {
+export function extractEmailTriageFields(subject: string, body = "") {
   const cleanSubject = text(subject)
-  const processMatches = Array.from(new Set(cleanSubject.match(/\b\d{4}\.\d{2}\.\d{6}\b/g) || []))
+  const cleanBody = text(body)
+  const combined = [cleanSubject, cleanBody].filter(Boolean).join("\n")
+
+  const subjectMatches = Array.from(new Set(cleanSubject.match(/\b\d{4}\.\d{2}\.\d{6}\b/g) || []))
+  const bodyMatches = Array.from(new Set(cleanBody.match(/\b\d{4}\.\d{2}\.\d{6}\b/g) || []))
+  const allMatches = Array.from(new Set(combined.match(/\b\d{4}\.\d{2}\.\d{6}\b/g) || []))
+  const detected = subjectMatches[0] || bodyMatches[0] || allMatches[0] || ""
 
   const oficioMatch = cleanSubject.match(/Of[ií]cio\s*-\s*([^\[]+)/i)
   const classifier = text(oficioMatch?.[1]).replace(/[-–—]+$/g, "").trim() || "Não classificado"
 
   return {
     subject: cleanSubject,
-    pgeNet: processMatches[0] || "",
-    processo: processMatches[0] || "",
+    pgeNet: detected,
+    processo: detected,
     classifier,
-    allProcessNumbers: processMatches,
+    detectedIn: subjectMatches.length ? "assunto" : bodyMatches.length ? "corpo" : "não detectado",
+    allProcessNumbers: allMatches,
   }
 }
 
@@ -208,7 +232,8 @@ export async function previewEmailTriage(limit = 10) {
       for await (const message of client.fetch(range, { envelope: true, source: true, uid: true }, { uid: false })) {
         const parsed = (await simpleParser(message.source as Buffer)) as ParsedMailLike
         const subject = text(parsed.subject || message.envelope?.subject)
-        const extracted = extractEmailTriageFields(subject)
+        const body = text(parsed.text) || stripHtml(parsed.html)
+        const extracted = extractEmailTriageFields(subject, body)
         const demand = extracted.processo ? await findDemandByProcess(extracted.processo) : null
 
         items.push({
@@ -220,6 +245,8 @@ export async function previewEmailTriage(limit = 10) {
           classifier: extracted.classifier,
           pgeNet: extracted.pgeNet,
           processo: extracted.processo,
+          detectedIn: extracted.detectedIn,
+          allProcessNumbers: extracted.allProcessNumbers,
           attachments: (parsed.attachments || []).map((attachment) => ({
             filename: text(attachment.filename) || "anexo",
             contentType: text(attachment.contentType),
@@ -233,7 +260,9 @@ export async function previewEmailTriage(limit = 10) {
               }
             : {
                 type: "criar_os",
-                label: "Processo não encontrado. Criaria ordem de serviço para cadastro/vinculação.",
+                label: extracted.processo
+                  ? "Processo não encontrado. Criaria ordem de serviço para cadastro/vinculação."
+                  : "Nenhum processo/PGE.net detectado. Criaria ordem de serviço para análise manual.",
                 demanda: null,
               },
         })
