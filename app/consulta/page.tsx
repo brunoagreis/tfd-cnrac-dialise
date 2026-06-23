@@ -1,219 +1,121 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
-import {
-  Search,
-  ShieldCheck,
-  FileText,
-  ClipboardList,
-  Stethoscope,
-  AlertTriangle,
-  CheckCircle2,
-  RotateCcw,
-  MessageSquare,
-  Paperclip,
-} from "lucide-react"
-
-import { useStore } from "@/lib/store-context"
-import {
-  MODULE_LABELS,
-  DEMANDA_STATUS_LABELS,
-  TIPO_SOLICITACAO_LABELS,
-  PENDENCIA_LABELS,
-  type Module,
-  type DemandaStatus,
-  type Demanda,
-  type Paciente,
-} from "@/lib/types"
+import { ArrowLeft, EyeOff, Search, Shield } from "lucide-react"
+import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
-import { Separator } from "@/components/ui/separator"
+import { Label } from "@/components/ui/label"
+import { MunicipalityPortalLogo } from "@/components/municipio/municipality-portal-logo"
 
-const MODULE_ICONS: Record<Module, typeof FileText> = {
-  tfd: FileText,
-  cnrac: ClipboardList,
-  hemodialise: Stethoscope,
+type ConsultaResult = {
+  protocolo: string
+  modulo: string
+  status: string
+  criadoEm: string | null
+  atualizadoEm: string | null
+  paciente: { nome: string; cpf: string; cns: string; municipio: string }
+  processo: string
+  procedimento: { codigo: string; descricao: string; cid10: string; especialidade: string; subespecialidade: string }
+  movimentos: Array<{ id: string; tipo: string; descricao: string; criadoEm: string | null; criadoPor: string }>
 }
 
-const STATUS_CONFIG: Record<DemandaStatus, { icon: typeof AlertTriangle; color: string }> = {
-  pendente: { icon: AlertTriangle, color: "bg-amber-100 text-amber-800" },
-  resolvido: { icon: CheckCircle2, color: "bg-emerald-100 text-emerald-800" },
-  devolvida: { icon: RotateCcw, color: "bg-red-100 text-red-800" },
+function formatDate(value: string | null) {
+  if (!value) return "-"
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return "-"
+  return date.toLocaleString("pt-BR")
 }
 
-export default function ConsultaPage() {
-  const store = useStore()
+function Info({ label, value }: { label: string; value: string }) {
+  return <div className="rounded-lg border border-border bg-card p-3"><p className="text-xs text-muted-foreground">{label}</p><p className="mt-1 break-words font-medium">{value || "-"}</p></div>
+}
+
+export default function ConsultaProtocoloPage() {
   const [protocolo, setProtocolo] = useState("")
-  const [result, setResult] = useState<{ demanda: Demanda; paciente: Paciente } | null>(null)
-  const [searched, setSearched] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [result, setResult] = useState<ConsultaResult | null>(null)
 
-  function handleSearch() {
-    if (!protocolo.trim()) return
-    const demanda = store.getDemandaByProtocol(protocolo.trim().toUpperCase())
-    if (demanda) {
-      const paciente = store.pacientes.find((p) => p.id === demanda.pacienteId)
-      if (paciente) {
-        setResult({ demanda, paciente })
-      } else {
-        setResult(null)
-      }
-    } else {
-      setResult(null)
+  useEffect(() => {
+    const block = (event: Event) => event.preventDefault()
+    const keyBlock = (event: KeyboardEvent) => {
+      const key = event.key.toLowerCase()
+      if ((event.ctrlKey || event.metaKey) && ["p", "s", "c"].includes(key)) event.preventDefault()
+      if (key === "printscreen") event.preventDefault()
     }
-    setSearched(true)
+    document.addEventListener("contextmenu", block)
+    document.addEventListener("copy", block)
+    document.addEventListener("cut", block)
+    document.addEventListener("keydown", keyBlock)
+    return () => {
+      document.removeEventListener("contextmenu", block)
+      document.removeEventListener("copy", block)
+      document.removeEventListener("cut", block)
+      document.removeEventListener("keydown", keyBlock)
+    }
+  }, [])
+
+  async function searchProtocol() {
+    const value = protocolo.trim().toUpperCase()
+    if (!value) {
+      toast.error("Informe o protocolo.")
+      return
+    }
+    try {
+      setLoading(true)
+      setResult(null)
+      const response = await fetch(`/api/consulta/protocolo?protocolo=${encodeURIComponent(value)}`, { cache: "no-store" })
+      const json = await response.json().catch(() => ({}))
+      if (!response.ok || !json?.ok) {
+        toast.error(json?.error || "Protocolo não encontrado.")
+        return
+      }
+      setResult(json.item)
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-background">
-      {/* Header */}
-      <header className="flex items-center gap-3 border-b border-border bg-card px-4 py-4 lg:px-8">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-          <ShieldCheck className="h-4 w-4 text-primary-foreground" aria-hidden="true" />
+    <main className="consulta-publica min-h-screen bg-background text-foreground">
+      <style jsx global>{`
+        @media print {
+          body * { visibility: hidden !important; }
+          body::before { content: "Impressão não permitida na consulta pública do SIGAJUS."; visibility: visible !important; display: block; padding: 40px; font-size: 18px; font-family: Arial, sans-serif; }
+        }
+        .consulta-publica { -webkit-user-select: none; user-select: none; }
+      `}</style>
+
+      <header className="border-b bg-primary text-primary-foreground">
+        <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-5 md:flex-row md:items-center md:justify-between">
+          <div className="flex items-center gap-4">
+            <MunicipalityPortalLogo variant="white" className="h-12 w-auto max-w-[260px] object-contain" />
+            <div><h1 className="text-2xl font-bold tracking-tight">Consulta Pública de Protocolo</h1><p className="text-sm opacity-90">Acompanhamento externo com dados pessoais protegidos.</p></div>
+          </div>
+          <Button asChild variant="secondary"><Link href="/login"><ArrowLeft className="mr-2 h-4 w-4" /> Voltar ao login</Link></Button>
         </div>
-        <div>
-          <span className="text-sm font-bold text-foreground">SIS Regulacao</span>
-          <span className="ml-2 text-xs text-muted-foreground">Consulta de Protocolo</span>
-        </div>
-        <div className="flex-1" />
-        <Button variant="outline" size="sm" asChild>
-          <Link href="/login">Acessar Sistema</Link>
-        </Button>
       </header>
 
-      {/* Content */}
-      <main className="flex flex-1 flex-col items-center px-4 py-12">
-        <div className="w-full max-w-2xl">
-          <div className="mb-8 text-center">
-            <h1 className="text-2xl font-bold tracking-tight text-foreground">Consulta de Protocolo</h1>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Informe o numero do protocolo para acompanhar sua demanda. Nao e necessario login.
-            </p>
-          </div>
-
-          <Card className="border-border">
-            <CardContent className="pt-6">
-              <div className="flex gap-3">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-                  <Input
-                    placeholder="Ex: TFD-2026-00001"
-                    value={protocolo}
-                    onChange={(e) => { setProtocolo(e.target.value); setSearched(false) }}
-                    onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-                    className="pl-9 uppercase"
-                    aria-label="Numero do protocolo"
-                  />
-                </div>
-                <Button onClick={handleSearch}>Consultar</Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          {searched && !result && (
-            <Card className="mt-6 border-amber-300/30 bg-amber-50">
-              <CardContent className="py-8 text-center">
-                <AlertTriangle className="mx-auto mb-2 h-8 w-8 text-amber-600" />
-                <p className="text-sm font-medium text-amber-800">Protocolo nao encontrado</p>
-                <p className="mt-1 text-xs text-amber-700">Verifique o numero e tente novamente.</p>
-              </CardContent>
-            </Card>
-          )}
-
-          {result && <ProtocoloResult demanda={result.demanda} paciente={result.paciente} />}
-        </div>
-      </main>
-    </div>
-  )
-}
-
-function ProtocoloResult({ demanda, paciente }: { demanda: Demanda; paciente: Paciente }) {
-  const Icon = MODULE_ICONS[demanda.modulo]
-  const statusCfg = STATUS_CONFIG[demanda.status]
-  const StatusIcon = statusCfg.icon
-
-  return (
-    <div className="mt-6 flex flex-col gap-4">
-      {/* Header card */}
-      <Card className="border-border">
-        <CardHeader className="pb-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <CardTitle className="text-lg text-card-foreground">{demanda.protocolo}</CardTitle>
-            <Badge variant="outline" className={statusCfg.color}>
-              <StatusIcon className="mr-1 h-3 w-3" />{DEMANDA_STATUS_LABELS[demanda.status]}
-            </Badge>
-            <Badge variant="secondary"><Icon className="mr-1 h-3 w-3" />{MODULE_LABELS[demanda.modulo]}</Badge>
-          </div>
-          <CardDescription>
-            Criado em {new Date(demanda.criadoEm).toLocaleDateString("pt-BR")} | Ultima atualizacao: {new Date(demanda.atualizadoEm).toLocaleDateString("pt-BR")}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-x-8 gap-y-2 text-sm sm:grid-cols-2">
-            <div><span className="text-xs text-muted-foreground">Paciente:</span><p className="text-card-foreground">{paciente.nome}</p></div>
-            <div><span className="text-xs text-muted-foreground">Procedimento:</span><p className="text-card-foreground">{demanda.descricaoSigtap}</p></div>
-            <div><span className="text-xs text-muted-foreground">Especialidade:</span><p className="text-card-foreground">{demanda.especialidade}</p></div>
-            <div><span className="text-xs text-muted-foreground">Tipo:</span><p className="text-card-foreground">{TIPO_SOLICITACAO_LABELS[demanda.tipoSolicitacao]}</p></div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Timeline */}
-      <Card className="border-border">
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base text-card-foreground">
-            <MessageSquare className="h-4 w-4" /> Movimentacoes ({demanda.interacoes.length})
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {demanda.interacoes.length === 0 ? (
-            <p className="py-4 text-center text-sm text-muted-foreground">Nenhuma movimentacao registrada.</p>
-          ) : (
-            <div className="flex flex-col gap-3">
-              {demanda.interacoes.map((inter) => (
-                <div key={inter.id} className="rounded-lg border border-border p-3">
-                  <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                    <span className="font-medium text-card-foreground">{inter.criadoPorNome}</span>
-                    <span>{new Date(inter.criadoEm).toLocaleString("pt-BR")}</span>
-                    {inter.pendencia && (
-                      <Badge variant="outline" className="bg-amber-50 text-amber-800 text-xs">
-                        {PENDENCIA_LABELS[inter.pendencia]}
-                      </Badge>
-                    )}
-                  </div>
-                  <p className="mt-1 text-sm text-card-foreground">{inter.texto}</p>
-                  {inter.anexos.length > 0 && (
-                    <div className="mt-2 flex items-center gap-1 text-xs text-muted-foreground">
-                      <Paperclip className="h-3 w-3" /> {inter.anexos.length} documento(s) anexado(s)
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Docs count */}
-      {(demanda.anexos.length > 0 || demanda.interacoes.some((i) => i.anexos.length > 0)) && (
+      <section className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-6">
         <Card className="border-border">
-          <CardContent className="flex items-center gap-3 py-4">
-            <Paperclip className="h-5 w-5 text-primary" />
-            <p className="text-sm text-card-foreground">
-              {demanda.anexos.length + demanda.interacoes.reduce((s, i) => s + i.anexos.length, 0)} documento(s) anexado(s) neste protocolo.
-            </p>
+          <CardHeader><CardTitle className="flex items-center gap-2 text-base"><Search className="h-4 w-4" /> Buscar protocolo</CardTitle><CardDescription>Informe o protocolo de TFD, CNRAC, Hemodiálise, Judicial ou Pré Judicial.</CardDescription></CardHeader>
+          <CardContent className="flex flex-col gap-3 md:flex-row md:items-end">
+            <div className="flex-1 space-y-2"><Label htmlFor="protocolo">Protocolo</Label><Input id="protocolo" value={protocolo} onChange={(event) => setProtocolo(event.target.value)} onKeyDown={(event) => event.key === "Enter" && searchProtocol()} placeholder="Ex.: JUD-2026-00001" /></div>
+            <Button onClick={searchProtocol} disabled={loading}>{loading ? "Consultando..." : "Consultar"}</Button>
           </CardContent>
         </Card>
-      )}
-    </div>
+
+        <Card className="border-blue-200 bg-blue-50 text-blue-950"><CardContent className="flex gap-3 p-4 text-sm"><Shield className="mt-0.5 h-4 w-4 shrink-0" /><div><strong>Consulta pública protegida.</strong> Dados pessoais são mascarados. Documentos, anexos e PDFs não são disponibilizados. Impressão e cópia pelo navegador são bloqueadas.</div></CardContent></Card>
+
+        {result ? <div className="relative"><div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-[0.04]"><span className="rotate-[-18deg] text-7xl font-black tracking-widest">SIGAJUS</span></div>
+          <Card className="border-border"><CardHeader><CardTitle className="text-xl">{result.protocolo}</CardTitle><CardDescription>{result.modulo} • {result.status}</CardDescription></CardHeader><CardContent className="grid gap-4 md:grid-cols-2 lg:grid-cols-4"><Info label="Paciente" value={result.paciente.nome} /><Info label="CPF" value={result.paciente.cpf} /><Info label="CNS" value={result.paciente.cns} /><Info label="Município" value={result.paciente.municipio} /><Info label="Autos/Processo" value={result.processo} /><Info label="Criado em" value={formatDate(result.criadoEm)} /><Info label="Atualizado em" value={formatDate(result.atualizadoEm)} /><Info label="Módulo" value={result.modulo} /></CardContent></Card>
+          <Card className="mt-6 border-border"><CardHeader><CardTitle className="text-base">Resumo técnico</CardTitle><CardDescription>Informações exibidas sem documentos anexos.</CardDescription></CardHeader><CardContent className="grid gap-4 md:grid-cols-2"><Info label="Procedimento" value={`${result.procedimento.codigo} - ${result.procedimento.descricao}`} /><Info label="CID-10" value={result.procedimento.cid10} /><Info label="Especialidade" value={result.procedimento.especialidade} /><Info label="Subespecialidade" value={result.procedimento.subespecialidade} /></CardContent></Card>
+          <Card className="mt-6 border-border"><CardHeader><CardTitle className="flex items-center gap-2 text-base"><EyeOff className="h-4 w-4" /> Movimentações</CardTitle><CardDescription>Arquivos, PDFs e anexos não são exibidos na consulta pública.</CardDescription></CardHeader><CardContent>{result.movimentos.length === 0 ? <p className="text-sm text-muted-foreground">Nenhuma movimentação pública encontrada.</p> : <div className="space-y-3">{result.movimentos.map((item) => <div key={item.id} className="rounded-xl border border-border p-4"><div className="mb-2 flex flex-wrap items-center justify-between gap-2"><span className="rounded-full bg-muted px-2.5 py-1 text-xs font-semibold">{item.tipo}</span><span className="text-xs text-muted-foreground">{formatDate(item.criadoEm)}</span></div><p className="whitespace-pre-wrap text-sm leading-relaxed">{item.descricao}</p><p className="mt-2 text-xs text-muted-foreground">Registrado por: {item.criadoPor}</p></div>)}</div>}</CardContent></Card>
+        </div> : null}
+      </section>
+    </main>
   )
 }
