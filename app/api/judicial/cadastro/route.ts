@@ -256,9 +256,10 @@ export async function POST(req: NextRequest) {
       const pacienteNome = normalizeUpper(paciente.nome)
       const pacienteCpf = normalizeText(paciente.cpf)
       const pacienteCns = normalizeText(paciente.cartaoSus)
+      const tipoIntimacao = isIntimation === "sim" ? "SIM" : "NAO"
 
       const observacoesBloco = [
-        `TIPO DE INTIMACAO: ${isIntimation === "sim" ? "SIM" : "NAO"}`,
+        `TIPO DE INTIMACAO: ${tipoIntimacao}`,
         oficioNumber ? `OFICIO/INTIMACAO: ${oficioNumber}` : "",
         `DATA DE RECEBIMENTO: ${receivedAt}`,
         reiterationAt ? `DATA DA REITERACAO: ${reiterationAt}` : "",
@@ -412,6 +413,15 @@ export async function POST(req: NextRequest) {
         cid10,
         especialidade,
         subespecialidade,
+        numeroProcesso: actionRecords,
+        pgeNet: pgeNetNumber,
+        numeroOficio: oficioNumber,
+        tipoIntimacao,
+        dataRecebimento: receivedAt,
+        dataReiteracao: reiterationAt,
+        prazoDias: deadlineDays,
+        prazoFinal: deadlineAt,
+        userSistema: criadoPorNome,
       }
     })
 
@@ -427,6 +437,15 @@ export async function POST(req: NextRequest) {
       cid10: result.cid10,
       especialidade: result.especialidade,
       subespecialidade: result.subespecialidade,
+      numeroProcesso: result.numeroProcesso,
+      pgeNet: result.pgeNet,
+      numeroOficio: result.numeroOficio,
+      tipoIntimacao: result.tipoIntimacao,
+      dataRecebimento: result.dataRecebimento,
+      dataReiteracao: result.dataReiteracao,
+      prazoDias: result.prazoDias,
+      prazoFinal: result.prazoFinal,
+      userSistema: result.userSistema,
     })
 
     if (!emailResult.ok) {
