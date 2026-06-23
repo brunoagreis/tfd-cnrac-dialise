@@ -1,5 +1,6 @@
 import nodemailer from "nodemailer"
 import { prisma } from "@/lib/prisma"
+import { recordMunicipalityEmailDispatch } from "@/lib/municipality-email-dispatch-log"
 
 type MunicipalityContactRow = {
   municipalityName: string | null
@@ -47,6 +48,15 @@ type DemandNotificationInput = {
   prazoFinal?: string | null
   dataAgendamento?: string | null
   userSistema?: string | null
+}
+
+type NotificationResult = {
+  ok: boolean
+  skipped: boolean
+  reason?: string
+  messageId?: string
+  accepted?: unknown
+  rejected?: unknown
 }
 
 function text(value: unknown) {
@@ -335,12 +345,31 @@ function getMailConfig() {
   }
 }
 
+async function finishNotification(input: DemandNotificationInput, result: NotificationResult) {
+  try {
+    await recordMunicipalityEmailDispatch({
+      protocolo: input.protocolo,
+      module: input.module,
+      municipio: input.municipio,
+      status: result.ok && !result.skipped ? "ENVIADO" : "NAO_ENVIADO",
+      messageId: result.messageId,
+      accepted: result.accepted,
+      rejected: result.rejected,
+      reason: result.reason,
+    })
+  } catch (error) {
+    console.error("RECORD_MUNICIPALITY_EMAIL_DISPATCH_ERROR", error)
+  }
+
+  return result
+}
+
 export async function sendMunicipalityDemandNotification(input: DemandNotificationInput) {
   try {
     await ensureEmailDispatchColumns()
 
     const municipio = text(input.municipio)
-    if (!municipio) return { ok: false, skipped: true, reason: "Município não informado." }
+    if (!municipio) return finishNotification(input, { ok: false, skipped: true, reason: "Município não informado." })
 
     const [contact] = await prisma.$queryRawUnsafe<MunicipalityContactRow[]>(
       `
@@ -354,7 +383,7 @@ export async function sendMunicipalityDemandNotification(input: DemandNotificati
 
     const recipients = normalizeEmails(contact?.emails)
     if (recipients.length === 0) {
-      return { ok: false, skipped: true, reason: "Município sem e-mail cadastrado." }
+      return finishNotification(input, { ok: false, skipped: true, reason: "Município sem e-mail cadastrado." })
     }
 
     const [template] = await prisma.$queryRawUnsafe<TemplateRow[]>(
@@ -370,12 +399,12 @@ export async function sendMunicipalityDemandNotification(input: DemandNotificati
     )
 
     if (!template?.subject || !template?.body) {
-      return { ok: false, skipped: true, reason: "Modelo de e-mail automático não configurado para o módulo." }
+      return finishNotification(input, { ok: false, skipped: true, reason: "Modelo de e-mail automático não configurado para o módulo." })
     }
 
     const config = getMailConfig()
     if (!config.isConfigured) {
-      return { ok: false, skipped: true, reason: `SMTP não configurado: ${config.missing.join(", ")}` }
+      return finishNotification(input, { ok: false, skipped: true, reason: `SMTP não configurado: ${config.missing.join(", ")}` })
     }
 
     const subject = replaceTokens(template.subject, input)
@@ -398,9 +427,9 @@ export async function sendMunicipalityDemandNotification(input: DemandNotificati
       html,
     })
 
-    return { ok: true, skipped: false, messageId: info.messageId, accepted: info.accepted, rejected: info.rejected }
+    return finishNotification(input, { ok: true, skipped: false, messageId: info.messageId, accepted: info.accepted, rejected: info.rejected })
   } catch (error) {
     console.error("SEND_MUNICIPALITY_DEMAND_NOTIFICATION_ERROR", error)
-    return { ok: false, skipped: true, reason: error instanceof Error ? error.message : "Erro ao enviar e-mail." }
+    return finishNotification(input, { ok: false, skipped: true, reason: error instanceof Error ? error.message : "Erro ao enviar e-mail." })
   }
 }
