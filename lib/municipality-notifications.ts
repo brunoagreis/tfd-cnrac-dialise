@@ -17,6 +17,7 @@ type DemandNotificationInput = {
   pacienteNome: string
   pacienteCpf?: string | null
   pacienteCns?: string | null
+  pacienteTelefone?: string | null
   pacienteEmail?: string | null
   pacienteDataNascimento?: string | null
   pacienteEndereco?: string | null
@@ -112,6 +113,11 @@ function tipoSolicitacaoLabel(value: unknown) {
 function tokenValues(input: DemandNotificationInput) {
   const moduloCodigo = normalizeModule(input.module)
   const protocolo = text(input.protocolo)
+  const pacienteNome = text(input.pacienteNome)
+  const pacienteCpf = text(input.pacienteCpf)
+  const pacienteCns = text(input.pacienteCns)
+  const pacienteTelefone = text(input.pacienteTelefone)
+  const pacienteEmail = text(input.pacienteEmail)
   const numeroProcesso = text(input.numeroProcesso)
   const pgeNet = text(input.pgeNet)
   const numeroOficio = text(input.numeroOficio)
@@ -121,10 +127,9 @@ function tokenValues(input: DemandNotificationInput) {
   const localSolicitado = text(input.localSolicitado)
   const tipoSolicitacao = tipoSolicitacaoLabel(input.tipoSolicitacao)
   const municipio = text(input.municipio)
-
-  // E-mail municipal é comunicação externa. Dados identificáveis e clínicos
-  // não são substituídos por segurança/LGPD, mesmo que o token esteja no modelo.
-  const protectedValue = ""
+  const codigoSigtap = text(input.codigoSigtap)
+  const descricaoSigtap = text(input.descricaoSigtap)
+  const cid10 = text(input.cid10)
 
   return {
     modulo: moduleLabel(input.module),
@@ -137,17 +142,21 @@ function tokenValues(input: DemandNotificationInput) {
     protocolo_judicial: moduloCodigo === "judicial" ? protocolo : "",
     protocolo_prejudicial: moduloCodigo === "pre_judicial" ? protocolo : "",
 
-    nome_paciente: protectedValue,
-    paciente_nome: protectedValue,
-    requerente: protectedValue,
-    cpf: protectedValue,
-    paciente_cpf: protectedValue,
-    cns: protectedValue,
-    cartao_sus: protectedValue,
-    paciente_cns: protectedValue,
-    email_paciente: protectedValue,
-    data_nascimento: protectedValue,
-    endereco_paciente: protectedValue,
+    nome_paciente: pacienteNome,
+    paciente_nome: pacienteNome,
+    requerente: pacienteNome,
+    cpf: pacienteCpf,
+    paciente_cpf: pacienteCpf,
+    cns: pacienteCns,
+    cartao_sus: pacienteCns,
+    paciente_cns: pacienteCns,
+    telefone_paciente: pacienteTelefone,
+    paciente_telefone: pacienteTelefone,
+    email_paciente: pacienteEmail,
+    paciente_email: pacienteEmail,
+    data_nascimento: text(input.pacienteDataNascimento),
+    nascimento_paciente: text(input.pacienteDataNascimento),
+    endereco_paciente: text(input.pacienteEndereco),
 
     municipio,
     municipio_paciente: municipio,
@@ -159,7 +168,7 @@ function tokenValues(input: DemandNotificationInput) {
     destino: localSolicitado,
     tipo_solicitacao: tipoSolicitacao,
 
-    ficha_core: protectedValue,
+    ficha_core: text(input.fichaCore),
     numero_processo: numeroProcesso,
     autos_acao: numeroProcesso,
     processo: numeroProcesso,
@@ -175,24 +184,24 @@ function tokenValues(input: DemandNotificationInput) {
     data_agendamento: dataAgendamento,
     user_sistema: userSistema,
 
-    sigtap: protectedValue,
-    codigo_sigtap: protectedValue,
-    procedimento: protectedValue,
-    procedimento_sigtap: protectedValue,
-    procedimento_cnrac: protectedValue,
-    sigtap_descricao: protectedValue,
-    descricao_sigtap: protectedValue,
-    cid: protectedValue,
-    cid10: protectedValue,
-    cid_cnrac: protectedValue,
-    especialidade: protectedValue,
-    subespecialidade: protectedValue,
+    sigtap: codigoSigtap,
+    codigo_sigtap: codigoSigtap,
+    procedimento: descricaoSigtap,
+    procedimento_sigtap: codigoSigtap,
+    procedimento_cnrac: descricaoSigtap,
+    sigtap_descricao: descricaoSigtap,
+    descricao_sigtap: descricaoSigtap,
+    cid: cid10,
+    cid10,
+    cid_cnrac: cid10,
+    especialidade: text(input.especialidade),
+    subespecialidade: text(input.subespecialidade),
 
-    peso: protectedValue,
-    altura: protectedValue,
-    tipo_sanguineo: protectedValue,
-    observacoes: protectedValue,
-    observacoes_unidade: protectedValue,
+    peso: text(input.peso),
+    altura: text(input.altura),
+    tipo_sanguineo: text(input.tipoSanguineo),
+    observacoes: text(input.observacoes),
+    observacoes_unidade: text(input.observacoes),
   } satisfies Record<string, string>
 }
 
