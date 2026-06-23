@@ -1,12 +1,18 @@
+import { randomUUID } from "node:crypto"
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { getMunicipalitySession } from "@/lib/municipality-portal-session"
+import { flagDemandForMunicipalityInteraction } from "@/lib/municipality-portal-notifications"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
 function text(value: unknown) {
   return String(value ?? "").trim()
+}
+
+function buildId(prefix: string) {
+  return `${prefix}${randomUUID().replace(/-/g, "")}`
 }
 
 async function ensureUploadTable() {
@@ -46,7 +52,7 @@ async function findDemand(protocolo: string, municipio: string) {
 export async function POST(req: NextRequest) {
   try {
     const session = await getMunicipalitySession()
-    if (!session) return NextResponse.json({ ok: false, error: "Não autenticado." }, { status: 401 })
+    if (!session) return NextResponse.json({ ok: false, error: "Nao autenticado." }, { status: 401 })
 
     await ensureUploadTable()
 
@@ -64,7 +70,7 @@ export async function POST(req: NextRequest) {
 
     const demand = await findDemand(protocolo, session.municipalityName)
     if (!demand) {
-      return NextResponse.json({ ok: false, error: "Protocolo não encontrado para este município." }, { status: 404 })
+      return NextResponse.json({ ok: false, error: "Protocolo nao encontrado para este municipio." }, { status: 404 })
     }
 
     const bytes = Buffer.from(await file.arrayBuffer())
@@ -95,6 +101,32 @@ export async function POST(req: NextRequest) {
       file.size,
       bytes,
     )
+
+    const interactionText = `ANEXO DO MUNICIPIO\nArquivo: ${file.name}\nTamanho: ${Math.round(file.size / 1024)} KB`
+
+    await prisma.$executeRawUnsafe(
+      `
+        INSERT INTO public.interacoes (
+          id,
+          "demandaId",
+          texto,
+          pendencia,
+          "createdAt",
+          "createdBy",
+          "createdByName",
+          "createdByCpf",
+          "assinaturaUrl"
+        )
+        VALUES ($1, $2, $3, NULL, NOW(), $4, $5, NULL, NULL)
+      `,
+      buildId("int_"),
+      demand.id,
+      interactionText,
+      `municipio:${session.municipalityId}`,
+      `Municipio: ${session.municipalityName}`,
+    )
+
+    await flagDemandForMunicipalityInteraction({ demandaId: demand.id, protocolo })
 
     return NextResponse.json({ ok: true })
   } catch (error) {
