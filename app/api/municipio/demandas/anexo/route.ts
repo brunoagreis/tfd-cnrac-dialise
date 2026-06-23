@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto"
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { getMunicipalitySession } from "@/lib/municipality-portal-session"
-import { flagDemandForMunicipalityInteraction } from "@/lib/municipality-portal-notifications"
+import { safeFlagDemandForMunicipalityInteraction } from "@/lib/municipality-portal-safe-signal"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -126,7 +126,7 @@ export async function POST(req: NextRequest) {
       `Municipio: ${session.municipalityName}`,
     )
 
-    await flagDemandForMunicipalityInteraction({ demandaId: demand.id, protocolo })
+    await safeFlagDemandForMunicipalityInteraction({ demandaId: demand.id, protocolo })
 
     return NextResponse.json({ ok: true })
   } catch (error) {
