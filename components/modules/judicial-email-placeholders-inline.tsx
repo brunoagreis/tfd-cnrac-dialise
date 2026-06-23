@@ -5,8 +5,31 @@ import { useEffect } from "react"
 const placeholderHtml = `
   <div style="display:grid;gap:12px;">
     <div style="border:1px solid #bfdbfe;background:#eff6ff;border-radius:12px;padding:12px;color:#1e3a8a;line-height:1.45;">
-      <strong>Placeholders disponíveis para disparo municipal.</strong><br />
-      Dados sensíveis ou clínicos, como nome do paciente, CPF, CNS, SIGTAP e CID, não são exibidos no e-mail externo por segurança/LGPD.
+      <strong>Placeholders disponíveis.</strong><br />
+      O cabeçalho automático do SIGAJUS mostra apenas módulo, protocolo, município e número do processo. Os demais dados só aparecem se forem usados no modelo cadastrado.
+    </div>
+
+    <div style="border:1px solid #e5e7eb;border-radius:12px;padding:12px;">
+      <strong>Dados pessoais do paciente</strong>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;">
+        ${[
+          "$nome_paciente",
+          "$paciente_nome",
+          "$requerente",
+          "$cpf",
+          "$paciente_cpf",
+          "$cns",
+          "$paciente_cns",
+          "$cartao_sus",
+          "$telefone_paciente",
+          "$paciente_telefone",
+          "$email_paciente",
+          "$paciente_email",
+          "$data_nascimento",
+          "$nascimento_paciente",
+          "$endereco_paciente",
+        ].map(tokenChip).join("")}
+      </div>
     </div>
 
     <div style="border:1px solid #e5e7eb;border-radius:12px;padding:12px;">
@@ -16,12 +39,36 @@ const placeholderHtml = `
           "$protocolo",
           "$modulo",
           "$municipio",
+          "$municipio_paciente",
           "$local_solicitante",
           "$email_solicitante",
           "$telefone_solicitante",
           "$local_solicitado",
           "$tipo_solicitacao",
+          "$observacoes",
+          "$observacoes_unidade",
           "$user_sistema",
+        ].map(tokenChip).join("")}
+      </div>
+    </div>
+
+    <div style="border:1px solid #e5e7eb;border-radius:12px;padding:12px;">
+      <strong>Dados clínicos/procedimento</strong>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;">
+        ${[
+          "$sigtap",
+          "$codigo_sigtap",
+          "$sigtap_descricao",
+          "$descricao_sigtap",
+          "$procedimento",
+          "$procedimento_sigtap",
+          "$cid",
+          "$cid10",
+          "$especialidade",
+          "$subespecialidade",
+          "$peso",
+          "$altura",
+          "$tipo_sanguineo",
         ].map(tokenChip).join("")}
       </div>
     </div>
@@ -36,12 +83,18 @@ const placeholderHtml = `
 
     ${moduleBlock("CNRAC", [
       "$protocolo_cnrac",
+      "$procedimento_cnrac",
+      "$cid_cnrac",
+      "$ficha_core",
       "$origem",
       "$destino",
     ])}
 
     ${moduleBlock("Hemodiálise", [
       "$protocolo_hemodialise",
+      "$peso",
+      "$altura",
+      "$tipo_sanguineo",
       "$origem",
       "$destino",
     ])}
@@ -50,7 +103,9 @@ const placeholderHtml = `
       "$protocolo_judicial",
       "$numero_processo",
       "$autos_acao",
+      "$processo",
       "$pge_net",
+      "$numero_pge_net",
       "$numero_oficio",
       "$oficio",
       "$tipo_intimacao",
