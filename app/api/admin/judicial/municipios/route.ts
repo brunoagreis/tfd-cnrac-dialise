@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { syncMunicipalityPortalAccess } from "@/lib/municipality-portal-access"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -211,6 +212,8 @@ export async function POST(req: Request) {
         { status: 500 },
       )
     }
+
+    await syncMunicipalityPortalAccess(saved.id, saved.municipalityName, saved.emails)
 
     return NextResponse.json({
       ok: true,
