@@ -214,5 +214,3 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "Erro ao carregar demandas do município." }, { status: 500 })
   }
 }
-
-export { ensureUploadTable, getDemandForMunicipality }
