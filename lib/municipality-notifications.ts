@@ -17,12 +17,24 @@ type DemandNotificationInput = {
   pacienteNome: string
   pacienteCpf?: string | null
   pacienteCns?: string | null
+  pacienteEmail?: string | null
+  pacienteDataNascimento?: string | null
+  pacienteEndereco?: string | null
   municipio: string
+  localSolicitante?: string | null
+  emailSolicitante?: string | null
+  telefoneSolicitante?: string | null
+  localSolicitado?: string | null
+  tipoSolicitacao?: string | null
   codigoSigtap?: string | null
   descricaoSigtap?: string | null
   cid10?: string | null
   especialidade?: string | null
   subespecialidade?: string | null
+  peso?: string | null
+  altura?: string | null
+  tipoSanguineo?: string | null
+  observacoes?: string | null
   fichaCore?: string | null
   numeroProcesso?: string | null
   pgeNet?: string | null
@@ -83,7 +95,22 @@ function parseBoolean(value: string | undefined, fallback: boolean) {
   return ["1", "true", "yes", "on"].includes(value.trim().toLowerCase())
 }
 
+function tipoSolicitacaoLabel(value: unknown) {
+  const key = text(value).toLowerCase()
+  const labels: Record<string, string> = {
+    transito: "Trânsito",
+    definitiva: "Definitiva",
+    nao_se_aplica: "Não se aplica",
+    inclusao: "Inclusão",
+    substituicao: "Substituição",
+    alta: "Alta",
+    outros: "Outros",
+  }
+  return labels[key] ?? text(value)
+}
+
 function tokenValues(input: DemandNotificationInput) {
+  const moduloCodigo = normalizeModule(input.module)
   const protocolo = text(input.protocolo)
   const pacienteNome = text(input.pacienteNome)
   const pacienteCpf = text(input.pacienteCpf)
@@ -94,13 +121,25 @@ function tokenValues(input: DemandNotificationInput) {
   const fichaCore = text(input.fichaCore)
   const userSistema = text(input.userSistema) || "SIGAJUS"
   const dataAgendamento = text(input.dataAgendamento)
+  const localSolicitante = text(input.localSolicitante)
+  const localSolicitado = text(input.localSolicitado)
+  const tipoSolicitacao = tipoSolicitacaoLabel(input.tipoSolicitacao)
+  const codigoSigtap = text(input.codigoSigtap)
+  const descricaoSigtap = text(input.descricaoSigtap)
+  const cid10 = text(input.cid10)
+  const municipio = text(input.municipio)
 
   return {
     modulo: moduleLabel(input.module),
-    modulo_codigo: normalizeModule(input.module),
+    modulo_codigo: moduloCodigo,
+
     protocolo,
-    protocolo_judicial: protocolo,
-    protocolo_prejudicial: protocolo,
+    protocolo_tfd: moduloCodigo === "tfd" ? protocolo : "",
+    protocolo_cnrac: moduloCodigo === "cnrac" ? protocolo : "",
+    protocolo_hemodialise: moduloCodigo === "hemodialise" ? protocolo : "",
+    protocolo_judicial: moduloCodigo === "judicial" ? protocolo : "",
+    protocolo_prejudicial: moduloCodigo === "pre_judicial" ? protocolo : "",
+
     nome_paciente: pacienteNome,
     paciente_nome: pacienteNome,
     requerente: pacienteNome,
@@ -109,8 +148,21 @@ function tokenValues(input: DemandNotificationInput) {
     cns: pacienteCns,
     cartao_sus: pacienteCns,
     paciente_cns: pacienteCns,
+    email_paciente: text(input.pacienteEmail),
+    data_nascimento: text(input.pacienteDataNascimento),
+    endereco_paciente: text(input.pacienteEndereco),
+
+    municipio,
+    municipio_paciente: municipio,
+    local_solicitante: localSolicitante,
+    email_solicitante: text(input.emailSolicitante),
+    telefone_solicitante: text(input.telefoneSolicitante),
+    local_solicitado: localSolicitado,
+    origem: localSolicitante,
+    destino: localSolicitado,
+    tipo_solicitacao: tipoSolicitacao,
+
     ficha_core: fichaCore,
-    municipio: text(input.municipio),
     numero_processo: numeroProcesso,
     autos_acao: numeroProcesso,
     processo: numeroProcesso,
@@ -125,14 +177,25 @@ function tokenValues(input: DemandNotificationInput) {
     prazo_final: text(input.prazoFinal),
     data_agendamento: dataAgendamento,
     user_sistema: userSistema,
-    sigtap: text(input.codigoSigtap),
-    codigo_sigtap: text(input.codigoSigtap),
-    sigtap_descricao: text(input.descricaoSigtap),
-    descricao_sigtap: text(input.descricaoSigtap),
-    cid: text(input.cid10),
-    cid10: text(input.cid10),
+
+    sigtap: codigoSigtap,
+    codigo_sigtap: codigoSigtap,
+    procedimento: descricaoSigtap,
+    procedimento_sigtap: codigoSigtap,
+    procedimento_cnrac: descricaoSigtap,
+    sigtap_descricao: descricaoSigtap,
+    descricao_sigtap: descricaoSigtap,
+    cid: cid10,
+    cid10,
+    cid_cnrac: cid10,
     especialidade: text(input.especialidade),
     subespecialidade: text(input.subespecialidade),
+
+    peso: text(input.peso),
+    altura: text(input.altura),
+    tipo_sanguineo: text(input.tipoSanguineo),
+    observacoes: text(input.observacoes),
+    observacoes_unidade: text(input.observacoes),
   } satisfies Record<string, string>
 }
 
@@ -192,6 +255,8 @@ function wrapEmailHtml(bodyHtml: string, input: DemandNotificationInput) {
                         ${detailRow("Paciente", values.nome_paciente)}
                         ${detailRow("CPF", values.cpf)}
                         ${detailRow("Município", values.municipio)}
+                        ${detailRow("Solicitante", values.local_solicitante)}
+                        ${detailRow("Destino", values.local_solicitado)}
                         ${detailRow("Nº processo", values.numero_processo)}
                         ${detailRow("PGE.net", values.pge_net)}
                         ${detailRow("SIGTAP", values.sigtap ? `${values.sigtap} - ${values.sigtap_descricao}` : values.sigtap_descricao)}
