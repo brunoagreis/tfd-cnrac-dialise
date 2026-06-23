@@ -24,6 +24,12 @@ export async function ensureMunicipalityUploadTable() {
   `)
 
   await prisma.$executeRawUnsafe(`
+    UPDATE public.municipio_portal_anexos
+    SET download_token = md5(random()::text || clock_timestamp()::text || id::text)
+    WHERE NULLIF(TRIM(COALESCE(download_token, '')), '') IS NULL
+  `)
+
+  await prisma.$executeRawUnsafe(`
     CREATE UNIQUE INDEX IF NOT EXISTS municipio_portal_anexos_download_token_uniq
       ON public.municipio_portal_anexos (download_token)
   `)
