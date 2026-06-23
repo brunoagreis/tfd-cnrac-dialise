@@ -24,6 +24,8 @@ type PreviewItem = {
   classifier: string
   pgeNet: string
   processo: string
+  detectedIn?: string
+  allProcessNumbers?: string[]
   attachments: AttachmentItem[]
   simulatedAction: {
     type: string
@@ -138,7 +140,7 @@ export default function EmailIntegracaoPage() {
       <Card className="border-border">
         <CardHeader>
           <CardTitle className="text-base">Prévia da triagem</CardTitle>
-          <CardDescription>Mostra assunto, PGE.net/processo detectado, classificador, anexos e ação simulada.</CardDescription>
+          <CardDescription>Mostra assunto, PGE.net/processo detectado no assunto ou corpo, classificador, anexos e ação simulada.</CardDescription>
         </CardHeader>
         <CardContent>
           {items.length === 0 ? (
@@ -153,11 +155,15 @@ export default function EmailIntegracaoPage() {
                   </div>
                   <h2 className="font-semibold">{item.subject || "Sem assunto"}</h2>
                   <p className="mt-1 text-sm text-muted-foreground">Remetente: {item.from || "-"}</p>
-                  <div className="mt-3 grid gap-2 text-sm md:grid-cols-3">
+                  <div className="mt-3 grid gap-2 text-sm md:grid-cols-4">
                     <div><strong>PGE.net:</strong> {item.pgeNet || "Não detectado"}</div>
                     <div><strong>Processo:</strong> {item.processo || "Não detectado"}</div>
+                    <div><strong>Detectado em:</strong> {item.detectedIn || "-"}</div>
                     <div><strong>Anexos:</strong> {item.attachments.length}</div>
                   </div>
+                  {item.allProcessNumbers?.length ? (
+                    <p className="mt-2 text-xs text-muted-foreground">Números localizados: {item.allProcessNumbers.join(", ")}</p>
+                  ) : null}
                   {item.attachments.length ? (
                     <div className="mt-3 rounded-lg bg-muted p-3 text-sm">
                       {item.attachments.map((attachment, index) => (
