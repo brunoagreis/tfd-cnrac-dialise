@@ -268,40 +268,20 @@ export default function LoginPage() {
                   Entrar
                 </Button>
 
-                <Button
-                  asChild
-                  type="button"
-                  variant="outline"
-                  className="w-full bg-transparent"
-                >
+                <Button asChild type="button" variant="outline" className="w-full bg-transparent">
                   <Link href="/cadastrar-se">Cadastrar-se</Link>
                 </Button>
               </div>
             </form>
-<div className="hidden">
-            <div className="mt-4 flex flex-col items-center gap-2">
-              <Link
-                href="/solicitacao"
-                className="text-sm font-medium text-primary hover:underline"
-              >
-                Formulário de solicitação (hospitais)
-              </Link>
 
-              <Link
-                href="/acompanhamento"
-                className="text-sm text-muted-foreground hover:underline"
-              >
-                Acompanhar protocolo (unidades)
-              </Link>
-
-              <Link
-                href="/consulta"
-                className="text-sm text-muted-foreground hover:underline"
-              >
-                Consultar protocolo (externo)
-              </Link>
+            <div className="mt-5 grid gap-2 border-t border-border pt-4">
+              <Button asChild type="button" variant="secondary" className="w-full">
+                <Link href="/consulta">Consulta pública de protocolo</Link>
+              </Button>
+              <Button asChild type="button" variant="outline" className="w-full bg-transparent">
+                <Link href="/municipio/login">Login do Município</Link>
+              </Button>
             </div>
-</div>
           </CardContent>
         </Card>
       </div>
