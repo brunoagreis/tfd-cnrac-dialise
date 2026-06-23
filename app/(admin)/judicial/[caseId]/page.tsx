@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/auth-context"
 import { useJudicial } from "@/lib/judicial-context"
 import { JudicialCaseDetail } from "@/components/modules/judicial-case-detail"
 import { JudicialPriorityPanel } from "@/components/modules/judicial-priority-panel"
+import { MunicipalityAttachmentLinkEnhancer } from "@/components/modules/municipality-attachment-link-enhancer"
 
 export default function JudicialCasePage() {
   const params = useParams()
@@ -46,6 +47,7 @@ export default function JudicialCasePage() {
 
   return (
     <>
+      <MunicipalityAttachmentLinkEnhancer />
       <JudicialPriorityPanel caseId={caseId} user={user} />
       <JudicialCaseDetail caseId={caseId} />
     </>
