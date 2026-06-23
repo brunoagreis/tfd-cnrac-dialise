@@ -1,13 +1,15 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
-import { ArrowLeft, Inbox, MailCheck, RefreshCcw, Search } from "lucide-react"
+import { ArrowLeft, Inbox, MailCheck, RefreshCcw, Save, Search } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 
 type AttachmentItem = {
   filename: string
@@ -51,6 +53,20 @@ type ConnectionResult = {
   }
 }
 
+type UserItem = {
+  id: string
+  nome: string
+  email: string
+}
+
+type RuleItem = {
+  id: string
+  nome: string
+  palavras: string[]
+  ativo: boolean
+  usuarios: UserItem[]
+}
+
 function formatDate(value: string) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return "-"
@@ -68,6 +84,61 @@ export default function EmailIntegracaoPage() {
   const [connection, setConnection] = useState<ConnectionResult | null>(null)
   const [items, setItems] = useState<PreviewItem[]>([])
   const [loading, setLoading] = useState(false)
+  const [rules, setRules] = useState<RuleItem[]>([])
+  const [users, setUsers] = useState<UserItem[]>([])
+  const [ruleName, setRuleName] = useState("")
+  const [ruleWords, setRuleWords] = useState("")
+  const [selectedUsers, setSelectedUsers] = useState<string[]>([])
+
+  const selectedUserSet = useMemo(() => new Set(selectedUsers), [selectedUsers])
+
+  useEffect(() => {
+    void loadRules()
+  }, [])
+
+  async function loadRules() {
+    const response = await fetch("/api/admin/judicial/email-integracao/regras", { cache: "no-store" })
+    const json = await response.json().catch(() => ({}))
+    if (response.ok && json?.ok) {
+      setRules(Array.isArray(json.rules) ? json.rules : [])
+      setUsers(Array.isArray(json.users) ? json.users : [])
+    }
+  }
+
+  async function saveRule() {
+    if (!ruleName.trim()) {
+      toast.error("Informe o nome do grupo.")
+      return
+    }
+    if (!ruleWords.trim()) {
+      toast.error("Informe as palavras-chave.")
+      return
+    }
+
+    const response = await fetch("/api/admin/judicial/email-integracao/regras", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nome: ruleName, palavras: ruleWords, usuarioIds: selectedUsers }),
+    })
+    const json = await response.json().catch(() => ({}))
+    if (!response.ok || !json?.ok) {
+      toast.error(json?.error || "Erro ao salvar regra.")
+      return
+    }
+    toast.success("Regra salva.")
+    setRuleName("")
+    setRuleWords("")
+    setSelectedUsers([])
+    await loadRules()
+  }
+
+  function toggleUser(userId: string) {
+    setSelectedUsers((current) =>
+      current.includes(userId)
+        ? current.filter((id) => id !== userId)
+        : [...current, userId],
+    )
+  }
 
   async function testConnection() {
     try {
@@ -106,7 +177,7 @@ export default function EmailIntegracaoPage() {
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Integração de e-mail</h1>
-          <p className="text-sm text-muted-foreground">Teste a leitura da caixa sigajus.ses.ms@gmail.com sem processar os e-mails.</p>
+          <p className="text-sm text-muted-foreground">Configure grupos, responsáveis e teste a leitura da caixa sigajus.ses.ms@gmail.com.</p>
         </div>
         <Button asChild variant="outline" className="bg-transparent">
           <Link href="/admin/judicial"><ArrowLeft className="mr-2 h-4 w-4" /> Voltar</Link>
@@ -116,7 +187,7 @@ export default function EmailIntegracaoPage() {
       <Card className="border-border">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base"><Inbox className="h-4 w-4" /> Teste de conexão</CardTitle>
-          <CardDescription>Nesta fase o SIGAJUS apenas conecta e simula a triagem. Nenhuma demanda, OS, anexo ou monitoramento é criado.</CardDescription>
+          <CardDescription>Nesta área você valida a caixa e confere a prévia da triagem.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-wrap gap-2">
@@ -131,9 +202,56 @@ export default function EmailIntegracaoPage() {
               {connection.error ? <p className="text-destructive"><strong>Erro:</strong> {connection.error}</p> : null}
               {connection.config ? <p><strong>Conta:</strong> {connection.config.user} • {connection.config.host}:{connection.config.port} • {connection.config.mailbox}</p> : null}
               {connection.mailbox ? <p><strong>Mensagens IMAP na INBOX:</strong> {connection.mailbox.exists}</p> : null}
-              {connection.mailbox ? <p className="mt-2 text-xs text-muted-foreground">Observação: o Gmail pode exibir a caixa como conversas agrupadas. O IMAP conta mensagens individuais; uma conversa com indicador “2” no Gmail conta como duas mensagens.</p> : null}
+              {connection.mailbox ? <p className="mt-2 text-xs text-muted-foreground">Observação: o Gmail pode exibir a caixa como conversas agrupadas. O IMAP conta mensagens individuais.</p> : null}
             </div>
           ) : null}
+        </CardContent>
+      </Card>
+
+      <Card className="border-border">
+        <CardHeader>
+          <CardTitle className="text-base">Grupos de palavras-chave e responsáveis</CardTitle>
+          <CardDescription>Quando uma palavra do grupo for encontrada no assunto ou corpo do e-mail, o caso será direcionado para os responsáveis selecionados.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <div className="grid gap-3 lg:grid-cols-[1fr_2fr]">
+            <div className="space-y-2">
+              <Label>Grupo</Label>
+              <Input value={ruleName} onChange={(event) => setRuleName(event.target.value)} placeholder="Ex.: Inicial" />
+            </div>
+            <div className="space-y-2">
+              <Label>Palavras-chave</Label>
+              <Input value={ruleWords} onChange={(event) => setRuleWords(event.target.value)} placeholder="Ex.: inicial, solicitação de informações" />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Responsáveis</Label>
+            <div className="grid max-h-56 gap-2 overflow-auto rounded-xl border border-border p-3 md:grid-cols-2 lg:grid-cols-3">
+              {users.map((user) => (
+                <label key={user.id} className="flex cursor-pointer items-start gap-2 rounded-lg p-2 text-sm hover:bg-muted">
+                  <input type="checkbox" checked={selectedUserSet.has(user.id)} onChange={() => toggleUser(user.id)} className="mt-1" />
+                  <span><strong>{user.nome}</strong><br /><span className="text-xs text-muted-foreground">{user.email || "Sem e-mail"}</span></span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <Button type="button" onClick={saveRule}><Save className="mr-2 h-4 w-4" /> Salvar regra</Button>
+
+          <div className="space-y-2">
+            {rules.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Nenhuma regra cadastrada ainda.</p>
+            ) : rules.map((rule) => (
+              <div key={rule.id} className="rounded-xl border border-border p-3 text-sm">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge>{rule.nome}</Badge>
+                  <span className="text-muted-foreground">{rule.palavras.join(", ")}</span>
+                </div>
+                <p className="mt-2 text-xs text-muted-foreground">Responsáveis: {rule.usuarios?.length ? rule.usuarios.map((user) => user.nome).join(", ") : "nenhum"}</p>
+              </div>
+            ))}
+          </div>
         </CardContent>
       </Card>
 
@@ -161,9 +279,7 @@ export default function EmailIntegracaoPage() {
                     <div><strong>Detectado em:</strong> {item.detectedIn || "-"}</div>
                     <div><strong>Anexos:</strong> {item.attachments.length}</div>
                   </div>
-                  {item.allProcessNumbers?.length ? (
-                    <p className="mt-2 text-xs text-muted-foreground">Números localizados: {item.allProcessNumbers.join(", ")}</p>
-                  ) : null}
+                  {item.allProcessNumbers?.length ? <p className="mt-2 text-xs text-muted-foreground">Números localizados: {item.allProcessNumbers.join(", ")}</p> : null}
                   {item.attachments.length ? (
                     <div className="mt-3 rounded-lg bg-muted p-3 text-sm">
                       {item.attachments.map((attachment, index) => (
