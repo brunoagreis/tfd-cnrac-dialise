@@ -2,7 +2,6 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import Image from "next/image"
 import { Loader2 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -10,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { MunicipalityPortalLogo } from "@/components/municipio/municipality-portal-logo"
 
 export default function MunicipioLoginPage() {
   const router = useRouter()
@@ -39,10 +39,10 @@ export default function MunicipioLoginPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-background px-4 py-6">
+    <main className="flex min-h-screen items-center justify-center bg-gradient-to-br from-background to-muted px-4 py-6">
       <div className="w-full max-w-md">
-        <div className="mb-2 flex justify-center">
-          <Image src="/logo-sigajus.png" alt="SIGAJUS" width={220} height={90} priority className="h-auto w-auto max-w-[220px] object-contain" />
+        <div className="mb-4 flex justify-center">
+          <MunicipalityPortalLogo variant="color" className="h-16 w-auto max-w-[300px] object-contain" />
         </div>
         <Card className="border-border shadow-lg">
           <CardHeader>
