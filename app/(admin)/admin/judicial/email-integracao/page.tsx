@@ -119,7 +119,7 @@ export default function EmailIntegracaoPage() {
         <CardContent className="space-y-4">
           <div className="flex flex-wrap gap-2">
             <Button type="button" onClick={testConnection} disabled={loading}><MailCheck className="mr-2 h-4 w-4" /> Testar conexão</Button>
-            <Button type="button" variant="outline" className="bg-transparent" onClick={previewEmails} disabled={loading}><Search className="mr-2 h-4 w-4" /> Ler últimos 10 e-mails</Button>
+            <Button type="button" variant="outline" className="bg-transparent" onClick={previewEmails} disabled={loading}><Search className="mr-2 h-4 w-4" /> Ler últimas 10 mensagens</Button>
             {loading ? <Badge variant="outline"><RefreshCcw className="mr-1 h-3 w-3 animate-spin" /> Processando</Badge> : null}
           </div>
 
@@ -128,7 +128,8 @@ export default function EmailIntegracaoPage() {
               <p><strong>Status:</strong> {connection.ok ? "Conectado" : "Falha"}</p>
               {connection.error ? <p className="text-destructive"><strong>Erro:</strong> {connection.error}</p> : null}
               {connection.config ? <p><strong>Conta:</strong> {connection.config.user} • {connection.config.host}:{connection.config.port} • {connection.config.mailbox}</p> : null}
-              {connection.mailbox ? <p><strong>E-mails na caixa:</strong> {connection.mailbox.exists}</p> : null}
+              {connection.mailbox ? <p><strong>Mensagens IMAP na INBOX:</strong> {connection.mailbox.exists}</p> : null}
+              {connection.mailbox ? <p className="mt-2 text-xs text-muted-foreground">Observação: o Gmail pode exibir a caixa como conversas agrupadas. O IMAP conta mensagens individuais; uma conversa com indicador “2” no Gmail conta como duas mensagens.</p> : null}
             </div>
           ) : null}
         </CardContent>
@@ -141,7 +142,7 @@ export default function EmailIntegracaoPage() {
         </CardHeader>
         <CardContent>
           {items.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Nenhum e-mail carregado ainda.</p>
+            <p className="text-sm text-muted-foreground">Nenhuma mensagem carregada ainda. Clique em “Ler últimas 10 mensagens”.</p>
           ) : (
             <div className="space-y-3">
               {items.map((item) => (
