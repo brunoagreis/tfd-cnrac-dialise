@@ -15,13 +15,7 @@ type DemandRow = {
   pacienteCpf: string | null
   pacienteCns: string | null
   municipio: string | null
-  localSolicitante: string | null
   localSolicitado: string | null
-  codigoSigtap: string | null
-  descricaoSigtap: string | null
-  cid10: string | null
-  especialidade: string | null
-  subespecialidade: string | null
   observacoesUnidade: string | null
 }
 
@@ -142,13 +136,7 @@ export async function GET(req: NextRequest) {
           p.cpf AS "pacienteCpf",
           p."cartaoSus" AS "pacienteCns",
           COALESCE(NULLIF(TRIM(d."localSolicitado"), ''), p.municipio) AS municipio,
-          d."localSolicitante" AS "localSolicitante",
           d."localSolicitado" AS "localSolicitado",
-          d."codigoSigtap" AS "codigoSigtap",
-          d."descricaoSigtap" AS "descricaoSigtap",
-          d.cid10 AS cid10,
-          d.especialidade AS especialidade,
-          d.subespecialidade AS subespecialidade,
           d."observacoesUnidade" AS "observacoesUnidade"
         FROM public.demandas d
         INNER JOIN public.pacientes p ON p.id = d."pacienteId"
@@ -232,13 +220,6 @@ export async function GET(req: NextRequest) {
           municipio: text(demand.municipio) || "-",
         },
         processo: maskProcess(processo),
-        procedimento: {
-          codigo: text(demand.codigoSigtap) || "-",
-          descricao: text(demand.descricaoSigtap) || "-",
-          cid10: text(demand.cid10) || "-",
-          especialidade: text(demand.especialidade) || "-",
-          subespecialidade: text(demand.subespecialidade) || "-",
-        },
         movimentos: movements,
       },
     })
