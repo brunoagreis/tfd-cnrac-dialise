@@ -33,14 +33,22 @@ function boolEnv(value: unknown, fallback = true) {
   return fallback
 }
 
+function envText(...keys: string[]) {
+  for (const key of keys) {
+    const value = text(process.env[key])
+    if (value) return value
+  }
+  return ""
+}
+
 export function getEmailTriageConfig() {
   const config: EmailTriageConfig = {
-    host: text(process.env.EMAIL_TRIAGEM_HOST) || "imap.gmail.com",
-    port: Number(process.env.EMAIL_TRIAGEM_PORT || 993),
-    secure: boolEnv(process.env.EMAIL_TRIAGEM_SECURE, true),
-    user: text(process.env.EMAIL_TRIAGEM_USER) || "sigajus.ses.ms@gmail.com",
-    password: text(process.env.EMAIL_TRIAGEM_PASSWORD),
-    mailbox: text(process.env.EMAIL_TRIAGEM_MAILBOX) || "INBOX",
+    host: envText("EMAIL_TRIAGEM_HOST") || "imap.gmail.com",
+    port: Number(envText("EMAIL_TRIAGEM_PORT") || 993),
+    secure: boolEnv(envText("EMAIL_TRIAGEM_SECURE"), true),
+    user: envText("EMAIL_TRIAGEM_USER", "MAIL_USERNAME", "MAIL_FROM_ADDRESS") || "sigajus.ses.ms@gmail.com",
+    password: envText("EMAIL_TRIAGEM_PASSWORD", "MAIL_PASSWORD"),
+    mailbox: envText("EMAIL_TRIAGEM_MAILBOX") || "INBOX",
   }
 
   return {
@@ -107,7 +115,7 @@ export async function testEmailTriageConnection() {
   if (!config.configured) {
     return {
       ok: false,
-      error: "Configure EMAIL_TRIAGEM_PASSWORD no .env para testar a conexão.",
+      error: "Configure EMAIL_TRIAGEM_PASSWORD ou MAIL_PASSWORD no .env para testar a conexão.",
       config: {
         host: config.host,
         port: config.port,
@@ -165,7 +173,7 @@ export async function previewEmailTriage(limit = 10) {
   if (!config.configured) {
     return {
       ok: false,
-      error: "Configure EMAIL_TRIAGEM_PASSWORD no .env para ler os e-mails.",
+      error: "Configure EMAIL_TRIAGEM_PASSWORD ou MAIL_PASSWORD no .env para ler os e-mails.",
       items: [],
     }
   }
