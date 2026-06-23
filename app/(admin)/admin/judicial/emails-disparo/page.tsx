@@ -32,21 +32,12 @@ const modules = [
 const commonPlaceholders = [
   "$protocolo",
   "$modulo",
-  "$nome_paciente",
-  "$cpf",
-  "$cns",
   "$municipio",
   "$local_solicitante",
   "$email_solicitante",
   "$telefone_solicitante",
   "$local_solicitado",
   "$tipo_solicitacao",
-  "$sigtap",
-  "$sigtap_descricao",
-  "$cid",
-  "$especialidade",
-  "$subespecialidade",
-  "$observacoes",
   "$user_sistema",
 ]
 
@@ -60,17 +51,11 @@ const placeholdersByModule: Record<string, string[]> = {
   ],
   cnrac: [
     "$protocolo_cnrac",
-    "$procedimento_cnrac",
-    "$cid_cnrac",
-    "$ficha_core",
     "$origem",
     "$destino",
   ],
   hemodialise: [
     "$protocolo_hemodialise",
-    "$peso",
-    "$altura",
-    "$tipo_sanguineo",
     "$origem",
     "$destino",
   ],
@@ -197,10 +182,14 @@ export default function JudicialEmailsDisparoPage() {
 
       <Card className="border-border">
         <CardHeader>
-          <CardTitle className="text-base">Placeholders por módulo</CardTitle>
-          <CardDescription>Use estes códigos no assunto e no corpo do modelo. O sistema substitui automaticamente no envio.</CardDescription>
+          <CardTitle className="text-base">Placeholders seguros por módulo</CardTitle>
+          <CardDescription>Estes tokens são próprios para disparo municipal. Dados identificáveis ou clínicos, como nome, CPF, CNS, SIGTAP e CID, não são exibidos no e-mail externo.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
+          <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950">
+            O cabeçalho automático do SIGAJUS mostra somente módulo, protocolo, município e número do processo quando existir. O texto abaixo dele respeita o modelo cadastrado.
+          </div>
+
           <div className="rounded-xl border border-border p-4">
             <h2 className="mb-3 text-sm font-semibold">Comuns a todos os módulos</h2>
             <PlaceholderList items={commonPlaceholders} />
