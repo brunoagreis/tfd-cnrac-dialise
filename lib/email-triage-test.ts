@@ -24,6 +24,14 @@ type ParsedMailLike = {
   attachments?: Array<{ filename?: string; contentType?: string; size?: number }>
 }
 
+type DemandMatch = {
+  id: string
+  protocolo: string | null
+  pacienteNome: string | null
+  monitoramentoId?: string | null
+  matchSource?: string | null
+}
+
 function text(value: unknown) {
   return String(value ?? "").trim()
 }
@@ -41,6 +49,10 @@ function envText(...keys: string[]) {
     if (value) return value
   }
   return ""
+}
+
+function onlyDigits(value: unknown) {
+  return text(value).replace(/\D/g, "")
 }
 
 function stripHtml(value: unknown) {
@@ -99,31 +111,85 @@ export function extractEmailTriageFields(subject: string, body = "") {
 
 async function findDemandByProcess(processNumber: string) {
   const processo = text(processNumber)
+  const processoDigits = onlyDigits(processo)
   if (!processo) return null
 
-  const rows = await prisma.$queryRawUnsafe<Array<{ protocolo: string | null; id: string; pacienteNome: string | null }>>(
+  const linkedRows = await prisma.$queryRawUnsafe<DemandMatch[]>(
+    `
+      SELECT
+        COALESCE(d.id::text, b.demanda_id::text, b.origem_registro_id::text, b.id::text) AS id,
+        d.protocolo,
+        COALESCE(p.nome, b.nome_paciente) AS "pacienteNome",
+        b.id::text AS "monitoramentoId",
+        CASE
+          WHEN UPPER(COALESCE(pv.tipo, '')) = 'PGE_NET' THEN 'PGE.net em processos vinculados'
+          ELSE 'Processo vinculado'
+        END AS "matchSource"
+      FROM public.judicial_processos_vinculados pv
+      INNER JOIN public.judicial_monitoramento_base b
+        ON b.id = pv.monitoramento_id
+      LEFT JOIN public.demandas d
+        ON d.id = b.demanda_id
+      LEFT JOIN public.pacientes p
+        ON p.id = COALESCE(b.paciente_id, d."pacienteId")
+      WHERE COALESCE(pv.ativo, TRUE) = TRUE
+        AND (
+          pv.numero ILIKE $1
+          OR regexp_replace(COALESCE(pv.numero, ''), '\\D', '', 'g') = $2
+        )
+      ORDER BY
+        CASE WHEN UPPER(COALESCE(pv.tipo, '')) = 'PGE_NET' THEN 0 ELSE 1 END,
+        b.id DESC
+      LIMIT 1
+    `,
+    `%${processo}%`,
+    processoDigits,
+  ).catch(() => [] as DemandMatch[])
+
+  const linkedFound = linkedRows[0]
+  if (linkedFound) {
+    return {
+      id: text(linkedFound.id),
+      protocolo: text(linkedFound.protocolo),
+      pacienteNome: text(linkedFound.pacienteNome),
+      monitoramentoId: text(linkedFound.monitoramentoId),
+      matchSource: text(linkedFound.matchSource),
+    }
+  }
+
+  const rows = await prisma.$queryRawUnsafe<DemandMatch[]>(
     `
       SELECT
         d.id::text AS id,
         d.protocolo,
-        p.nome AS "pacienteNome"
+        p.nome AS "pacienteNome",
+        b.id::text AS "monitoramentoId",
+        'Demanda/observações' AS "matchSource"
       FROM public.demandas d
-      INNER JOIN public.pacientes p ON p.id = d."pacienteId"
+      INNER JOIN public.pacientes p
+        ON p.id = d."pacienteId"
+      LEFT JOIN public.judicial_monitoramento_base b
+        ON b.demanda_id = d.id
       WHERE d."observacoesUnidade" ILIKE $1
          OR d.protocolo ILIKE $1
+         OR regexp_replace(COALESCE(d."observacoesUnidade", ''), '\\D', '', 'g') LIKE $3
       ORDER BY d."createdAt" DESC
       LIMIT 1
     `,
     `%${processo}%`,
-  )
+    processoDigits,
+    `%${processoDigits}%`,
+  ).catch(() => [] as DemandMatch[])
 
   const found = rows[0]
   if (!found) return null
 
   return {
-    id: found.id,
+    id: text(found.id),
     protocolo: text(found.protocolo),
     pacienteNome: text(found.pacienteNome),
+    monitoramentoId: text(found.monitoramentoId),
+    matchSource: text(found.matchSource),
   }
 }
 
@@ -255,7 +321,9 @@ export async function previewEmailTriage(limit = 10) {
           simulatedAction: demand
             ? {
                 type: "vincular_processo",
-                label: "Processo encontrado. Vincularia ao processo e criaria monitoramento.",
+                label: demand.matchSource
+                  ? `Processo encontrado (${demand.matchSource}). Vincularia ao processo e criaria monitoramento.`
+                  : "Processo encontrado. Vincularia ao processo e criaria monitoramento.",
                 demanda: demand,
               }
             : {
