@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge"
 type FileItem = { name?: string; filename?: string; mimeType?: string; contentType?: string; size?: number; url?: string }
 type HistoryItem = { id: string; assunto: string; remetente: string; pgeNet: string; processo: string; status: string; monitoramentoId: string; osProtocolo: string; erro: string; processadoEm: string; corpoResumo?: string; attachments: FileItem[] }
 type ConnectionResult = { ok: boolean; error?: string; config?: { host: string; port: number; user: string; mailbox: string }; mailbox?: { exists: number } }
-type TriageStatus = { running: boolean; source: string; lastStartedAt: string; lastFinishedAt: string; nextRunAt: string; lastOk: boolean | null; lastMessage: string; lastProcessed: number; updatedAt: string }
+type TriageStatus = { running: boolean; source: string; lastStartedAt: string; lastFinishedAt: string; nextRunAt: string; lastOk: boolean | null; lastMessage: string; lastProcessed: number; mailboxTotal: number; unreadTotal: number; readCount: number; triagedCount: number; linkedCount: number; osCount: number; errorCount: number; currentSubject: string; updatedAt: string }
 
 const PAGE_SIZE = 10
 const AUTO_INTERVAL_MS = 5 * 60 * 1000
@@ -106,6 +106,16 @@ export function EmailIntegracaoPageV5() {
           <p><strong>Última execução:</strong> {status?.lastFinishedAt ? dateBr(status.lastFinishedAt) : status?.lastStartedAt ? `${dateBr(status.lastStartedAt)} em andamento` : "Ainda não executou"}</p>
           <p><strong>Próxima execução:</strong> {status?.nextRunAt ? dateBr(status.nextRunAt) : "Aguardando agendamento"}</p>
           <p><strong>Resultado:</strong> {status?.lastMessage || "-"}</p>
+          {status?.currentSubject ? <p><strong>E-mail atual:</strong> {status.currentSubject}</p> : null}
+          <div className="mt-3 grid gap-2 md:grid-cols-4 xl:grid-cols-7">
+            <div className="rounded-lg border bg-muted/30 p-3"><p className="text-xs text-muted-foreground">Na caixa</p><p className="text-lg font-bold">{status?.mailboxTotal ?? 0}</p></div>
+            <div className="rounded-lg border bg-muted/30 p-3"><p className="text-xs text-muted-foreground">Novos identificados</p><p className="text-lg font-bold">{status?.unreadTotal ?? 0}</p></div>
+            <div className="rounded-lg border bg-muted/30 p-3"><p className="text-xs text-muted-foreground">Marcados como lidos</p><p className="text-lg font-bold">{status?.readCount ?? 0}</p></div>
+            <div className="rounded-lg border bg-muted/30 p-3"><p className="text-xs text-muted-foreground">Triados</p><p className="text-lg font-bold">{status?.triagedCount ?? status?.lastProcessed ?? 0}</p></div>
+            <div className="rounded-lg border bg-muted/30 p-3"><p className="text-xs text-muted-foreground">Vinculados</p><p className="text-lg font-bold">{status?.linkedCount ?? 0}</p></div>
+            <div className="rounded-lg border bg-muted/30 p-3"><p className="text-xs text-muted-foreground">OS criadas</p><p className="text-lg font-bold">{status?.osCount ?? 0}</p></div>
+            <div className="rounded-lg border bg-muted/30 p-3"><p className="text-xs text-muted-foreground">Erros</p><p className="text-lg font-bold">{status?.errorCount ?? 0}</p></div>
+          </div>
         </div>
         {connection ? <div className="rounded-xl border p-4 text-sm"><p><strong>Status:</strong> {connection.ok ? "Conectado" : "Falha"}</p>{connection.error ? <p className="text-destructive"><strong>Erro:</strong> {connection.error}</p> : null}{connection.config ? <p><strong>Conta:</strong> {connection.config.user} • {connection.config.host}:{connection.config.port} • {connection.config.mailbox}</p> : null}{connection.mailbox ? <p><strong>Mensagens IMAP na INBOX:</strong> {connection.mailbox.exists}</p> : null}</div> : null}
       </CardContent>
