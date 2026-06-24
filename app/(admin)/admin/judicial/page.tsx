@@ -1,48 +1,16 @@
 "use client"
 
-import { Settings } from "lucide-react"
+import Link from "next/link"
+import { BarChart3, CalendarClock, Inbox, KeyRound, Mail, MailCheck, Settings, Settings2 } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { canAccessJudicialAdmin } from "@/lib/judicial-access"
 import { JudicialAdminPanel } from "@/components/modules/judicial-admin-panel"
 import { JudicialEmailEditorCaretFix } from "@/components/modules/judicial-email-editor-caret-fix"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import AtribuicaoManualPage from "@/app/(admin)/admin/judicial/atribuicao-manual/page"
-import EmailsDisparoPage from "@/app/(admin)/admin/judicial/emails-disparo/page"
-import EmailsEnviosPage from "@/app/(admin)/admin/judicial/emails-envios/page"
-import MunicipiosAcessoPage from "@/app/(admin)/admin/judicial/municipios-acesso/page"
-import HorariosPage from "@/app/(admin)/admin/dashboard-administrativo/horarios/page"
+import { Button } from "@/components/ui/button"
 
 export function JudicialPriorityReportShortcuts() {
   return null
 }
-
-const adminTabs = [
-  { value: "core", label: "Importações CORE" },
-  { value: "municipios", label: "Municípios" },
-  { value: "emails", label: "E-mails" },
-  { value: "prioridade", label: "Prioridades" },
-  { value: "bloqueio-sequestro", label: "Bloqueio / Sequestro" },
-  { value: "sigtap-cadastro", label: "SIGTAP" },
-  { value: "especialidade-sub", label: "Especialidade / Subespecialidade" },
-  { value: "atribuicao", label: "Atribuição manual" },
-  { value: "disparo", label: "Disparo de e-mails" },
-  { value: "envios", label: "Envios de e-mail" },
-  { value: "municipios-acesso", label: "Acesso municípios" },
-  { value: "horarios", label: "Horários de trabalho" },
-]
-
-const internalAdminTabs = new Set([
-  "core",
-  "municipios",
-  "emails",
-  "prioridade",
-  "bloqueio-sequestro",
-  "sigtap-cadastro",
-  "especialidade-sub",
-])
-
-const tabButtonClass =
-  "rounded-md border border-input bg-background px-3 py-2 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-muted data-[state=active]:border-primary data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
 
 export default function JudicialAdminPage() {
   const { user } = useAuth()
@@ -59,39 +27,79 @@ export default function JudicialAdminPage() {
     <div className="flex flex-col gap-6">
       <JudicialEmailEditorCaretFix />
 
-      <div className="flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-          <Settings className="h-5 w-5 text-primary" />
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+            <Settings className="h-5 w-5 text-primary" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Administrador Judicial</h1>
+            <p className="text-sm text-muted-foreground">
+              Modelos de e-mail, contatos municipais, importação CORE, prioridades e relatórios.
+            </p>
+          </div>
         </div>
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Administrador Judicial</h1>
-          <p className="text-sm text-muted-foreground">
-            Modelos de e-mail, contatos municipais, importação CORE, prioridades e relatórios.
-          </p>
+
+        <div className="flex flex-wrap gap-2">
+          <Button asChild variant="outline" className="bg-transparent">
+            <Link href="/admin/judicial/atribuicao-manual">
+              <Settings2 className="mr-2 h-4 w-4" />
+              Atribuição manual
+            </Link>
+          </Button>
+
+          <Button asChild variant="outline" className="bg-transparent">
+            <Link href="/admin/judicial/emails-disparo">
+              <Mail className="mr-2 h-4 w-4" />
+              Disparo de e-mails
+            </Link>
+          </Button>
+
+          <Button asChild variant="outline" className="bg-transparent">
+            <Link href="/admin/judicial/emails-envios">
+              <MailCheck className="mr-2 h-4 w-4" />
+              Envios de e-mail
+            </Link>
+          </Button>
+
+          <Button asChild variant="outline" className="bg-transparent">
+            <Link href="/admin/judicial/email-integracao">
+              <Inbox className="mr-2 h-4 w-4" />
+              Integração e-mail
+            </Link>
+          </Button>
+
+          <Button asChild variant="outline" className="bg-transparent">
+            <Link href="/admin/judicial/municipios-acesso">
+              <KeyRound className="mr-2 h-4 w-4" />
+              Acesso municípios
+            </Link>
+          </Button>
+
+          <Button asChild variant="outline" className="bg-transparent">
+            <Link href="/admin/judicial/prioridades-v2">
+              <Settings2 className="mr-2 h-4 w-4" />
+              Prioridades
+            </Link>
+          </Button>
+
+          <Button asChild variant="outline" className="bg-transparent">
+            <Link href="/admin/dashboard-administrativo">
+              <BarChart3 className="mr-2 h-4 w-4" />
+              Dashboard administrativo
+            </Link>
+          </Button>
+
+          <Button asChild variant="outline" className="bg-transparent">
+            <Link href="/admin/dashboard-administrativo/horarios">
+              <CalendarClock className="mr-2 h-4 w-4" />
+              Horários de trabalho
+            </Link>
+          </Button>
         </div>
       </div>
 
-      <Tabs defaultValue="core" className="space-y-4">
-        <TabsList className="flex h-auto w-full flex-wrap justify-start gap-2 bg-transparent p-0">
-          {adminTabs.map((item) => (
-            <TabsTrigger key={item.value} value={item.value} className={tabButtonClass}>
-              {item.label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-
-        {Array.from(internalAdminTabs).map((tab) => (
-          <TabsContent key={tab} value={tab} className="mt-0">
-            <JudicialAdminPanel forcedTab={tab} hideTabsList />
-          </TabsContent>
-        ))}
-
-        <TabsContent value="atribuicao" className="mt-0"><AtribuicaoManualPage /></TabsContent>
-        <TabsContent value="disparo" className="mt-0"><EmailsDisparoPage /></TabsContent>
-        <TabsContent value="envios" className="mt-0"><EmailsEnviosPage /></TabsContent>
-        <TabsContent value="municipios-acesso" className="mt-0"><MunicipiosAcessoPage /></TabsContent>
-        <TabsContent value="horarios" className="mt-0"><HorariosPage /></TabsContent>
-      </Tabs>
+      <JudicialAdminPanel />
     </div>
   )
 }
