@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { ensureEmailTriageTables } from "@/lib/email-triage-processing"
 import { prisma } from "@/lib/prisma"
 
@@ -20,12 +20,15 @@ type Row = {
   demandaId: string | null
   osId: string | null
   osProtocolo: string | null
+  corpoResumo: string | null
   erro: string | null
   metadata: unknown
   osAnexos: unknown
   processadoEm: string | null
   lidoEm: string | null
 }
+
+type CountRow = { total: string | number | bigint }
 
 function text(value: unknown) {
   return String(value ?? "").trim()
@@ -84,9 +87,19 @@ function files(row: Row) {
   })
 }
 
-export async function GET() {
+function bodyText(row: Row) {
+  const meta = obj(row.metadata)
+  return text(row.corpoResumo || meta.bodyText || meta.body || obj(meta.os).bodyText)
+}
+
+export async function GET(req: NextRequest) {
   try {
     await ensureEmailTriageTables()
+    const page = Math.max(1, Number(req.nextUrl.searchParams.get("page") || 1))
+    const perPage = Math.max(5, Math.min(Number(req.nextUrl.searchParams.get("perPage") || 10), 50))
+    const offset = (page - 1) * perPage
+    const countRows = await prisma.$queryRawUnsafe<CountRow[]>(`SELECT COUNT(*) AS total FROM public.judicial_email_processados`)
+    const total = Number(countRows[0]?.total || 0)
     const rows = await prisma.$queryRawUnsafe<Row[]>(`
       SELECT
         ep.id::text AS id,
@@ -103,6 +116,7 @@ export async function GET() {
         ep.demanda_id AS "demandaId",
         ep.os_id::text AS "osId",
         os.protocolo AS "osProtocolo",
+        os.corpo_resumo AS "corpoResumo",
         ep.erro,
         ep.raw_metadata AS metadata,
         os.anexos AS "osAnexos",
@@ -111,11 +125,15 @@ export async function GET() {
       FROM public.judicial_email_processados ep
       LEFT JOIN public.judicial_email_os os ON os.id = ep.os_id
       ORDER BY ep.processado_em DESC, ep.id DESC
-      LIMIT 100
-    `)
+      LIMIT $1 OFFSET $2
+    `, perPage, offset)
 
     return NextResponse.json({
       ok: true,
+      page,
+      perPage,
+      total,
+      totalPages: Math.max(1, Math.ceil(total / perPage)),
       items: rows.map((row) => ({
         id: row.id,
         assunto: row.assunto || "",
@@ -131,6 +149,7 @@ export async function GET() {
         demandaId: row.demandaId || "",
         osId: row.osId || "",
         osProtocolo: row.osProtocolo || "",
+        corpoResumo: bodyText(row),
         erro: row.erro || "",
         processadoEm: row.processadoEm || "",
         lidoEm: row.lidoEm || "",
