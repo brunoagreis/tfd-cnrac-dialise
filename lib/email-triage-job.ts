@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/prisma"
 import { processUnreadEmailTriageV2 } from "@/lib/email-triage-processing-v2"
-import { getEmailTriageConfig } from "@/lib/email-triage-test"
 
 const ID = "default"
 const FIVE_MIN = 5 * 60 * 1000
@@ -96,12 +95,12 @@ export async function getEmailTriageStatus() {
 
 async function setStarted(source: string, nextRunAt?: string) {
   await ensureEmailTriageStatusTable()
-  await prisma.$executeRawUnsafe(`UPDATE public.judicial_email_triagem_status SET running = TRUE, source = $2, last_started_at = NOW(), next_run_at = $3::timestamptz, last_message = 'Conectando na caixa de e-mail', last_ok = NULL, last_processed = 0, mailbox_total = 0, unread_total = 0, read_count = 0, triaged_count = 0, linked_count = 0, os_count = 0, error_count = 0, current_subject = NULL, updated_at = NOW() WHERE id = $1`, ID, source, nextRunAt || nextIso())
+  await prisma.$executeRawUnsafe(`UPDATE public.judicial_email_triagem_status SET running = TRUE, source = $2, last_started_at = NOW(), next_run_at = $3::timestamptz, last_message = 'Triagem iniciada: lendo e-mails novos', last_ok = NULL, last_processed = 0, mailbox_total = 0, unread_total = 0, read_count = 0, triaged_count = 0, linked_count = 0, os_count = 0, error_count = 0, current_subject = NULL, updated_at = NOW() WHERE id = $1`, ID, source, nextRunAt || nextIso())
 }
 
-async function setCounts(message: string, mailboxTotal = 0, unreadTotal = 0) {
+async function setProcessingMessage(message: string) {
   await ensureEmailTriageStatusTable()
-  await prisma.$executeRawUnsafe(`UPDATE public.judicial_email_triagem_status SET mailbox_total = $2, unread_total = $3, last_message = $4, updated_at = NOW() WHERE id = $1`, ID, mailboxTotal, unreadTotal, message)
+  await prisma.$executeRawUnsafe(`UPDATE public.judicial_email_triagem_status SET last_message = $2, updated_at = NOW() WHERE id = $1`, ID, message)
 }
 
 async function setFinished(ok: boolean, message: string, processed: number, nextRunAt?: string, result?: any) {
@@ -109,31 +108,11 @@ async function setFinished(ok: boolean, message: string, processed: number, next
   const linked = result?.linkedCount ?? countByStatus(result, "VINCULADO")
   const os = result?.osCount ?? countByStatus(result, "OS_CRIADA")
   const errors = result?.errorCount ?? countErrors(result)
-  await prisma.$executeRawUnsafe(`UPDATE public.judicial_email_triagem_status SET running = FALSE, last_finished_at = NOW(), next_run_at = $2::timestamptz, last_ok = $3, last_message = $4, last_processed = $5, mailbox_total = COALESCE($6, mailbox_total), unread_total = COALESCE($7, unread_total), read_count = COALESCE($8, read_count), triaged_count = COALESCE($9, triaged_count), linked_count = $10, os_count = $11, error_count = $12, current_subject = NULL, updated_at = NOW() WHERE id = $1`, ID, nextRunAt || nextIso(), ok, message, processed, result?.mailboxTotal ?? result?.total ?? null, result?.unreadTotal ?? null, result?.readCount ?? processed, result?.triagedCount ?? processed, linked, os, errors)
-}
-
-async function countMailbox() {
-  const config = getEmailTriageConfig()
-  if (!config.configured) return { total: 0, unread: 0, error: "Configuração de e-mail incompleta." }
-  const { ImapFlow } = await import("imapflow")
-  const client = new ImapFlow({ host: config.host, port: config.port, secure: config.secure, auth: { user: config.user, pass: config.password }, logger: false })
-  try {
-    await client.connect()
-    const lock = await client.getMailboxLock(config.mailbox)
-    try {
-      const total = Number(client.mailbox?.exists || 0)
-      let unread = 0
-      for await (const msg of client.fetch("1:*", { flags: true }, { uid: false })) {
-        const flags = Array.isArray(msg.flags) ? msg.flags : Array.from(msg.flags as Iterable<unknown>)
-        if (!flags.map((flag) => String(flag).toLowerCase()).includes("\\seen")) unread += 1
-      }
-      return { total, unread }
-    } finally {
-      lock.release()
-    }
-  } finally {
-    await client.logout().catch(() => undefined)
-  }
+  const total = result?.mailboxTotal ?? result?.total ?? processed
+  const unread = result?.unreadTotal ?? processed
+  const read = result?.readCount ?? processed
+  const triaged = result?.triagedCount ?? processed
+  await prisma.$executeRawUnsafe(`UPDATE public.judicial_email_triagem_status SET running = FALSE, last_finished_at = NOW(), next_run_at = $2::timestamptz, last_ok = $3, last_message = $4, last_processed = $5, mailbox_total = $6, unread_total = $7, read_count = $8, triaged_count = $9, linked_count = $10, os_count = $11, error_count = $12, current_subject = NULL, updated_at = NOW() WHERE id = $1`, ID, nextRunAt || nextIso(), ok, message, processed, total, unread, read, triaged, linked, os, errors)
 }
 
 async function withTimeout<T>(promise: Promise<T>) {
@@ -145,8 +124,7 @@ async function withTimeout<T>(promise: Promise<T>) {
 
 async function execute(nextRunAt?: string) {
   try {
-    const mailbox = await countMailbox().catch((error) => ({ total: 0, unread: 0, error: error instanceof Error ? error.message : String(error) }))
-    await setCounts(mailbox.error ? `Falha ao contar e-mails: ${mailbox.error}` : `Identificados ${mailbox.unread} e-mail(s) novo(s) de ${mailbox.total} na INBOX`, mailbox.total, mailbox.unread)
+    await setProcessingMessage("Processando e-mails novos na INBOX")
     const result = await withTimeout(processUnreadEmailTriageV2(5000))
     const processed = Number(result.processed || 0)
     const message = result.ok ? `${processed} e-mail(s) processado(s)` : (result.error || "Falha ao processar e-mails")
