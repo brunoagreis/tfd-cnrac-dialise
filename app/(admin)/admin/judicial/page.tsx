@@ -16,6 +16,31 @@ export function JudicialPriorityReportShortcuts() {
   return null
 }
 
+const adminTabs = [
+  { value: "core", label: "Importações CORE" },
+  { value: "municipios", label: "Municípios" },
+  { value: "emails", label: "E-mails" },
+  { value: "prioridade", label: "Prioridades" },
+  { value: "bloqueio-sequestro", label: "Bloqueio / Sequestro" },
+  { value: "sigtap-cadastro", label: "SIGTAP" },
+  { value: "especialidade-sub", label: "Especialidade / Subespecialidade" },
+  { value: "atribuicao", label: "Atribuição manual" },
+  { value: "disparo", label: "Disparo de e-mails" },
+  { value: "envios", label: "Envios de e-mail" },
+  { value: "municipios-acesso", label: "Acesso municípios" },
+  { value: "horarios", label: "Horários de trabalho" },
+]
+
+const internalAdminTabs = new Set([
+  "core",
+  "municipios",
+  "emails",
+  "prioridade",
+  "bloqueio-sequestro",
+  "sigtap-cadastro",
+  "especialidade-sub",
+])
+
 export default function JudicialAdminPage() {
   const { user } = useAuth()
 
@@ -43,39 +68,24 @@ export default function JudicialAdminPage() {
         </div>
       </div>
 
-      <Tabs defaultValue="principal" className="space-y-4">
+      <Tabs defaultValue="core" className="space-y-4">
         <TabsList className="flex w-full flex-wrap justify-start gap-2 bg-transparent p-0">
-          <TabsTrigger value="principal">Admin Judicial</TabsTrigger>
-          <TabsTrigger value="atribuicao">Atribuição manual</TabsTrigger>
-          <TabsTrigger value="disparo">Disparo de e-mails</TabsTrigger>
-          <TabsTrigger value="envios">Envios de e-mail</TabsTrigger>
-          <TabsTrigger value="municipios-acesso">Acesso municípios</TabsTrigger>
-          <TabsTrigger value="horarios">Horários de trabalho</TabsTrigger>
+          {adminTabs.map((item) => (
+            <TabsTrigger key={item.value} value={item.value}>{item.label}</TabsTrigger>
+          ))}
         </TabsList>
 
-        <TabsContent value="principal" className="mt-0">
-          <JudicialAdminPanel />
-        </TabsContent>
+        {Array.from(internalAdminTabs).map((tab) => (
+          <TabsContent key={tab} value={tab} className="mt-0">
+            <JudicialAdminPanel forcedTab={tab} hideTabsList />
+          </TabsContent>
+        ))}
 
-        <TabsContent value="atribuicao" className="mt-0">
-          <AtribuicaoManualPage />
-        </TabsContent>
-
-        <TabsContent value="disparo" className="mt-0">
-          <EmailsDisparoPage />
-        </TabsContent>
-
-        <TabsContent value="envios" className="mt-0">
-          <EmailsEnviosPage />
-        </TabsContent>
-
-        <TabsContent value="municipios-acesso" className="mt-0">
-          <MunicipiosAcessoPage />
-        </TabsContent>
-
-        <TabsContent value="horarios" className="mt-0">
-          <HorariosPage />
-        </TabsContent>
+        <TabsContent value="atribuicao" className="mt-0"><AtribuicaoManualPage /></TabsContent>
+        <TabsContent value="disparo" className="mt-0"><EmailsDisparoPage /></TabsContent>
+        <TabsContent value="envios" className="mt-0"><EmailsEnviosPage /></TabsContent>
+        <TabsContent value="municipios-acesso" className="mt-0"><MunicipiosAcessoPage /></TabsContent>
+        <TabsContent value="horarios" className="mt-0"><HorariosPage /></TabsContent>
       </Tabs>
     </div>
   )
