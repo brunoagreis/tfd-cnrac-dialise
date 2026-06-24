@@ -1,5 +1,5 @@
-import { EmailIntegracaoPageV3 } from "@/components/modules/email-integracao-page-v3"
+import { EmailIntegracaoPageV4 } from "@/components/modules/email-integracao-page-v4"
 
 export default function EmailIntegracaoPage() {
-  return <EmailIntegracaoPageV3 />
+  return <EmailIntegracaoPageV4 />
 }
