@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from "next/server"
-import { processUnreadEmailTriageV2 } from "@/lib/email-triage-processing-v2"
+import { startEmailTriageJob } from "@/lib/email-triage-job"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
 async function handle(req: NextRequest) {
   try {
-    const rawLimit = req.nextUrl.searchParams.get("limit")
-    const limit = rawLimit ? Math.max(1, Math.min(Number(rawLimit) || 5000, 5000)) : 5000
-    const result = await processUnreadEmailTriageV2(limit)
+    const source = req.nextUrl.searchParams.get("source") || "manual"
+    const nextRunAt = req.nextUrl.searchParams.get("nextRunAt") || undefined
+    const result = await startEmailTriageJob(source, nextRunAt)
     return NextResponse.json(result, { status: result.ok ? 200 : 400 })
   } catch (error) {
     console.error("[email-integracao/processar] erro:", error)
