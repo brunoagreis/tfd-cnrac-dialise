@@ -82,7 +82,7 @@ export default function EmailGroupsPage() {
 
   async function remove(rule: RuleItem) {
     if (!confirm(`Excluir o grupo ${rule.nome}?`)) return
-    const r = await fetch("/api/admin/judicial/email-integracao/regras", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: rule.id, deletedById: user?.id, deletedByName: user?.name || user?.nome || "Administrador", deletedByEmail: user?.email }) })
+    const r = await fetch("/api/admin/judicial/email-integracao/regras", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: rule.id, deletedById: user?.id, deletedByName: user?.nome || "Administrador", deletedByEmail: user?.email }) })
     const j = await r.json().catch(() => ({}))
     if (!r.ok || !j?.ok) return toast.error(j?.error || "Erro ao excluir grupo.")
     toast.success("Grupo excluído.")
