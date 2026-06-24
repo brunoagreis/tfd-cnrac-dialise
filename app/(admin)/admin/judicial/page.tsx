@@ -41,6 +41,9 @@ const internalAdminTabs = new Set([
   "especialidade-sub",
 ])
 
+const tabButtonClass =
+  "rounded-md border border-input bg-background px-3 py-2 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-muted data-[state=active]:border-primary data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+
 export default function JudicialAdminPage() {
   const { user } = useAuth()
 
@@ -69,9 +72,11 @@ export default function JudicialAdminPage() {
       </div>
 
       <Tabs defaultValue="core" className="space-y-4">
-        <TabsList className="flex w-full flex-wrap justify-start gap-2 bg-transparent p-0">
+        <TabsList className="flex h-auto w-full flex-wrap justify-start gap-2 bg-transparent p-0">
           {adminTabs.map((item) => (
-            <TabsTrigger key={item.value} value={item.value}>{item.label}</TabsTrigger>
+            <TabsTrigger key={item.value} value={item.value} className={tabButtonClass}>
+              {item.label}
+            </TabsTrigger>
           ))}
         </TabsList>
 
