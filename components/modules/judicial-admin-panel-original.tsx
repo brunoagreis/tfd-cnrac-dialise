@@ -11,6 +11,11 @@ import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { JudicialBloqueioSequestroPanel } from "@/components/modules/judicial-bloqueio-sequestro-panel"
 import { JudicialPrioritiesPanelCombined } from "@/components/modules/judicial-priorities-panel-combined"
+import AtribuicaoManualPage from "@/app/(admin)/admin/judicial/atribuicao-manual/page"
+import EmailsDisparoPage from "@/app/(admin)/admin/judicial/emails-disparo/page"
+import EmailsEnviosPage from "@/app/(admin)/admin/judicial/emails-envios/page"
+import MunicipiosAcessoPage from "@/app/(admin)/admin/judicial/municipios-acesso/page"
+import HorariosPage from "@/app/(admin)/admin/dashboard-administrativo/horarios/page"
 
 type Props = {
   forcedTab?: string
@@ -63,6 +68,11 @@ export function JudicialAdminPanel({ forcedTab, hideTabsList = false }: Props = 
           <TabsTrigger value="bloqueio-sequestro">Bloqueio / Sequestro</TabsTrigger>
           <TabsTrigger value="sigtap-cadastro">SIGTAP</TabsTrigger>
           <TabsTrigger value="especialidade-sub">Especialidade / Subespecialidade</TabsTrigger>
+          <TabsTrigger value="atribuicao-manual">Atribuição manual</TabsTrigger>
+          <TabsTrigger value="disparo-emails">Disparo de e-mails</TabsTrigger>
+          <TabsTrigger value="envios-email">Envios de e-mail</TabsTrigger>
+          <TabsTrigger value="acesso-municipios">Acesso municípios</TabsTrigger>
+          <TabsTrigger value="horarios-trabalho">Horários de trabalho</TabsTrigger>
         </TabsList>
       ) : null}
 
@@ -106,6 +116,11 @@ export function JudicialAdminPanel({ forcedTab, hideTabsList = false }: Props = 
       <TabsContent value="bloqueio-sequestro" className="mt-0"><JudicialBloqueioSequestroPanel /></TabsContent>
       <TabsContent value="sigtap-cadastro" className="mt-0"><Card><CardHeader><CardTitle className="text-base">SIGTAP</CardTitle><CardDescription>Cadastro de SIGTAP.</CardDescription></CardHeader></Card></TabsContent>
       <TabsContent value="especialidade-sub" className="mt-0"><Card><CardHeader><CardTitle className="text-base">Especialidade / Subespecialidade</CardTitle><CardDescription>Cadastro de especialidades e subespecialidades.</CardDescription></CardHeader></Card></TabsContent>
+      <TabsContent value="atribuicao-manual" className="mt-0"><AtribuicaoManualPage /></TabsContent>
+      <TabsContent value="disparo-emails" className="mt-0"><EmailsDisparoPage /></TabsContent>
+      <TabsContent value="envios-email" className="mt-0"><EmailsEnviosPage /></TabsContent>
+      <TabsContent value="acesso-municipios" className="mt-0"><MunicipiosAcessoPage /></TabsContent>
+      <TabsContent value="horarios-trabalho" className="mt-0"><HorariosPage /></TabsContent>
     </Tabs>
   )
 }
