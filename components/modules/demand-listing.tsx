@@ -42,6 +42,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { EmailOsPanel } from "@/components/modules/email-os-panel"
 
 const STATUS_CONFIG: Record<
   DemandaStatus,
@@ -226,6 +227,8 @@ export function DemandListing({ modulo, filterByEmail }: DemandListingProps) {
 
   return (
     <div className="flex flex-col gap-4">
+      <EmailOsPanel modulo={modulo} />
+
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Card className="border-border">
           <CardContent className="pt-4">
