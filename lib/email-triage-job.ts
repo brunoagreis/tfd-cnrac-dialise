@@ -45,6 +45,14 @@ function isStale(status: ReturnType<typeof normalizeStatus>) {
   return Number.isFinite(started) && Date.now() - started > STALE_MS
 }
 
+function countByStatus(result: any, status: string) {
+  return Array.isArray(result?.items) ? result.items.filter((item: any) => String(item?.status || "").toUpperCase() === status).length : 0
+}
+
+function countErrors(result: any) {
+  return Array.isArray(result?.items) ? result.items.filter((item: any) => String(item?.status || "").toUpperCase().includes("ERRO")).length : 0
+}
+
 function normalizeStatus(row?: StatusRow | null) {
   return {
     running: Boolean(row?.running),
@@ -98,7 +106,10 @@ async function setCounts(message: string, mailboxTotal = 0, unreadTotal = 0) {
 
 async function setFinished(ok: boolean, message: string, processed: number, nextRunAt?: string, result?: any) {
   await ensureEmailTriageStatusTable()
-  await prisma.$executeRawUnsafe(`UPDATE public.judicial_email_triagem_status SET running = FALSE, last_finished_at = NOW(), next_run_at = $2::timestamptz, last_ok = $3, last_message = $4, last_processed = $5, mailbox_total = COALESCE($6, mailbox_total), unread_total = COALESCE($7, unread_total), read_count = COALESCE($8, read_count), triaged_count = COALESCE($9, triaged_count), linked_count = COALESCE($10, linked_count), os_count = COALESCE($11, os_count), error_count = COALESCE($12, error_count), current_subject = NULL, updated_at = NOW() WHERE id = $1`, ID, nextRunAt || nextIso(), ok, message, processed, result?.mailboxTotal ?? result?.total ?? null, result?.unreadTotal ?? null, result?.readCount ?? processed, result?.triagedCount ?? processed, result?.linkedCount ?? null, result?.osCount ?? null, result?.errorCount ?? null)
+  const linked = result?.linkedCount ?? countByStatus(result, "VINCULADO")
+  const os = result?.osCount ?? countByStatus(result, "OS_CRIADA")
+  const errors = result?.errorCount ?? countErrors(result)
+  await prisma.$executeRawUnsafe(`UPDATE public.judicial_email_triagem_status SET running = FALSE, last_finished_at = NOW(), next_run_at = $2::timestamptz, last_ok = $3, last_message = $4, last_processed = $5, mailbox_total = COALESCE($6, mailbox_total), unread_total = COALESCE($7, unread_total), read_count = COALESCE($8, read_count), triaged_count = COALESCE($9, triaged_count), linked_count = $10, os_count = $11, error_count = $12, current_subject = NULL, updated_at = NOW() WHERE id = $1`, ID, nextRunAt || nextIso(), ok, message, processed, result?.mailboxTotal ?? result?.total ?? null, result?.unreadTotal ?? null, result?.readCount ?? processed, result?.triagedCount ?? processed, linked, os, errors)
 }
 
 async function countMailbox() {
