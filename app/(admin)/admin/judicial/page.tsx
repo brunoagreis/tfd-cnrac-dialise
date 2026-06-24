@@ -1,23 +1,20 @@
 "use client"
 
-import Link from "next/link"
 import { Settings } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { canAccessJudicialAdmin } from "@/lib/judicial-access"
 import { JudicialAdminPanel } from "@/components/modules/judicial-admin-panel"
 import { JudicialEmailEditorCaretFix } from "@/components/modules/judicial-email-editor-caret-fix"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import AtribuicaoManualPage from "@/app/(admin)/admin/judicial/atribuicao-manual/page"
+import EmailsDisparoPage from "@/app/(admin)/admin/judicial/emails-disparo/page"
+import EmailsEnviosPage from "@/app/(admin)/admin/judicial/emails-envios/page"
+import MunicipiosAcessoPage from "@/app/(admin)/admin/judicial/municipios-acesso/page"
+import HorariosPage from "@/app/(admin)/admin/dashboard-administrativo/horarios/page"
 
-const adminLinks = [
-  { href: "/admin/judicial", label: "Importações CORE" },
-  { href: "/admin/judicial/municipios-acesso", label: "Acesso municípios" },
-  { href: "/admin/judicial/email-integracao", label: "Integração e-mail" },
-  { href: "/admin/judicial/emails-disparo", label: "Disparo de e-mails" },
-  { href: "/admin/judicial/emails-envios", label: "Envios de e-mail" },
-  { href: "/admin/judicial/atribuicao-manual", label: "Atribuição manual" },
-  { href: "/admin/dashboard-administrativo/horarios", label: "Horários de trabalho" },
-  { href: "/admin/judicial/prioridades-v2", label: "Prioridades" },
-  { href: "/admin/dashboard-administrativo", label: "Dashboard administrativo" },
-]
+export function JudicialPriorityReportShortcuts() {
+  return null
+}
 
 export default function JudicialAdminPage() {
   const { user } = useAuth()
@@ -46,19 +43,40 @@ export default function JudicialAdminPage() {
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-2 border-b border-border pb-3">
-        {adminLinks.map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={`rounded-md px-3 py-2 text-sm transition-colors ${item.href === "/admin/judicial" ? "bg-background font-medium text-foreground shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
-          >
-            {item.label}
-          </Link>
-        ))}
-      </div>
+      <Tabs defaultValue="principal" className="space-y-4">
+        <TabsList className="flex w-full flex-wrap justify-start gap-2 bg-transparent p-0">
+          <TabsTrigger value="principal">Admin Judicial</TabsTrigger>
+          <TabsTrigger value="atribuicao">Atribuição manual</TabsTrigger>
+          <TabsTrigger value="disparo">Disparo de e-mails</TabsTrigger>
+          <TabsTrigger value="envios">Envios de e-mail</TabsTrigger>
+          <TabsTrigger value="municipios-acesso">Acesso municípios</TabsTrigger>
+          <TabsTrigger value="horarios">Horários de trabalho</TabsTrigger>
+        </TabsList>
 
-      <JudicialAdminPanel />
+        <TabsContent value="principal" className="mt-0">
+          <JudicialAdminPanel />
+        </TabsContent>
+
+        <TabsContent value="atribuicao" className="mt-0">
+          <AtribuicaoManualPage />
+        </TabsContent>
+
+        <TabsContent value="disparo" className="mt-0">
+          <EmailsDisparoPage />
+        </TabsContent>
+
+        <TabsContent value="envios" className="mt-0">
+          <EmailsEnviosPage />
+        </TabsContent>
+
+        <TabsContent value="municipios-acesso" className="mt-0">
+          <MunicipiosAcessoPage />
+        </TabsContent>
+
+        <TabsContent value="horarios" className="mt-0">
+          <HorariosPage />
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }
