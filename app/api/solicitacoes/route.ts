@@ -1,21 +1,19 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { Module, TipoSolicitacao, CategoriaAnexo } from "@prisma/client"
+import { ensureEmailOsRoutingColumns } from "@/lib/email-os-routing"
+
+function text(value: unknown) {
+  return String(value ?? "").trim()
+}
 
 export async function POST(req: Request) {
   try {
     const body = await req.json()
+    const { paciente, demanda, anexos } = body
+    const osId = text(body?.osId)
 
-    const {
-      paciente,
-      demanda,
-      anexos
-    } = body
-
-    // 1️⃣ Cria ou busca paciente
-    let pacienteDb = await prisma.paciente.findUnique({
-      where: { cpf: paciente.cpf }
-    })
+    let pacienteDb = await prisma.paciente.findUnique({ where: { cpf: paciente.cpf } })
 
     if (!pacienteDb) {
       pacienteDb = await prisma.paciente.create({
@@ -27,16 +25,11 @@ export async function POST(req: Request) {
           email: paciente.email,
           municipio: paciente.municipio,
           endereco: paciente.endereco,
-          telefones: {
-            create: paciente.telefones.map((t: string) => ({
-              value: t
-            }))
-          }
-        }
+          telefones: { create: paciente.telefones.map((t: string) => ({ value: t })) },
+        },
       })
     }
 
-    // 2️⃣ Cria demanda
     const novaDemanda = await prisma.demanda.create({
       data: {
         protocolo: `PRT-${Date.now()}`,
@@ -56,11 +49,7 @@ export async function POST(req: Request) {
         observacoesUnidade: demanda.observacoesUnidade,
         localSolicitado: demanda.localSolicitado,
         tipoSolicitacao: demanda.tipoSolicitacao as TipoSolicitacao,
-        telefonesSolicitante: {
-          create: demanda.telefonesSolicitante.map((t: string) => ({
-            value: t
-          }))
-        },
+        telefonesSolicitante: { create: demanda.telefonesSolicitante.map((t: string) => ({ value: t })) },
         anexos: {
           create: anexos.map((a: any) => ({
             nome: a.nome,
@@ -69,22 +58,25 @@ export async function POST(req: Request) {
             categoria: a.categoria as CategoriaAnexo,
             descricao: a.descricao,
             criadoPor: "externo",
-            criadoPorNome: demanda.localSolicitante
-          }))
-        }
-      }
+            criadoPorNome: demanda.localSolicitante,
+          })),
+        },
+      },
     })
 
-    return NextResponse.json({
-      success: true,
-      protocolo: novaDemanda.protocolo
-    })
+    if (osId) {
+      await ensureEmailOsRoutingColumns()
+      await prisma.$executeRawUnsafe(
+        `UPDATE public.judicial_email_os SET status = 'CONVERTIDA', convertido_demanda_id = $2, convertido_protocolo = $3, convertido_em = NOW(), updated_at = NOW() WHERE id::text = $1`,
+        osId,
+        novaDemanda.id,
+        novaDemanda.protocolo,
+      )
+    }
 
+    return NextResponse.json({ success: true, protocolo: novaDemanda.protocolo })
   } catch (error) {
     console.error(error)
-    return NextResponse.json(
-      { error: "Erro ao salvar solicitacao" },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: "Erro ao salvar solicitacao" }, { status: 500 })
   }
 }
