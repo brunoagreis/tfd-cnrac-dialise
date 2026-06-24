@@ -3,6 +3,7 @@ import type { Metadata, Viewport } from "next"
 import { Inter, JetBrains_Mono } from "next/font/google"
 import { Toaster } from "@/components/ui/sonner"
 import { Providers } from "@/components/providers"
+import { EmailOsSolicitacaoBridge } from "@/components/modules/email-os-solicitacao-bridge"
 
 import "./globals.css"
 
@@ -42,6 +43,7 @@ export default function RootLayout({
     <html lang="pt-BR" className={`${inter.variable} ${jetbrainsMono.variable}`}>
       <body className="font-sans antialiased">
         <Providers>
+          <EmailOsSolicitacaoBridge />
           {children}
           <Toaster richColors position="top-right" />
         </Providers>
