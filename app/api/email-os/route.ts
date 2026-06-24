@@ -66,29 +66,51 @@ export async function POST(req: NextRequest) {
     if (!user) return NextResponse.json({ ok: false, error: "Responsável não encontrado." }, { status: 404 })
 
     if (!osId && text(body?.uid)) {
+      const uid = text(body?.uid)
+      const messageId = text(body?.messageId || uid)
+      const assunto = text(body?.subject) || "E-mail sem assunto"
+      const corpoResumo = text(body?.bodyText || body?.corpoResumo || body?.body || `Criado pela prévia da integração de e-mail. UID: ${uid}`).slice(0, 10000)
+      const anexos = Array.isArray(body?.attachments) ? body.attachments : []
       const protocolo = `OS-EMAIL-${new Date().getFullYear()}-${String(Date.now()).slice(-8)}`
       const rows = await prisma.$queryRawUnsafe<Array<{ id: string; protocolo: string }>>(
         `INSERT INTO public.judicial_email_os (protocolo, message_id, assunto, remetente, recebido_em, pge_net, processo, detectado_em, classificador, corpo_resumo, anexos, status, modulo_destino, responsavel_id, responsavel_nome, responsavel_email, created_at, updated_at)
          VALUES ($1,$2,$3,$4,$5::timestamptz,$6,$7,$8,$9,$10,$11::jsonb,'ATRIBUIDA',$12,$13,$14,$15,NOW(),NOW())
          RETURNING id::text AS id, protocolo`,
         protocolo,
-        text(body?.messageId || body?.uid),
-        text(body?.subject) || "E-mail sem assunto",
+        messageId,
+        assunto,
         text(body?.from),
         text(body?.date) || new Date().toISOString(),
         text(body?.pgeNet) || null,
         text(body?.processo) || null,
         text(body?.detectedIn) || null,
         text(body?.classifier) || null,
-        `Criado pela prévia da integração de e-mail. UID: ${text(body?.uid)}`,
-        JSON.stringify(Array.isArray(body?.attachments) ? body.attachments : []),
+        corpoResumo,
+        JSON.stringify(anexos),
         modulo,
         user.id,
         user.nome || "Usuário",
         user.email || null,
       )
-      await finalizeEmailMessage(body?.uid).catch(() => undefined)
-      return NextResponse.json({ ok: true, os: rows[0] })
+      const created = rows[0]
+      await prisma.$executeRawUnsafe(
+        `INSERT INTO public.judicial_email_processados (message_uid, message_id, assunto, remetente, recebido_em, pge_net, processo, detectado_em, classificador, status, os_id, raw_metadata, processado_em, lido_em, deleted_em, created_at, updated_at)
+         VALUES ($1,$2,$3,$4,$5::timestamptz,$6,$7,$8,$9,'OS_CRIADA',$10::bigint,$11::jsonb,NOW(),NOW(),NOW(),NOW(),NOW())
+         ON CONFLICT (message_id) WHERE message_id IS NOT NULL AND message_id <> '' DO UPDATE SET status='OS_CRIADA', os_id=EXCLUDED.os_id, raw_metadata=EXCLUDED.raw_metadata, lido_em=NOW(), deleted_em=NOW(), updated_at=NOW()`,
+        uid,
+        messageId,
+        assunto,
+        text(body?.from),
+        text(body?.date) || new Date().toISOString(),
+        text(body?.pgeNet) || null,
+        text(body?.processo) || null,
+        text(body?.detectedIn) || null,
+        text(body?.classifier) || null,
+        created?.id || null,
+        JSON.stringify({ manual: true, modulo, responsavelId: user.id, bodyText: corpoResumo, attachments: anexos, os: { protocolo: created?.protocolo, attachments: anexos } }),
+      )
+      void finalizeEmailMessage(uid).catch((error) => console.error("[POST /api/email-os] finalizacao IMAP:", error))
+      return NextResponse.json({ ok: true, os: created })
     }
 
     if (!osId) return NextResponse.json({ ok: false, error: "Informe a OS." }, { status: 400 })
