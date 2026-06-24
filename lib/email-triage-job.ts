@@ -59,8 +59,7 @@ async function setFinished(ok: boolean, message: string, processed: number, next
   await prisma.$executeRawUnsafe(`UPDATE public.judicial_email_triagem_status SET running = FALSE, last_finished_at = NOW(), next_run_at = $2::timestamptz, last_ok = $3, last_message = $4, last_processed = $5, updated_at = NOW() WHERE id = $1`, ID, nextRunAt || nextIso(), ok, message, processed)
 }
 
-async function execute(source: string, nextRunAt?: string) {
-  await setStarted(source, nextRunAt)
+async function execute(nextRunAt?: string) {
   try {
     const result = await processUnreadEmailTriageV2(5000)
     const processed = Number(result.processed || 0)
@@ -79,7 +78,8 @@ export async function startEmailTriageJob(source = "manual", nextRunAt?: string)
     return { ok: true, alreadyRunning: true, started: false, status: await getEmailTriageStatus() }
   }
   globalThis.__sigajusEmailTriageJobRunning = true
-  void execute(source, nextRunAt).catch(async (error) => {
+  await setStarted(source, nextRunAt)
+  void execute(nextRunAt).catch(async (error) => {
     globalThis.__sigajusEmailTriageJobRunning = false
     await setFinished(false, error instanceof Error ? error.message : String(error), 0, nextRunAt).catch(() => undefined)
   })
