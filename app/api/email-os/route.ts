@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { ensureEmailOsRoutingColumns, inferEmailOsModule, normalizeEmailOsModule } from "@/lib/email-os-routing"
+import { finalizeEmailMessage } from "@/lib/email-triage-mailbox"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -86,6 +87,7 @@ export async function POST(req: NextRequest) {
         user.nome || "Usuário",
         user.email || null,
       )
+      await finalizeEmailMessage(body?.uid).catch(() => undefined)
       return NextResponse.json({ ok: true, os: rows[0] })
     }
 
