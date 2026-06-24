@@ -15,6 +15,11 @@ function senderText(mail: ParsedMailLike) {
   if (first?.address) return text(first.name) ? `${text(first.name)} <${first.address}>` : first.address
   return text(mail.from?.text)
 }
+function hasSeenFlag(flags: unknown) {
+  if (!flags) return false
+  const values = Array.isArray(flags) ? flags : Array.from(flags as Iterable<unknown>)
+  return values.map((flag) => String(flag).toLowerCase()).includes("\\seen")
+}
 
 async function findDemandByProcess(processNumber: string) {
   const processo = text(processNumber)
@@ -58,7 +63,8 @@ export async function previewAllEmailTriage() {
       const total = client.mailbox?.exists ?? 0
       if (!total) return { ok: true, total: 0, items: [] }
       const items = []
-      for await (const message of client.fetch("1:*", { envelope: true, source: true, uid: true }, { uid: false })) {
+      for await (const message of client.fetch("1:*", { envelope: true, source: true, uid: true, flags: true }, { uid: false })) {
+        if (hasSeenFlag(message.flags)) continue
         const parsed = (await simpleParser(message.source as Buffer)) as ParsedMailLike
         const subject = text(parsed.subject || message.envelope?.subject)
         const body = text(parsed.text) || stripHtml(parsed.html)
