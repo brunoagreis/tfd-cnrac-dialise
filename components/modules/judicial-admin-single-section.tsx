@@ -9,31 +9,12 @@ import { canAccessJudicialAdmin } from "@/lib/judicial-access"
 import { JudicialAdminPanel as JudicialAdminPanelReal } from "@/components/modules/judicial-admin-panel-original"
 import { Button } from "@/components/ui/button"
 
-const FIXES: Array<[RegExp, string]> = [
-  [/Ã§/g, "ç"],
-  [/Ã‡/g, "Ç"],
-  [/Ã£/g, "ã"],
-  [/Ãµ/g, "õ"],
-  [/Ã¡/g, "á"],
-  [/Ã©/g, "é"],
-  [/Ã­/g, "í"],
-  [/Ã³/g, "ó"],
-  [/Ãº/g, "ú"],
-  [/Ãª/g, "ê"],
-  [/Ã¢/g, "â"],
-  [/Ã´/g, "ô"],
-  [/Ã /g, "à"],
-  [/Ã�/g, "Á"],
-  [/Ã‰/g, "É"],
-  [/â€¢/g, "•"],
-  [/â€“/g, "–"],
-  [/â€”/g, "—"],
-]
-
 function fixMojibake(value: string) {
-  let next = value
-  for (const [pattern, replacement] of FIXES) next = next.replace(pattern, replacement)
-  return next
+  try {
+    return decodeURIComponent(escape(value))
+  } catch {
+    return value
+  }
 }
 
 function fixTextNodes(root: HTMLElement) {
@@ -47,23 +28,24 @@ function fixTextNodes(root: HTMLElement) {
 }
 
 function activateInternalTab(root: HTMLElement, tabLabel: string) {
-  const tabLists = Array.from(root.querySelectorAll<HTMLElement>('[role="tablist"]'))
-  for (const tabList of tabLists) tabList.style.display = "none"
-
   const tabs = Array.from(root.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
   const target = tabs.find((tab) => fixMojibake(tab.textContent || "").trim() === tabLabel)
-  target?.click()
+  if (target && target.getAttribute("aria-selected") !== "true" && target.getAttribute("data-state") !== "active") {
+    target.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }))
+  }
+
+  const tabLists = Array.from(root.querySelectorAll<HTMLElement>('[role="tablist"]'))
+  for (const tabList of tabLists) {
+    tabList.style.position = "absolute"
+    tabList.style.width = "1px"
+    tabList.style.height = "1px"
+    tabList.style.overflow = "hidden"
+    tabList.style.clipPath = "inset(50%)"
+    tabList.style.whiteSpace = "nowrap"
+  }
 }
 
-export function JudicialAdminSingleSection({
-  tabLabel,
-  title,
-  description,
-}: {
-  tabLabel: string
-  title: string
-  description: string
-}) {
+export function JudicialAdminSingleSection({ tabLabel, title, description }: { tabLabel: string; title: string; description: string }) {
   const { user } = useAuth()
   const rootRef = useRef<HTMLDivElement | null>(null)
 
@@ -77,22 +59,18 @@ export function JudicialAdminSingleSection({
     }
 
     apply()
-    const timer = window.setTimeout(apply, 100)
-    const observer = new MutationObserver(apply)
-    observer.observe(root, { childList: true, subtree: true, characterData: true })
+    const timers = [50, 150, 400].map((ms) => window.setTimeout(apply, ms))
+    const observer = new MutationObserver(() => window.setTimeout(apply, 0))
+    observer.observe(root, { childList: true, subtree: true })
 
     return () => {
-      window.clearTimeout(timer)
+      timers.forEach(window.clearTimeout)
       observer.disconnect()
     }
   }, [tabLabel])
 
   if (!canAccessJudicialAdmin(user)) {
-    return (
-      <div className="rounded-xl border border-dashed border-border p-12 text-center text-muted-foreground">
-        Somente administradores podem acessar esta página.
-      </div>
-    )
+    return <div className="rounded-xl border border-dashed border-border p-12 text-center text-muted-foreground">Somente administradores podem acessar esta página.</div>
   }
 
   return (
@@ -103,16 +81,10 @@ export function JudicialAdminSingleSection({
           <p className="text-sm text-muted-foreground">{description}</p>
         </div>
         <Button asChild variant="outline" className="bg-transparent">
-          <Link href="/admin/judicial">
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Voltar ao Admin Judicial
-          </Link>
+          <Link href="/admin/judicial"><ArrowLeft className="mr-2 h-4 w-4" />Voltar ao Admin Judicial</Link>
         </Button>
       </div>
-
-      <div ref={rootRef}>
-        <JudicialAdminPanelReal />
-      </div>
+      <div ref={rootRef}><JudicialAdminPanelReal /></div>
     </div>
   )
 }
