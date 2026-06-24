@@ -4,7 +4,6 @@ import { Inter, JetBrains_Mono } from "next/font/google"
 import { Toaster } from "@/components/ui/sonner"
 import { Providers } from "@/components/providers"
 import { EmailOsSolicitacaoBridge } from "@/components/modules/email-os-solicitacao-bridge"
-import "@/lib/email-triage-scheduler"
 
 import "./globals.css"
 
