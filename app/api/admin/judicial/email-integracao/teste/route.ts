@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
-import { previewEmailTriage, testEmailTriageConnection } from "@/lib/email-triage-test"
+import { testEmailTriageConnection } from "@/lib/email-triage-test"
+import { previewAllEmailTriage } from "@/lib/email-triage-preview"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -8,10 +9,9 @@ export async function GET(req: NextRequest) {
   try {
     const url = new URL(req.url)
     const action = url.searchParams.get("action") || "connection"
-    const limit = Number(url.searchParams.get("limit") || 10)
 
     if (action === "preview") {
-      const result = await previewEmailTriage(limit)
+      const result = await previewAllEmailTriage()
       return NextResponse.json(result, { status: result.ok ? 200 : 400 })
     }
 
