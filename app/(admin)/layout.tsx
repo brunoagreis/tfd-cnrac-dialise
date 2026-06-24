@@ -81,7 +81,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
       <div
         className={cn(
-          "fixed inset-y-0 left-0 z-50 w-64 transform transition-transform duration-200 ease-in-out lg:relative lg:z-auto lg:translate-x-0",
+          "fixed inset-y-0 left-0 z-50 w-64 shrink-0 transform transition-transform duration-200 ease-in-out lg:relative lg:z-auto lg:translate-x-0",
           sidebarOpen ? "translate-x-0" : "-translate-x-full",
           sidebarCollapsed && "lg:w-20",
         )}
@@ -92,13 +92,13 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         />
       </div>
 
-      <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <AppTopbar
           onToggleSidebar={() => setSidebarOpen((p) => !p)}
           onToggleSidebarCollapse={handleToggleSidebarCollapse}
           isSidebarCollapsed={sidebarCollapsed}
         />
-        <main className="flex-1 overflow-y-auto p-4 lg:p-6">{children}</main>
+        <main className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-4 lg:p-6">{children}</main>
       </div>
     </div>
   )
