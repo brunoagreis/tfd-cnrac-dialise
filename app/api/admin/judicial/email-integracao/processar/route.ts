@@ -6,7 +6,8 @@ export const dynamic = "force-dynamic"
 
 async function handle(req: NextRequest) {
   try {
-    const limit = Math.max(1, Math.min(Number(req.nextUrl.searchParams.get("limit") || 10), 25))
+    const rawLimit = req.nextUrl.searchParams.get("limit")
+    const limit = rawLimit ? Math.max(1, Math.min(Number(rawLimit) || 5000, 5000)) : 5000
     const result = await processUnreadEmailTriageV2(limit)
     return NextResponse.json(result, { status: result.ok ? 200 : 400 })
   } catch (error) {
