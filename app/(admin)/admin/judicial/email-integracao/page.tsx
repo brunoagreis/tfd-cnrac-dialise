@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
-import { ArrowLeft, Edit3, Inbox, MailCheck, Play, RefreshCcw, Save, Search, X } from "lucide-react"
+import { ArrowLeft, Edit3, Eye, History, Inbox, MailCheck, Play, RefreshCcw, Save, Search, X } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 
-type AttachmentItem = { filename: string; contentType: string; size: number }
+type AttachmentItem = { filename?: string; name?: string; contentType?: string; mimeType?: string; size: number; url?: string }
 type PreviewItem = {
   uid: number
   messageId: string
@@ -34,6 +34,26 @@ type ConnectionResult = {
 }
 type UserItem = { id: string; nome: string; email: string }
 type RuleItem = { id: string; nome: string; palavras: string[]; ativo: boolean; usuarios: UserItem[] }
+type HistoryItem = {
+  id: string
+  assunto: string
+  remetente: string
+  recebidoEm: string
+  pgeNet: string
+  processo: string
+  detectadoEm: string
+  classificador: string
+  regraNome: string
+  status: string
+  monitoramentoId: string
+  demandaId: string
+  osId: string
+  osProtocolo: string
+  erro: string
+  processadoEm: string
+  lidoEm: string
+  attachments: AttachmentItem[]
+}
 
 function formatDate(value: string) {
   const date = new Date(value)
@@ -46,6 +66,14 @@ function formatSize(value: number) {
   if (value < 1024) return `${value} B`
   if (value < 1024 * 1024) return `${Math.round(value / 1024)} KB`
   return `${(value / (1024 * 1024)).toFixed(2)} MB`
+}
+
+function fileName(file: AttachmentItem) {
+  return file.name || file.filename || "anexo"
+}
+
+function fileMime(file: AttachmentItem) {
+  return file.mimeType || file.contentType || "tipo não informado"
 }
 
 function fixText(value: string) {
@@ -68,6 +96,7 @@ function fixText(value: string) {
 export default function EmailIntegracaoPage() {
   const [connection, setConnection] = useState<ConnectionResult | null>(null)
   const [items, setItems] = useState<PreviewItem[]>([])
+  const [history, setHistory] = useState<HistoryItem[]>([])
   const [loading, setLoading] = useState(false)
   const [running, setRunning] = useState(false)
   const [rules, setRules] = useState<RuleItem[]>([])
@@ -81,6 +110,7 @@ export default function EmailIntegracaoPage() {
 
   useEffect(() => {
     void loadRules()
+    void loadHistory()
   }, [])
 
   async function loadRules() {
@@ -90,6 +120,12 @@ export default function EmailIntegracaoPage() {
       setRules(Array.isArray(json.rules) ? json.rules : [])
       setUsers(Array.isArray(json.users) ? json.users : [])
     }
+  }
+
+  async function loadHistory() {
+    const response = await fetch("/api/admin/judicial/email-integracao/historico", { cache: "no-store" })
+    const json = await response.json().catch(() => ({}))
+    if (response.ok && json?.ok) setHistory(Array.isArray(json.items) ? json.items : [])
   }
 
   function clearForm() {
@@ -110,7 +146,6 @@ export default function EmailIntegracaoPage() {
   async function saveRule() {
     if (!ruleName.trim()) return toast.error("Informe o nome do grupo.")
     if (!ruleWords.trim()) return toast.error("Informe as palavras-chave.")
-
     const response = await fetch("/api/admin/judicial/email-integracao/regras", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -159,9 +194,9 @@ export default function EmailIntegracaoPage() {
       const response = await fetch("/api/admin/judicial/email-integracao/processar?limit=10", { method: "POST", cache: "no-store" })
       const json = await response.json().catch(() => ({}))
       if (!response.ok || !json?.ok) return toast.error(json?.error || "Falha ao executar triagem.")
-      if (json.processing) toast.success(json.message || "Triagem iniciada.")
-      else toast.success(`${json.processed || 0} mensagem(ns) nova(s) tratada(s).`)
+      toast.success(`${json.processed || 0} mensagem(ns) nova(s) tratada(s).`)
       await previewEmails()
+      await loadHistory()
     } finally {
       setRunning(false)
     }
@@ -172,18 +207,19 @@ export default function EmailIntegracaoPage() {
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Integração de e-mail</h1>
-          <p className="text-sm text-muted-foreground">Configure grupos, responsáveis e teste a leitura da caixa sigajus.ses.ms@gmail.com.</p>
+          <p className="text-sm text-muted-foreground">Configure grupos, responsáveis, execute a triagem e acompanhe o histórico processado.</p>
         </div>
         <Button asChild variant="outline" className="bg-transparent"><Link href="/admin/judicial"><ArrowLeft className="mr-2 h-4 w-4" /> Voltar</Link></Button>
       </div>
 
       <Card className="border-border">
-        <CardHeader><CardTitle className="flex items-center gap-2 text-base"><Inbox className="h-4 w-4" /> Teste e execução</CardTitle><CardDescription>A prévia não altera dados. A execução trata mensagens não lidas, grava movimentações/anexos, cria OS quando necessário e marca o e-mail como lido.</CardDescription></CardHeader>
+        <CardHeader><CardTitle className="flex items-center gap-2 text-base"><Inbox className="h-4 w-4" /> Teste e execução</CardTitle><CardDescription>A execução trata mensagens não lidas, grava movimentações/anexos, cria OS quando necessário, salva histórico e marca o e-mail como lido.</CardDescription></CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-wrap gap-2">
             <Button type="button" onClick={testConnection} disabled={loading || running}><MailCheck className="mr-2 h-4 w-4" /> Testar conexão</Button>
             <Button type="button" variant="outline" className="bg-transparent" onClick={previewEmails} disabled={loading || running}><Search className="mr-2 h-4 w-4" /> Ler últimas 10 mensagens</Button>
             <Button type="button" onClick={runTriageNow} disabled={loading || running}><Play className="mr-2 h-4 w-4" /> Executar triagem agora</Button>
+            <Button type="button" variant="outline" className="bg-transparent" onClick={loadHistory} disabled={loading || running}><History className="mr-2 h-4 w-4" /> Atualizar histórico</Button>
             {loading || running ? <Badge variant="outline"><RefreshCcw className="mr-1 h-3 w-3 animate-spin" /> Processando</Badge> : null}
           </div>
           {connection ? <div className="rounded-xl border border-border p-4 text-sm"><p><strong>Status:</strong> {connection.ok ? "Conectado" : "Falha"}</p>{connection.error ? <p className="text-destructive"><strong>Erro:</strong> {connection.error}</p> : null}{connection.config ? <p><strong>Conta:</strong> {connection.config.user} • {connection.config.host}:{connection.config.port} • {connection.config.mailbox}</p> : null}{connection.mailbox ? <p><strong>Mensagens IMAP na INBOX:</strong> {connection.mailbox.exists}</p> : null}{connection.mailbox ? <p className="mt-2 text-xs text-muted-foreground">Observação: o Gmail pode exibir a caixa como conversas agrupadas. O IMAP conta mensagens individuais.</p> : null}</div> : null}
@@ -191,19 +227,18 @@ export default function EmailIntegracaoPage() {
       </Card>
 
       <Card className="border-border">
-        <CardHeader><CardTitle className="text-base">Grupos de palavras-chave e responsáveis</CardTitle><CardDescription>Quando uma palavra do grupo for encontrada no assunto ou corpo do e-mail, o caso será direcionado para os responsáveis selecionados.</CardDescription></CardHeader>
+        <CardHeader><CardTitle className="text-base">Grupos de palavras-chave e responsáveis</CardTitle><CardDescription>Quando uma palavra do grupo for encontrada no assunto ou corpo, o caso será direcionado para os responsáveis selecionados.</CardDescription></CardHeader>
         <CardContent className="space-y-5">
-          <div className="grid gap-3 lg:grid-cols-[1fr_2fr]">
-            <div className="space-y-2"><Label>Grupo</Label><Input value={ruleName} onChange={(event) => setRuleName(event.target.value)} placeholder="Ex.: Inicial" /></div>
-            <div className="space-y-2"><Label>Palavras-chave</Label><Input value={ruleWords} onChange={(event) => setRuleWords(event.target.value)} placeholder="Ex.: inicial, solicitação de informações" /></div>
-          </div>
+          <div className="grid gap-3 lg:grid-cols-[1fr_2fr]"><div className="space-y-2"><Label>Grupo</Label><Input value={ruleName} onChange={(event) => setRuleName(event.target.value)} placeholder="Ex.: Inicial" /></div><div className="space-y-2"><Label>Palavras-chave</Label><Input value={ruleWords} onChange={(event) => setRuleWords(event.target.value)} placeholder="Ex.: inicial, solicitação de informações" /></div></div>
           <div className="space-y-2"><Label>Responsáveis</Label><div className="grid max-h-56 gap-2 overflow-auto rounded-xl border border-border p-3 md:grid-cols-2 lg:grid-cols-3">{users.map((user) => <label key={user.id} className="flex cursor-pointer items-start gap-2 rounded-lg p-2 text-sm hover:bg-muted"><input type="checkbox" checked={selectedUserSet.has(user.id)} onChange={() => toggleUser(user.id)} className="mt-1" /><span><strong>{fixText(user.nome)}</strong><br /><span className="text-xs text-muted-foreground">{user.email || "Sem e-mail"}</span></span></label>)}</div></div>
           <div className="flex flex-wrap gap-2"><Button type="button" onClick={saveRule}><Save className="mr-2 h-4 w-4" /> {editingRuleId ? "Atualizar regra" : "Salvar regra"}</Button>{editingRuleId ? <Button type="button" variant="outline" className="bg-transparent" onClick={clearForm}><X className="mr-2 h-4 w-4" /> Cancelar edição</Button> : null}</div>
           <div className="space-y-2">{rules.length === 0 ? <p className="text-sm text-muted-foreground">Nenhuma regra cadastrada ainda.</p> : rules.map((rule) => <div key={rule.id} className="rounded-xl border border-border p-3 text-sm"><div className="flex flex-wrap items-center gap-2"><Badge>{fixText(rule.nome)}</Badge><span className="text-muted-foreground">{rule.palavras.map(fixText).join(", ")}</span><Button type="button" size="sm" variant="outline" className="ml-auto bg-transparent" onClick={() => editRule(rule)}><Edit3 className="mr-1 h-3 w-3" /> Editar</Button></div><p className="mt-2 text-xs text-muted-foreground">Responsáveis: {rule.usuarios?.length ? rule.usuarios.map((user) => fixText(user.nome)).join(", ") : "nenhum"}</p></div>)}</div>
         </CardContent>
       </Card>
 
-      <Card className="border-border"><CardHeader><CardTitle className="text-base">Prévia da triagem</CardTitle><CardDescription>Mostra assunto, PGE.net/processo detectado no assunto ou corpo, classificador, anexos e ação simulada.</CardDescription></CardHeader><CardContent>{items.length === 0 ? <p className="text-sm text-muted-foreground">Nenhuma mensagem carregada ainda. Clique em “Ler últimas 10 mensagens”.</p> : <div className="space-y-3">{items.map((item) => <div key={`${item.uid}-${item.messageId}`} className="rounded-xl border border-border p-4"><div className="mb-2 flex flex-wrap items-center justify-between gap-2"><Badge variant={item.simulatedAction.type === "vincular_processo" ? "default" : "secondary"}>{fixText(item.classifier)}</Badge><span className="text-xs text-muted-foreground">{formatDate(item.date)}</span></div><h2 className="font-semibold">{item.subject || "Sem assunto"}</h2><p className="mt-1 text-sm text-muted-foreground">Remetente: {item.from || "-"}</p><div className="mt-3 grid gap-2 text-sm md:grid-cols-4"><div><strong>PGE.net:</strong> {item.pgeNet || "Não detectado"}</div><div><strong>Processo:</strong> {item.processo || "Não detectado"}</div><div><strong>Detectado em:</strong> {item.detectedIn || "-"}</div><div><strong>Anexos:</strong> {item.attachments.length}</div></div>{item.allProcessNumbers?.length ? <p className="mt-2 text-xs text-muted-foreground">Números localizados: {item.allProcessNumbers.join(", ")}</p> : null}{item.attachments.length ? <div className="mt-3 rounded-lg bg-muted p-3 text-sm">{item.attachments.map((attachment, index) => <div key={`${attachment.filename}-${index}`}>{attachment.filename} • {attachment.contentType || "tipo não informado"} • {formatSize(attachment.size)}</div>)}</div> : null}<div className="mt-3 rounded-lg border border-dashed border-border p-3 text-sm"><strong>Ação simulada:</strong> {item.simulatedAction.label}{item.simulatedAction.demanda ? <div>Protocolo encontrado: {item.simulatedAction.demanda.protocolo}</div> : null}</div></div>)}</div>}</CardContent></Card>
+      <Card className="border-border"><CardHeader><CardTitle className="text-base">Histórico de e-mails processados</CardTitle><CardDescription>Data, título, status, vínculo, OS e anexos salvos para conferência.</CardDescription></CardHeader><CardContent>{history.length === 0 ? <p className="text-sm text-muted-foreground">Nenhum e-mail processado ainda.</p> : <div className="space-y-3">{history.map((item) => <div key={item.id} className="rounded-xl border border-border p-4 text-sm"><div className="mb-2 flex flex-wrap items-center justify-between gap-2"><div className="flex flex-wrap items-center gap-2"><Badge variant={item.status === "ERRO" || item.status === "ERRO_LEITURA" ? "destructive" : item.status === "OS_CRIADA" ? "secondary" : "default"}>{item.status}</Badge>{item.regraNome ? <Badge variant="outline">{fixText(item.regraNome)}</Badge> : null}</div><span className="text-xs text-muted-foreground">{formatDate(item.processadoEm)}</span></div><p className="font-semibold">{item.assunto || "Sem assunto"}</p><p className="text-muted-foreground">Remetente: {item.remetente || "-"}</p><div className="mt-2 grid gap-2 md:grid-cols-4"><div><strong>PGE.net:</strong> {item.pgeNet || "-"}</div><div><strong>Processo:</strong> {item.processo || "-"}</div><div><strong>Monitoramento:</strong> {item.monitoramentoId || "-"}</div><div><strong>OS:</strong> {item.osProtocolo || "-"}</div></div>{item.erro ? <p className="mt-2 text-destructive">Erro: {item.erro}</p> : null}{item.attachments?.length ? <div className="mt-3 rounded-lg bg-muted p-3">{item.attachments.map((file, index) => <div key={`${fileName(file)}-${index}`} className="flex flex-wrap items-center gap-2"><span>{fileName(file)} • {fileMime(file)} • {formatSize(Number(file.size || 0))}</span>{file.url ? <Button asChild size="sm" variant="outline" className="bg-transparent"><a href={file.url} target="_blank" rel="noreferrer"><Eye className="mr-1 h-3 w-3" /> Visualizar</a></Button> : null}</div>)}</div> : null}</div>)}</div>}</CardContent></Card>
+
+      <Card className="border-border"><CardHeader><CardTitle className="text-base">Prévia da triagem</CardTitle><CardDescription>Mostra assunto, PGE.net/processo detectado no assunto ou corpo, classificador, anexos e ação simulada.</CardDescription></CardHeader><CardContent>{items.length === 0 ? <p className="text-sm text-muted-foreground">Nenhuma mensagem carregada ainda. Clique em “Ler últimas 10 mensagens”.</p> : <div className="space-y-3">{items.map((item) => <div key={`${item.uid}-${item.messageId}`} className="rounded-xl border border-border p-4"><div className="mb-2 flex flex-wrap items-center justify-between gap-2"><Badge variant={item.simulatedAction.type === "vincular_processo" ? "default" : "secondary"}>{fixText(item.classifier)}</Badge><span className="text-xs text-muted-foreground">{formatDate(item.date)}</span></div><h2 className="font-semibold">{item.subject || "Sem assunto"}</h2><p className="mt-1 text-sm text-muted-foreground">Remetente: {item.from || "-"}</p><div className="mt-3 grid gap-2 text-sm md:grid-cols-4"><div><strong>PGE.net:</strong> {item.pgeNet || "Não detectado"}</div><div><strong>Processo:</strong> {item.processo || "Não detectado"}</div><div><strong>Detectado em:</strong> {item.detectedIn || "-"}</div><div><strong>Anexos:</strong> {item.attachments.length}</div></div>{item.allProcessNumbers?.length ? <p className="mt-2 text-xs text-muted-foreground">Números localizados: {item.allProcessNumbers.join(", ")}</p> : null}{item.attachments.length ? <div className="mt-3 rounded-lg bg-muted p-3 text-sm">{item.attachments.map((attachment, index) => <div key={`${attachment.filename}-${index}`}>{fileName(attachment)} • {fileMime(attachment)} • {formatSize(Number(attachment.size || 0))}</div>)}</div> : null}<div className="mt-3 rounded-lg border border-dashed border-border p-3 text-sm"><strong>Ação simulada:</strong> {item.simulatedAction.label}{item.simulatedAction.demanda ? <div>Protocolo encontrado: {item.simulatedAction.demanda.protocolo}</div> : null}</div></div>)}</div>}</CardContent></Card>
     </div>
   )
 }
