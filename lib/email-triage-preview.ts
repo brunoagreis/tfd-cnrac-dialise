@@ -8,7 +8,7 @@ type DemandMatch = { protocolo: string | null; pacienteNome: string | null; moni
 function text(value: unknown) { return String(value ?? "").trim() }
 function digits(value: unknown) { return text(value).replace(/\D/g, "") }
 function stripHtml(value: unknown) {
-  return text(value).replace(/<style[\s\S]*?<\/style>/gi, " ").replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<br\s*\/?\s*>/gi, "\n").replace(/<\/p>/gi, "\n").replace(/<[^>]+>/g, " ").replace(/&nbsp;/gi, " ").replace(/&amp;/gi, "&").replace(/&lt;/gi, "<").replace(/&gt;/gi, ">").replace(/\s+/g, " ").trim()
+  return text(value).replace(/<br\s*\/?\s*>/gi, "\n").replace(/<\/p>/gi, "\n").replace(/<[^>]+>/g, " ").replace(/&nbsp;/gi, " ").replace(/&amp;/gi, "&").replace(/&lt;/gi, "<").replace(/&gt;/gi, ">").replace(/\s+/g, " ").trim()
 }
 function senderText(mail: ParsedMailLike) {
   const first = mail.from?.value?.[0]
@@ -81,6 +81,7 @@ export async function previewAllEmailTriage() {
           processo: extracted.processo,
           detectedIn: extracted.detectedIn,
           allProcessNumbers: extracted.allProcessNumbers,
+          bodyText: body,
           attachments: (parsed.attachments || []).map((attachment) => ({ filename: text(attachment.filename) || "anexo", contentType: text(attachment.contentType), size: Number(attachment.size || 0) })),
           simulatedAction: demand ? { type: "vincular_processo", label: demand.matchSource ? `Processo encontrado (${demand.matchSource}). Vincularia ao processo e criaria monitoramento.` : "Processo encontrado. Vincularia ao processo e criaria monitoramento.", demanda: demand } : { type: "criar_os", label: extracted.processo ? "Processo não encontrado. Criaria ordem de serviço para cadastro/vinculação." : "Nenhum processo/PGE.net detectado. Criaria ordem de serviço para análise manual.", demanda: null },
         })
