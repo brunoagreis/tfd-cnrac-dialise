@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { BarChart3, Building2, CalendarClock, Inbox, KeyRound, ListChecks, Mail, MailCheck, Scale, Search, Settings, Settings2, ShieldAlert, Upload } from "lucide-react"
+import { BarChart3, Building2, CalendarClock, Inbox, KeyRound, ListChecks, Mail, MailCheck, Scale, Search, Settings, Settings2, ShieldAlert, Tags, Upload } from "lucide-react"
 
 import { useAuth } from "@/lib/auth-context"
 import { canAccessJudicialAdmin } from "@/lib/judicial-access"
@@ -20,6 +20,7 @@ const adminAreas = [
   { title: "Bloqueio / Sequestro", description: "Gerenciar registros de bloqueio e sequestro.", href: "/admin/judicial/bloqueio-sequestro", icon: ShieldAlert },
   { title: "SIGTAP", description: "Cadastrar e consultar procedimentos SIGTAP.", href: "/admin/judicial/sigtap", icon: Search },
   { title: "Especialidade / Subespecialidade", description: "Cadastrar especialidades e subespecialidades.", href: "/admin/judicial/especialidade-subespecialidade", icon: ListChecks },
+  { title: "Grupos de palavras-chave", description: "Cadastrar palavras e responsáveis para triagem automática.", href: "/admin/judicial/email-grupos", icon: Tags },
   { title: "Atribuição manual", description: "Direcionar monitoramentos para responsáveis.", href: "/admin/judicial/atribuicao-manual", icon: Settings },
   { title: "Disparo de e-mails", description: "Enviar e-mails administrativos em lote.", href: "/admin/judicial/emails-disparo", icon: Mail },
   { title: "Envios de e-mail", description: "Acompanhar histórico de envios realizados.", href: "/admin/judicial/emails-envios", icon: MailCheck },
