@@ -26,6 +26,7 @@ export function inferEmailOsModule(subject: unknown, classifier: unknown): Email
 
 export async function ensureEmailOsRoutingColumns() {
   await ensureEmailTriageTables()
+  await prisma.$executeRawUnsafe(`ALTER TABLE public.judicial_email_os ADD COLUMN IF NOT EXISTS corpo_resumo TEXT`)
   await prisma.$executeRawUnsafe(`ALTER TABLE public.judicial_email_os ADD COLUMN IF NOT EXISTS modulo_destino TEXT`)
   await prisma.$executeRawUnsafe(`ALTER TABLE public.judicial_email_os ADD COLUMN IF NOT EXISTS responsavel_id TEXT`)
   await prisma.$executeRawUnsafe(`ALTER TABLE public.judicial_email_os ADD COLUMN IF NOT EXISTS responsavel_nome TEXT`)
