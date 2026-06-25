@@ -11,6 +11,18 @@ type Mail = { subject?: string; text?: string; html?: string | false; messageId?
 type Match = { monitoramentoId: string; demandaId: string; protocolo: string; pacienteNome: string }
 type Rule = { id: string | null; nome: string; users: Array<{ id: string; nome: string; email: string }> }
 
+type Progress = {
+  mailboxTotal?: number
+  unreadTotal?: number
+  readCount?: number
+  triagedCount?: number
+  linkedCount?: number
+  osCount?: number
+  errorCount?: number
+  currentSubject?: string | null
+  message?: string
+}
+
 const text = (value: unknown) => String(value ?? "").trim()
 const digits = (value: unknown) => text(value).replace(/\D/g, "")
 const buildId = (prefix: string) => `${prefix}${randomUUID().replace(/-/g, "")}`
@@ -43,6 +55,33 @@ function hasSeenFlag(flags: unknown) {
   if (!flags) return false
   const values = Array.isArray(flags) ? flags : Array.from(flags as Iterable<unknown>)
   return values.map((flag) => String(flag).toLowerCase()).includes("\\seen")
+}
+
+async function updateProgress(progress: Progress) {
+  await prisma.$executeRawUnsafe(
+    `UPDATE public.judicial_email_triagem_status
+     SET mailbox_total = COALESCE($2, mailbox_total),
+         unread_total = COALESCE($3, unread_total),
+         read_count = COALESCE($4, read_count),
+         triaged_count = COALESCE($5, triaged_count),
+         linked_count = COALESCE($6, linked_count),
+         os_count = COALESCE($7, os_count),
+         error_count = COALESCE($8, error_count),
+         current_subject = $9,
+         last_message = COALESCE($10, last_message),
+         updated_at = NOW()
+     WHERE id = 'default'`,
+    "default",
+    progress.mailboxTotal ?? null,
+    progress.unreadTotal ?? null,
+    progress.readCount ?? null,
+    progress.triagedCount ?? null,
+    progress.linkedCount ?? null,
+    progress.osCount ?? null,
+    progress.errorCount ?? null,
+    progress.currentSubject ?? null,
+    progress.message ?? null,
+  ).catch(() => undefined)
 }
 
 async function processed(messageId: string) {
@@ -98,7 +137,11 @@ async function saveProcessed(p: { uid: string; messageId: string; subject: strin
   return rows[0]?.id || ""
 }
 
-async function deleteMsg(client: any, uid: unknown) {
+async function markSeen(client: any, uid: unknown) {
+  await client.messageFlagsAdd(String(uid), ["\\Seen"], { uid: true })
+}
+
+async function finalizeMessage(client: any, uid: unknown) {
   await client.messageFlagsAdd(String(uid), ["\\Seen"], { uid: true }).catch(() => undefined)
   const fn = client.messageDelete
   if (typeof fn === "function") await fn.call(client, String(uid), { uid: true }).catch(() => undefined)
@@ -113,50 +156,72 @@ export async function processUnreadEmailTriageV2(limit = 5000) {
   const { simpleParser } = await import("mailparser")
   const client = new ImapFlow({ host: config.host, port: config.port, secure: config.secure, auth: { user: config.user, pass: config.password }, logger: false })
   const items: any[] = []
+  let mailboxTotal = 0
+  let unreadTotal = 0
+  let readCount = 0
+  let triagedCount = 0
+  let linkedCount = 0
+  let osCount = 0
+  let errorCount = 0
+
+  const publish = (message?: string, currentSubject?: string | null) => updateProgress({ mailboxTotal, unreadTotal, readCount, triagedCount, linkedCount, osCount, errorCount, currentSubject: currentSubject ?? null, message })
 
   try {
+    await publish("Conectando na caixa de e-mail")
     await client.connect()
     const lock = await client.getMailboxLock(config.mailbox)
     try {
-      const total = Number(client.mailbox?.exists || 0)
-      if (!total) return { ok: true, processed: 0, items, total }
-      const safeLimit = Math.max(1, Math.min(Number(limit) || total, total))
+      mailboxTotal = Number(client.mailbox?.exists || 0)
+      if (!mailboxTotal) {
+        await publish("Caixa vazia: nenhum e-mail na INBOX")
+        return { ok: true, processed: 0, items, total: 0, mailboxTotal, unreadTotal, readCount, triagedCount, linkedCount, osCount, errorCount }
+      }
 
-      for await (const msg of client.fetch("1:*", { envelope: true, source: true, uid: true, flags: true }, { uid: false })) {
-        if (items.length >= safeLimit) break
-        const uid = text(msg.uid)
-        if (hasSeenFlag(msg.flags)) continue
+      const metas: Array<{ uid: string; seen: boolean }> = []
+      for await (const meta of client.fetch("1:*", { uid: true, flags: true }, { uid: false })) {
+        const uid = text(meta.uid)
+        if (uid) metas.push({ uid, seen: hasSeenFlag(meta.flags) })
+      }
 
-        let mail: Mail
+      const safeLimit = Math.max(1, Math.min(Number(limit) || metas.length, metas.length))
+      const candidates = metas.slice(0, safeLimit)
+      unreadTotal = candidates.filter((item) => !item.seen).length || candidates.length
+      await publish(`Identificados ${candidates.length} e-mail(s) para triagem na INBOX`)
+
+      for (const candidate of candidates) {
+        const uid = candidate.uid
+        let subject = "E-mail sem assunto"
         try {
-          mail = (await simpleParser(msg.source as Buffer)) as Mail
-        } catch (error) {
-          const subject = text(msg.envelope?.subject) || "E-mail sem assunto"
-          await saveProcessed({ uid, messageId: `${config.user}:${uid}`, subject, from: "", date: new Date().toISOString(), fields: {}, rule: { id: null, nome: "Erro de leitura", users: [] }, status: "ERRO_LEITURA", error: error instanceof Error ? error.message : String(error), read: true })
-          await deleteMsg(client, uid)
-          items.push({ uid, subject, status: "ERRO_LEITURA" })
-          continue
-        }
+          await markSeen(client, uid)
+          readCount += 1
+          await publish(`Marcado como lido ${readCount}/${candidates.length}`)
 
-        const subject = text(mail.subject || msg.envelope?.subject) || "E-mail sem assunto"
-        const body = text(mail.text) || stripHtml(mail.html)
-        const bodyShort = body.slice(0, 10000)
-        const messageId = text(mail.messageId || `${config.user}:${uid}`)
-        const old = await processed(messageId)
-        if (old && ["VINCULADO", "OS_CRIADA", "ERRO_LEITURA"].includes(text(old.status).toUpperCase())) {
-          await deleteMsg(client, uid)
-          continue
-        }
+          const msg: any = await client.fetchOne(uid, { envelope: true, source: true, uid: true }, { uid: true })
+          if (!msg?.source) throw new Error("Não foi possível baixar o conteúdo do e-mail.")
 
-        const fields = extractEmailTriageFields(subject, body)
-        const rule = await matchRule(subject, body, fields.classifier)
-        const responsible = await pickEmailTriageAssignee(rule.id, rule.users)
-        const match = fields.processo ? await findMatch(fields.processo) : null
-        const from = sender(mail)
-        const date = mail.date?.toISOString() || msg.envelope?.date?.toISOString?.() || new Date().toISOString()
-        const files = mail.attachments || []
+          const mail = (await simpleParser(msg.source as Buffer)) as Mail
+          subject = text(mail.subject || msg.envelope?.subject) || "E-mail sem assunto"
+          await publish(`Triando: ${subject}`, subject)
 
-        try {
+          const body = text(mail.text) || stripHtml(mail.html)
+          const bodyShort = body.slice(0, 10000)
+          const messageId = text(mail.messageId || `${config.user}:${uid}`)
+          const old = await processed(messageId)
+          if (old && ["VINCULADO", "OS_CRIADA", "ERRO_LEITURA"].includes(text(old.status).toUpperCase())) {
+            await finalizeMessage(client, uid)
+            triagedCount += 1
+            items.push({ uid, subject, status: "IGNORADO_PROCESSADO" })
+            await publish(`E-mail já processado removido: ${triagedCount}/${candidates.length}`, subject)
+            continue
+          }
+
+          const fields = extractEmailTriageFields(subject, body)
+          const rule = await matchRule(subject, body, fields.classifier)
+          const responsible = await pickEmailTriageAssignee(rule.id, rule.users)
+          const match = fields.processo ? await findMatch(fields.processo) : null
+          const from = sender(mail)
+          const date = mail.date?.toISOString() || msg.envelope?.date?.toISOString?.() || new Date().toISOString()
+          const files = mail.attachments || []
           const emailId = await saveProcessed({ uid, messageId, subject, from, date, fields, rule, status: "EM_PROCESSAMENTO", match, metadata: { bodyText: bodyShort, attachments: files.map((file) => ({ filename: file.filename, contentType: file.contentType, size: file.size })) } })
 
           if (match?.monitoramentoId) {
@@ -165,24 +230,32 @@ export async function processUnreadEmailTriageV2(limit = 5000) {
             await prisma.$executeRawUnsafe(`UPDATE public.judicial_monitoramento_base SET status_monitoramento_atual='ATRIBUIDO_EMAIL', motivo_proximo_monitoramento='EMAIL_RECEBIDO', updated_at=NOW() WHERE id=$1::bigint`, match.monitoramentoId)
             if (responsible) await prisma.$executeRawUnsafe(`INSERT INTO public.judicial_email_atribuicoes (monitoramento_id,email_processado_id,regra_id,regra_nome,usuario_id,usuario_nome,usuario_email,motivo,ativo,atribuida_em,created_at,updated_at) VALUES ($1::bigint,$2::bigint,$3::bigint,$4,$5,$6,$7,$8,TRUE,NOW(),NOW(),NOW()) ON CONFLICT (monitoramento_id,email_processado_id,usuario_id) DO UPDATE SET ativo=TRUE, updated_at=NOW()`, match.monitoramentoId, emailId, rule.id || null, rule.nome, responsible.id, responsible.nome, responsible.email || null, `Atribuição automática por e-mail: ${subject}`)
             await saveProcessed({ uid, messageId, subject, from, date, fields, rule, status: "VINCULADO", match, metadata: { bodyText: bodyShort, responsible, movement: { attachments: saved }, attachments: saved }, read: true })
+            linkedCount += 1
             items.push({ uid, subject, status: "VINCULADO", found: true, responsible })
           } else {
             const modulo = inferEmailOsModule(subject, fields.classifier)
             const saved = await saveFiles(files, `OS-${uid}`)
             const osRows = await prisma.$queryRawUnsafe<Array<{ id: string; protocolo: string }>>(`INSERT INTO public.judicial_email_os (protocolo, assunto, remetente, recebido_em, pge_net, processo, detectado_em, classificador, regra_id, regra_nome, corpo_resumo, anexos, status, modulo_destino, responsavel_id, responsavel_nome, responsavel_email, created_at, updated_at) VALUES ($1,$2,$3,$4::timestamptz,$5,$6,$7,$8,$9::bigint,$10,$11,$12::jsonb,$13,$14,$15,$16,$17,NOW(),NOW()) RETURNING id::text AS id, protocolo`, `OS-EMAIL-${new Date().getFullYear()}-${String(Date.now()).slice(-8)}`, subject, from, date, fields.pgeNet || null, fields.processo || null, fields.detectedIn || null, fields.classifier || null, rule.id || null, rule.nome || null, bodyShort, JSON.stringify(saved), responsible ? "ATRIBUIDA" : "AGUARDANDO_CADASTRO", modulo, responsible?.id || null, responsible?.nome || null, responsible?.email || null)
             await saveProcessed({ uid, messageId, subject, from, date, fields, rule, status: "OS_CRIADA", match: null, osId: osRows[0]?.id, metadata: { bodyText: bodyShort, responsible, os: { attachments: saved, protocolo: osRows[0]?.protocolo }, attachments: saved }, read: true })
+            osCount += 1
             items.push({ uid, subject, status: "OS_CRIADA", found: false, os: osRows[0], responsible })
           }
 
-          await deleteMsg(client, uid)
+          await finalizeMessage(client, uid)
+          triagedCount += 1
+          await publish(`Triagem em andamento: ${triagedCount}/${candidates.length}`, subject)
         } catch (error) {
-          await saveProcessed({ uid, messageId, subject, from, date, fields, rule, status: "ERRO", match, error: error instanceof Error ? error.message : String(error), metadata: { bodyText: bodyShort }, read: true })
-          await deleteMsg(client, uid)
+          await saveProcessed({ uid, messageId: `${config.user}:${uid}`, subject, from: "", date: new Date().toISOString(), fields: {}, rule: { id: null, nome: "Erro", users: [] }, status: "ERRO", error: error instanceof Error ? error.message : String(error), read: true })
+          await finalizeMessage(client, uid)
+          errorCount += 1
+          triagedCount += 1
           items.push({ uid, subject, status: "ERRO", error: error instanceof Error ? error.message : String(error) })
+          await publish(`Erro registrado: ${triagedCount}/${candidates.length}`, subject)
         }
       }
 
-      return { ok: true, processed: items.length, items, total }
+      await publish(`Finalizado: ${triagedCount} e-mail(s) triado(s)`, null)
+      return { ok: true, processed: items.length, items, total: mailboxTotal, mailboxTotal, unreadTotal, readCount, triagedCount, linkedCount, osCount, errorCount }
     } finally {
       lock.release()
     }
