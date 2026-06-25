@@ -455,6 +455,7 @@ function JudicialCaseDetailContent({
   const [historyModalOpen, setHistoryModalOpen] = useState(false)
   const [auditModalOpen, setAuditModalOpen] = useState(false)
   const [municipalityContactsOpen, setMunicipalityContactsOpen] = useState(false)
+  const [selectedHistoryItem, setSelectedHistoryItem] = useState<HistoryItem | null>(null)
   const [finalizeStatus, setFinalizeStatus] =
     useState<keyof typeof FINALIZATION_STATUS_LABELS>("resolvido")
   const [finalizePendingLocation, setFinalizePendingLocation] = useState<
@@ -2625,9 +2626,26 @@ function JudicialCaseDetailContent({
                       {item.subtitle ? ` • ${item.subtitle}` : ""}
                     </p>
                     {item.description && (
-                      <p className="mt-1 line-clamp-4 whitespace-pre-line text-sm text-muted-foreground">
-                        {item.description}
-                      </p>
+                      item.html ? (
+                        <div
+                          className="prose prose-sm mt-1 line-clamp-4 max-w-none text-sm text-muted-foreground"
+                          dangerouslySetInnerHTML={{ __html: item.description }}
+                        />
+                      ) : (
+                        <p className="mt-1 line-clamp-4 whitespace-pre-line text-sm text-muted-foreground">
+                          {item.description}
+                        </p>
+                      )
+                    )}
+                    {item.description && (
+                      <Button
+                        type="button"
+                        variant="link"
+                        className="mt-1 h-auto p-0 text-xs"
+                        onClick={() => setSelectedHistoryItem(item)}
+                      >
+                        Ler mais...
+                      </Button>
                     )}
                     {item.attachments && item.attachments.length > 0 && (
                       <div className="mt-2 space-y-2">
@@ -3368,6 +3386,72 @@ function JudicialCaseDetailContent({
               </CardContent>
             </Card>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!selectedHistoryItem}
+        onOpenChange={(open) => {
+          if (!open) setSelectedHistoryItem(null)
+        }}
+      >
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          {selectedHistoryItem && (
+            <>
+              <DialogHeader>
+                <DialogTitle>{selectedHistoryItem.title}</DialogTitle>
+                <DialogDescription>
+                  {new Date(selectedHistoryItem.createdAt).toLocaleString("pt-BR")}
+                  {selectedHistoryItem.subtitle ? ` • ${selectedHistoryItem.subtitle}` : ""}
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="outline">{selectedHistoryItem.category}</Badge>
+                  {(selectedHistoryItem.badges || []).map((badge) => (
+                    <Badge key={`modal-read-more-${selectedHistoryItem.id}-${badge}`} variant="secondary">
+                      {badge}
+                    </Badge>
+                  ))}
+                </div>
+
+                {selectedHistoryItem.description ? (
+                  selectedHistoryItem.html ? (
+                    <div
+                      className="prose prose-sm max-w-none rounded-xl border border-border bg-muted/20 p-4"
+                      dangerouslySetInnerHTML={{ __html: selectedHistoryItem.description }}
+                    />
+                  ) : (
+                    <div className="max-h-[60vh] overflow-y-auto rounded-xl border border-border bg-muted/20 p-4">
+                      <p className="whitespace-pre-line text-sm leading-6 text-muted-foreground">
+                        {selectedHistoryItem.description}
+                      </p>
+                    </div>
+                  )
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    Esta movimentação não possui texto registrado.
+                  </p>
+                )}
+
+                {selectedHistoryItem.attachments && selectedHistoryItem.attachments.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-sm font-semibold">Anexos</p>
+                    {selectedHistoryItem.attachments.map((att) => (
+                      <div
+                        key={`modal-read-more-att-${selectedHistoryItem.id}-${att.id}`}
+                        className="rounded-lg border border-border p-3"
+                      >
+                        <p className="text-sm font-medium">{att.name}</p>
+                        <AttachmentActions attachment={att} />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
         </DialogContent>
       </Dialog>
 
