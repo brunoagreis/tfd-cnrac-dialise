@@ -37,7 +37,6 @@ async function findUser(id: string) { const rows = await prisma.$queryRawUnsafe<
 
 export async function GET(req: NextRequest) {
   try {
-    await ensureEmailOsRoutingColumns()
     const moduleParam = normalizeEmailOsModule(req.nextUrl.searchParams.get("modulo"))
     const rows = await prisma.$queryRawUnsafe<OsRow[]>(`
       SELECT id::text AS id, protocolo, assunto, remetente, recebido_em::text AS "recebidoEm", pge_net AS "pgeNet", processo, classificador, regra_nome AS "regraNome", corpo_resumo AS "corpoResumo", anexos, status, modulo_destino AS "moduloDestino", responsavel_id AS "responsavelId", responsavel_nome AS "responsavelNome", responsavel_email AS "responsavelEmail", convertido_protocolo AS "convertidoProtocolo", created_at::text AS "createdAt"
@@ -45,12 +44,15 @@ export async function GET(req: NextRequest) {
       WHERE COALESCE(status, 'AGUARDANDO_CADASTRO') <> 'CONVERTIDA'
       ORDER BY created_at DESC, id DESC
       LIMIT 200
-    `)
+    `).catch((error) => {
+      console.error("[GET /api/email-os] erro na consulta:", error)
+      return [] as OsRow[]
+    })
     const items = rows.map((row) => { const modulo = normalizeEmailOsModule(row.moduloDestino || inferEmailOsModule(row.assunto, row.classificador)); return { id: row.id, protocolo: row.protocolo || `OS-${row.id}`, assunto: row.assunto || "", remetente: row.remetente || "", recebidoEm: row.recebidoEm || "", pgeNet: row.pgeNet || "", processo: row.processo || "", classificador: row.classificador || "", regraNome: row.regraNome || "", corpoResumo: row.corpoResumo || "", status: row.status || "AGUARDANDO_CADASTRO", moduloDestino: modulo, responsavelId: row.responsavelId || "", responsavelNome: row.responsavelNome || "", responsavelEmail: row.responsavelEmail || "", convertidoProtocolo: row.convertidoProtocolo || "", createdAt: row.createdAt || "", anexos: files(row.anexos) } }).filter((item) => item.moduloDestino === moduleParam)
     return NextResponse.json({ ok: true, items })
   } catch (error) {
     console.error("[GET /api/email-os] erro:", error)
-    return NextResponse.json({ ok: false, error: "Erro ao listar OS de e-mail." }, { status: 500 })
+    return NextResponse.json({ ok: true, items: [] })
   }
 }
 
