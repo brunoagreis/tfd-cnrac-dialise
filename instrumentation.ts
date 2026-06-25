@@ -15,7 +15,7 @@ export async function register() {
   const { startCoreAutomaticScheduler } = await import("./lib/judicial-core-automatic-scheduler")
   startCoreAutomaticScheduler()
 
-  if (process.env.EMAIL_TRIAGEM_AUTO === "false") return
+  if (process.env.EMAIL_TRIAGEM_AUTO_SERVER !== "true") return
   if (globalThis.__sigajusMailLoopStarted) return
 
   globalThis.__sigajusMailLoopStarted = true
