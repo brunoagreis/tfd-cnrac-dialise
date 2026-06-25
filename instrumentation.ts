@@ -15,6 +15,9 @@ export async function register() {
   const { startCoreAutomaticScheduler } = await import("./lib/judicial-core-automatic-scheduler")
   startCoreAutomaticScheduler()
 
+  const { ensurePreJudicialSchema } = await import("./lib/pre-judicial-schema")
+  void ensurePreJudicialSchema().catch((error) => console.error("[instrumentation] pre judicial schema:", error))
+
   if (process.env.EMAIL_TRIAGEM_AUTO_SERVER !== "true") return
   if (globalThis.__sigajusMailLoopStarted) return
 
