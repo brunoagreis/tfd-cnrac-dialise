@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
@@ -202,6 +202,11 @@ function formatFileSize(size: number) {
   if (size < 1024) return `${size} B`
   if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
   return `${(size / (1024 * 1024)).toFixed(2)} MB`
+}
+
+function formatCns(value: string | null | undefined) {
+  const digits = String(value ?? "").replace(/\D/g, "")
+  return digits.length === 15 ? digits : "Não informado"
 }
 
 function fileListToArray(files: FileList | null) {
@@ -923,7 +928,7 @@ function JudicialCaseDetailContent({
     [historyItems],
   )
 
-  const latestMovementsPageSize = 5
+  const latestMovementsPageSize = 2
   const totalLatestMovementsPages = Math.max(
     1,
     Math.ceil(latestMovementItems.length / latestMovementsPageSize),
@@ -2036,7 +2041,7 @@ function JudicialCaseDetailContent({
 
             <p className="text-sm leading-6">
               <span className="font-semibold">{caseItem.patientName}</span> | CPF{" "}
-              {caseItem.cpf} | CNS: {caseItem.patientId || "Não informado"} | Município:{" "}
+              {caseItem.cpf} | CNS: {formatCns(caseItem.patientId)} | Município:{" "}
               {caseItem.municipalityName}
             </p>
 
@@ -2228,8 +2233,7 @@ function JudicialCaseDetailContent({
 
                   <div className="flex flex-wrap items-center gap-1.5">
                     <span>
-                      CPF {caseItem.cpf} | CNS: {caseItem.patientId || "Não informado"} |
-                      Município: {caseItem.municipalityName}
+                      CPF {caseItem.cpf} | CNS: {formatCns(caseItem.patientId)} | Município: {caseItem.municipalityName}
                     </span>
                     <Button
                       type="button"
@@ -2601,7 +2605,7 @@ function JudicialCaseDetailContent({
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Últimas movimentações</CardTitle>
               <CardDescription>
-                Exibe as últimas movimentações registradas no processo, com até 5 por página.
+                Exibe as últimas movimentações registradas no processo, com até 2 por página.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -4038,3 +4042,4 @@ function JudicialCaseDetailContent({
     </div>
   )
 }
+

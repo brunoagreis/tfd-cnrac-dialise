@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server"
+﻿import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { ensureEmailOsRoutingColumns, inferEmailOsModule, normalizeEmailOsModule } from "@/lib/email-os-routing"
 import { finalizeEmailMessage } from "@/lib/email-triage-mailbox"
@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
     const rows = await prisma.$queryRawUnsafe<OsRow[]>(`
       SELECT id::text AS id, protocolo, assunto, remetente, recebido_em::text AS "recebidoEm", pge_net AS "pgeNet", processo, classificador, regra_nome AS "regraNome", corpo_resumo AS "corpoResumo", anexos, status, modulo_destino AS "moduloDestino", responsavel_id AS "responsavelId", responsavel_nome AS "responsavelNome", responsavel_email AS "responsavelEmail", convertido_protocolo AS "convertidoProtocolo", created_at::text AS "createdAt"
       FROM public.judicial_email_os
-      WHERE COALESCE(status, 'AGUARDANDO_CADASTRO') <> 'CONVERTIDA'
+      WHERE COALESCE(status, 'AGUARDANDO_CADASTRO') NOT IN ('CONVERTIDA', 'INATIVA')
       ORDER BY created_at DESC, id DESC
       LIMIT 200
     `).catch((error) => {
@@ -60,6 +60,25 @@ export async function POST(req: NextRequest) {
   try {
     await ensureEmailOsRoutingColumns()
     const body = await req.json().catch(() => ({}))
+    const action = String(body?.action || "").trim().toLowerCase()
+
+    if (action === "inativar") {
+      const user = body?.user || {}
+      const role = String(user?.role || user?.perfil || user?.tipo || "").toUpperCase()
+      const isAdmin = role === "ADMIN" || role === "ADMINISTRADOR" || user?.isAdmin === true
+
+      if (!isAdmin) {
+        return NextResponse.json({ ok: false, error: "Somente administrador pode inativar OS." }, { status: 403 })
+      }
+
+      const id = String(body?.id || "").trim()
+      if (!id) {
+        return NextResponse.json({ ok: false, error: "ID da OS obrigatório." }, { status: 400 })
+      }
+
+      await prisma.$executeRawUnsafe("UPDATE public.judicial_email_os SET status = 'INATIVA' WHERE id::text = $1", id)
+      return NextResponse.json({ ok: true })
+    }
     const osId = text(body?.osId)
     const modulo = normalizeEmailOsModule(body?.modulo)
     const responsavelId = text(body?.responsavelId)
@@ -123,3 +142,4 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "Erro ao transferir OS." }, { status: 500 })
   }
 }
+
