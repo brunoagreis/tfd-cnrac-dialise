@@ -25,6 +25,8 @@ import {
   Edit3,
   Info,
   Plus,
+  Strikethrough,
+  AlignJustify,
 } from "lucide-react"
 
 import { useAuth } from "@/lib/auth-context"
@@ -117,15 +119,13 @@ type HistoryItem = {
 
 const MOVEMENT_OPTIONS: MovementType[] = [
   "monitoramento",
+  "encaminhar_demanda_municipio",
   "envio_agendamento_demanda",
   "agendamento",
   "solicitacao_inclusao",
   "reiteracao",
   "descumprimento",
   "cumprimento",
-  "cumprido",
-  "resolvido",
-  "arquivado",
   "falta_paciente",
   "obito",
   "bloqueio",
@@ -164,6 +164,83 @@ function splitCommaNames(value: string) {
     .filter(Boolean)
 }
 
+function normalizeEmailList(value: string | string[] | undefined) {
+  const source = Array.isArray(value) ? value.join(",") : String(value ?? "")
+  const items = source
+    .split(/[;,]/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+
+  const unique: string[] = []
+  for (const item of items) {
+    if (!unique.some((email) => email.toLowerCase() === item.toLowerCase())) {
+      unique.push(item)
+    }
+  }
+
+  return unique
+}
+
+function mergeRequiredEmails(value: string, requiredEmails: string[]) {
+  const items = normalizeEmailList(value)
+  const merged = [...items]
+
+  for (const required of requiredEmails) {
+    if (!merged.some((email) => email.toLowerCase() === required.toLowerCase())) {
+      merged.unshift(required)
+    }
+  }
+
+  return merged.join(", ")
+}
+
+function htmlToText(value: string) {
+  return String(value ?? "")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+}
+
+function normalizeMunicipalityKey(value: unknown) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9]/g, "")
+    .toLowerCase()
+}
+
+function adminText(value: unknown) {
+  if (value === null || value === undefined) return ""
+  return String(value).trim()
+}
+
+function adminList(value: unknown) {
+  if (Array.isArray(value)) {
+    return value.map((item) => adminText(item)).filter(Boolean)
+  }
+
+  return String(value ?? "")
+    .split(/[;,]/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+}
+
+function adminArray(value: unknown) {
+  if (Array.isArray(value)) return value
+
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>
+    for (const key of ["items", "data", "rows", "templates", "municipios"]) {
+      if (Array.isArray(record[key])) return record[key] as unknown[]
+    }
+  }
+
+  return []
+}
+
 function htmlHasContent(value: string) {
   return value.replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").trim().length > 0
 }
@@ -178,11 +255,12 @@ function escapeHtml(value: string) {
 }
 
 function replaceTemplatePlaceholders(value: string, replacements: Record<string, string>) {
-  let result = value || ""
-  Object.entries(replacements).forEach(([placeholder, replacement]) => {
-    result = result.replaceAll(placeholder, replacement)
+  return String(value ?? "").replace(/\$([a-zA-Z0-9_]+)/g, (match) => {
+    const replacement = replacements[match]
+    if (replacement === undefined || replacement === null) return match
+    const text = String(replacement)
+    return text.trim() ? text : match
   })
-  return result
 }
 
 function templateBodyToHtml(value: string) {
@@ -195,6 +273,49 @@ function templateBodyToHtml(value: string) {
       return trimmed ? `<p>${escapeHtml(trimmed)}</p>` : "<p></p>"
     })
     .join("")
+}
+
+function sanitizeEmailHtml(value: string) {
+  const fallback = String(value ?? "")
+    .replace(/<o:p[^>]*>[\s\S]*?<\/o:p>/gi, "")
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/\sclass="[^"]*"/gi, "")
+    .replace(/\sstyle="[^"]*"/gi, "")
+
+  if (typeof DOMParser === "undefined") return fallback
+
+  const doc = new DOMParser().parseFromString("<div>" + String(value ?? "") + "</div>", "text/html")
+  doc.querySelectorAll("script,style,meta,link,o\\:p").forEach((node) => node.remove())
+
+  doc.body.querySelectorAll("*").forEach((node) => {
+    const element = node as HTMLElement
+    const styles: string[] = []
+
+    const textAlign = element.style.textAlign
+    const fontFamily = element.style.fontFamily
+    const fontSize = element.style.fontSize
+    const fontWeight = element.style.fontWeight
+    const fontStyle = element.style.fontStyle
+    const textDecoration = element.style.textDecoration || element.style.textDecorationLine
+
+    Array.from(element.attributes).forEach((attribute) => {
+      const name = attribute.name.toLowerCase()
+      if (element.tagName === "A" && name === "href") return
+      element.removeAttribute(attribute.name)
+    })
+
+    if (textAlign) styles.push("text-align: " + textAlign)
+    if (fontFamily && fontFamily.length < 80 && !fontFamily.includes(";")) styles.push("font-family: " + fontFamily)
+    if (fontSize && fontSize.length < 40 && !fontSize.includes(";")) styles.push("font-size: " + fontSize)
+    if (fontWeight && /^(bold|normal|[1-9]00)$/.test(fontWeight)) styles.push("font-weight: " + fontWeight)
+    if (fontStyle && /^(italic|normal)$/.test(fontStyle)) styles.push("font-style: " + fontStyle)
+    if (textDecoration && textDecoration.length < 80 && !textDecoration.includes(";")) styles.push("text-decoration: " + textDecoration)
+
+    if (styles.length > 0) element.setAttribute("style", styles.join("; "))
+  })
+
+  return doc.body.firstElementChild?.innerHTML || fallback
 }
 
 function formatFileSize(size: number) {
@@ -438,7 +559,11 @@ function JudicialCaseDetailContent({
 
   const [manifestSubject, setManifestSubject] = useState("")
   const [manifestRecipients, setManifestRecipients] = useState("")
+  const [additionalManifestRecipients, setAdditionalManifestRecipients] = useState("")
   const [selectedManifestTemplateId, setSelectedManifestTemplateId] = useState("")
+  const [adminEmailTemplates, setAdminEmailTemplates] = useState<any[]>([])
+  const [adminMunicipalityContacts, setAdminMunicipalityContacts] = useState<any[]>([])
+  const [adminJudicialResourcesLoaded, setAdminJudicialResourcesLoaded] = useState(false)
   const [manifestHtml, setManifestHtml] = useState(
     "<p>Prezados,</p><p></p><p>Atenciosamente.</p>",
   )
@@ -457,6 +582,7 @@ function JudicialCaseDetailContent({
   const [fichaModalOpen, setFichaModalOpen] = useState(false)
   const [procedureCidModalOpen, setProcedureCidModalOpen] = useState(false)
   const [notificationModalOpen, setNotificationModalOpen] = useState(false)
+  const [forwardMunicipalityMode, setForwardMunicipalityMode] = useState(false)
   const [historyModalOpen, setHistoryModalOpen] = useState(false)
   const [auditModalOpen, setAuditModalOpen] = useState(false)
   const [municipalityContactsOpen, setMunicipalityContactsOpen] = useState(false)
@@ -487,6 +613,22 @@ function JudicialCaseDetailContent({
   }, [caseId])
 
 
+  function handleMovementTypeChange(value: string) {
+    const nextType = value as MovementType
+
+    if (nextType === "encaminhar_demanda_municipio") {
+      setMovementType("monitoramento")
+      setForwardMunicipalityMode(true)
+      setNotificationModalOpen(true)
+      setSelectedManifestTemplateId("__blank__")
+      applyBlankManifestEditor()
+      setManifestRecipients((prev) => mergeRequiredEmails(prev, requiredMunicipalityEmails))
+      return
+    }
+
+    setMovementType(nextType)
+  }
+
   function handleTabChange(nextTab: string) {
     setActiveTab(nextTab)
 
@@ -502,10 +644,83 @@ function JudicialCaseDetailContent({
     lastTrackedTabRef.current = trackKey
     judicial.trackUiAction("abrir_aba_judicial", user, caseItem.id, nextTab)
   }
+  const municipalityContactsSource =
+    adminJudicialResourcesLoaded
+      ? adminMunicipalityContacts
+      : judicial.municipalityContacts
 
-  const contacts = judicial.municipalityContacts.find(
-    (item) => item.municipalityName === caseItem.municipalityName,
+  const caseMunicipalityKey = normalizeMunicipalityKey(caseItem.municipalityName)
+
+  const contacts = municipalityContactsSource.find(
+    (item) => normalizeMunicipalityKey(item.municipalityName) === caseMunicipalityKey,
   )
+
+  const availableEmailTemplates = adminJudicialResourcesLoaded ? adminEmailTemplates : []
+
+  const requiredMunicipalityEmails = useMemo(
+    () => normalizeEmailList(contacts?.emails ?? []),
+    [contacts],
+  )
+
+  useEffect(() => {
+    let active = true
+
+    async function loadAdminJudicialResources() {
+      try {
+        const [emailResponse, municipalityResponse] = await Promise.all([
+          fetch("/api/admin/judicial/emails", { cache: "no-store" }),
+          fetch("/api/admin/judicial/municipios", { cache: "no-store" }),
+        ])
+
+        const [emailPayload, municipalityPayload] = await Promise.all([
+          emailResponse.json().catch(() => null),
+          municipalityResponse.json().catch(() => null),
+        ])
+
+        if (!active) return
+
+        const emailModels = adminArray(emailPayload)
+          .map((item) => {
+            const record = item as Record<string, unknown>
+            return {
+              id: adminText(record.id),
+              title: adminText(record.title || record.titulo || record.type || record.tipo_template),
+              subject: adminText(record.subject || record.assunto),
+              body: adminText(record.body || record.corpo || record.corpo_html),
+              type: adminText(record.type || record.tipo_template),
+              automaticDispatch: Boolean(record.automaticDispatch || record.disparo_automatico),
+            }
+          })
+          .filter((item) => item.id)
+
+        const municipalityContacts = adminArray(municipalityPayload)
+          .map((item) => {
+            const record = item as Record<string, unknown>
+            return {
+              id: adminText(record.id),
+              municipalityName: adminText(record.municipalityName || record.municipio_nome),
+              emails: adminList(record.emails),
+              phones: adminList(record.phones || record.telefones),
+              contacts: adminList(record.contacts || record.contatos),
+            }
+          })
+          .filter((item) => item.municipalityName)
+
+        setAdminEmailTemplates(emailModels)
+        setAdminMunicipalityContacts(municipalityContacts)
+      } catch (error) {
+        console.error("[JudicialCaseDetail] erro ao carregar modelos/municipios do Admin Judicial:", error)
+      } finally {
+        if (active) setAdminJudicialResourcesLoaded(true)
+      }
+    }
+
+    void loadAdminJudicialResources()
+
+    return () => {
+      active = false
+    }
+  }, [])
 
   const activeFicha =
     [...caseItem.fichas].reverse().find((item) => item.active !== false) ??
@@ -939,10 +1154,10 @@ function JudicialCaseDetailContent({
   )
 
   useEffect(() => {
-    if (contacts && !manifestRecipients) {
-      setManifestRecipients(contacts.emails.join(", "))
+    if (requiredMunicipalityEmails.length > 0) {
+      setManifestRecipients((prev) => mergeRequiredEmails(prev, requiredMunicipalityEmails))
     }
-  }, [contacts, manifestRecipients])
+  }, [requiredMunicipalityEmails])
 
   useEffect(() => {
     if (editorRef.current && editorRef.current.innerHTML !== manifestHtml) {
@@ -1454,29 +1669,120 @@ function JudicialCaseDetailContent({
     setManifestHtml(editorRef.current?.innerHTML || "")
   }
 
-  function handleApplyManifestTemplate() {
-    const template = judicial.emailTemplates.find(
-      (item) => item.id === selectedManifestTemplateId,
-    )
+  function buildManifestTemplateReplacements() {
+    const record = caseItem as unknown as Record<string, unknown>
+    const missing = "N\u00e3o informado"
 
-    if (!template) {
-      toast.error("Selecione um modelo de resposta.")
+    const read = (...keys: string[]) => {
+      for (const key of keys) {
+        const value = record[key]
+
+        if (Array.isArray(value)) {
+          const joined = value.map((item) => adminText(item)).filter(Boolean).join(" / ")
+          if (joined) return joined
+        }
+
+        const text = adminText(value)
+        if (text) return text
+      }
+
+      return ""
+    }
+
+    const protocol =
+      caseItem.originProtocol ||
+      read("protocol", "protocolo", "judicialProtocol", "protocoloJudicial") ||
+      missing
+
+    const processList =
+      processNumbers.join(" / ") ||
+      caseItem.processNumber ||
+      read("numeroProcesso", "processo", "processNumbers", "autosAcao") ||
+      missing
+
+    const pgeNet =
+      adminList(record.pgeNetNumbers).join(" / ") ||
+      read("pgeNetNumber", "pgeNet", "numeroPgeNet", "pge_net") ||
+      missing
+
+    const sigtapCode =
+      read("sigtapCode", "codigoSigtap", "procedureCode", "codigoProcedimento") ||
+      missing
+
+    const sigtapDescription =
+      read("sigtapDescription", "descricaoSigtap", "procedureDescription", "procedimento") ||
+      missing
+
+    const cidCode =
+      read("cid", "cid10", "cidCode", "codigoCid") ||
+      missing
+
+    const cidDescription =
+      read("cidDescription", "descricaoCid") ||
+      missing
+
+    const appointmentDate = caseItem.appointmentDate
+      ? new Date(caseItem.appointmentDate).toLocaleString("pt-BR")
+      : read("dataAgendamento", "appointment", "appointmentDate") || missing
+
+    return {
+      "$modulo": "Judicial",
+      "$protocolo": protocol,
+      "$protocolo_judicial": protocol,
+      "$protocolo_prejudicial": read("preJudicialProtocol", "protocoloPreJudicial") || missing,
+      "$nome_paciente": caseItem.patientName || read("nomePaciente", "patientName") || missing,
+      "$paciente_nome": caseItem.patientName || read("nomePaciente", "patientName") || missing,
+      "$cpf": caseItem.cpf || read("patientCpf", "pacienteCpf") || missing,
+      "$paciente_cpf": caseItem.cpf || read("patientCpf", "pacienteCpf") || missing,
+      "$cns": read("cns", "patientCns", "pacienteCns") || missing,
+      "$paciente_cns": read("cns", "patientCns", "pacienteCns") || missing,
+      "$municipio": caseItem.municipalityName || read("municipio", "municipality") || missing,
+      "$municipio_paciente": caseItem.municipalityName || read("municipio", "municipality") || missing,
+      "$ficha_core": activeFicha?.number || read("fichaCore", "coreFicha") || missing,
+      "$numero_processo": processList,
+      "$processo": processList,
+      "$autos_acao": processList,
+      "$pge_net": pgeNet,
+      "$numero_pge_net": pgeNet,
+      "$numero_oficio": read("oficioNumber", "numeroOficio") || missing,
+      "$oficio": read("oficioNumber", "numeroOficio") || missing,
+      "$data_agendamento": appointmentDate,
+      "$user_sistema": user?.nome || missing,
+      "$codigo_sigtap": sigtapCode,
+      "$sigtap_codigo": sigtapCode,
+      "$descricao_sigtap": sigtapDescription,
+      "$sigtap_descricao": sigtapDescription,
+      "$procedimento": sigtapDescription,
+      "$cid": cidCode,
+      "$cid10": cidCode,
+      "$cid_descricao": cidDescription,
+      "$especialidade": read("specialty", "especialidade") || missing,
+      "$subespecialidade": read("subSpecialty", "subespecialidade") || missing,
+    }
+  }
+
+  function applyBlankManifestEditor() {
+    setManifestSubject("")
+    setManifestHtml("<p></p>")
+    if (editorRef.current) {
+      editorRef.current.innerHTML = "<p></p>"
+    }
+  }
+
+  function applyManifestTemplateById(templateId: string) {
+    if (!templateId || templateId === "__blank__") {
+      applyBlankManifestEditor()
       return
     }
 
-    const replacements = {
-      "$ficha_core": activeFicha?.number || "Não informado",
-      "$cpf": caseItem.cpf || "Não informado",
-      "$nome_paciente": caseItem.patientName || "Não informado",
-      "$numero_processo":
-        processNumbers.join(" / ") || caseItem.processNumber || "Não informado",
-      "$protocolo_judicial": caseItem.originProtocol || "Não informado",
-      "$protocolo_prejudicial": caseItem.originProtocol || "Não informado",
-      "$data_agendamento": caseItem.appointmentDate
-        ? new Date(caseItem.appointmentDate).toLocaleString("pt-BR")
-        : "Não informado",
-      "$user_sistema": user?.nome || "Não informado",
+    const template = availableEmailTemplates.find((item) => item.id === templateId)
+
+    if (!template) {
+      toast.error("Modelo não encontrado.")
+      return
     }
+
+    const replacements = buildManifestTemplateReplacements()
 
     const nextSubject = replaceTemplatePlaceholders(template.subject, replacements)
     const nextHtml = templateBodyToHtml(
@@ -1488,59 +1794,135 @@ function JudicialCaseDetailContent({
     if (editorRef.current) {
       editorRef.current.innerHTML = nextHtml
     }
+  }
+
+  function handleSelectManifestTemplate(templateId: string) {
+    setSelectedManifestTemplateId(templateId)
+    applyManifestTemplateById(templateId)
+  }
+
+  function handleApplyManifestTemplate() {
+    if (!selectedManifestTemplateId) {
+      toast.error("Selecione um modelo de resposta ou EM BRANCO.")
+      return
+    }
+
+    applyManifestTemplateById(selectedManifestTemplateId)
     toast.success("Modelo aplicado na notificação ao município.")
   }
 
-  function handleSendMunicipalityNotification() {
+  async function handleSendMunicipalityNotification(options?: {
+    movementType?: MovementType
+    closeForwardModal?: boolean
+  }) {
     if (!user) return
-    const html = editorRef.current?.innerHTML || manifestHtml
+
+    const requiredRecipients = requiredMunicipalityEmails
+    const extraRecipients = normalizeEmailList(additionalManifestRecipients)
+    const recipients = normalizeEmailList([...requiredRecipients, ...extraRecipients].join(", "))
+
+    setManifestRecipients(requiredRecipients.join(", "))
+    setAdditionalManifestRecipients(extraRecipients.join(", "))
+
+    if (requiredRecipients.length === 0) {
+      toast.error("Município sem e-mail cadastrado no Admin Judicial.")
+      return
+    }
+
     if (!manifestSubject.trim()) {
       toast.error("Informe o assunto da notificação.")
       return
     }
+
+    const rawHtml = editorRef.current?.innerHTML || manifestHtml
+    const html = sanitizeEmailHtml(rawHtml)
+
     if (!htmlHasContent(html)) {
       toast.error("Escreva o conteúdo da notificação.")
       return
     }
 
     const composedHtml = `
-      <p><strong>Destinatários:</strong> ${manifestRecipients || "Não informado"}</p>
-      <p><strong>Assunto:</strong> ${manifestSubject}</p>
+      <p><strong>Destinat&aacute;rios:</strong> ${recipients.map((email) => escapeHtml(email)).join(", ")}</p>
+      <p><strong>Assunto:</strong> ${escapeHtml(manifestSubject.trim())}</p>
       <hr />
       ${html}
     `
 
-    judicial.registerMovement(caseItem.id, {
-      type: "manifestacao_municipio",
-      description: `Notificação enviada ao município. Assunto: ${manifestSubject}`,
-      user,
-      attachments:
-        uploadedManifestFiles.length > 0
-          ? uploadedManifestFiles
-          : splitCommaNames(manifestAttachments),
-    })
+    try {
+      const emailResponse = await fetch("/api/email", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          to: recipients,
+          subject: manifestSubject.trim(),
+          html,
+          text: htmlToText(html),
+        }),
+      })
 
-    judicial.addMunicipalityManifestation(caseItem.id, {
-      description: composedHtml,
-      attachmentNames:
-        uploadedManifestFiles.length > 0
-          ? uploadedManifestFiles
-          : splitCommaNames(manifestAttachments),
-      user,
-    })
+      const emailData = await emailResponse.json().catch(() => ({}))
 
-    toast.success("Notificação registrada para o município.")
-    setManifestSubject("")
-    setManifestHtml("<p>Prezados,</p><p></p><p>Atenciosamente.</p>")
-    setManifestAttachments("")
-    setSelectedManifestFiles(null)
-    setUploadedManifestFiles([])
-    if (editorRef.current) {
-      editorRef.current.innerHTML =
-        "<p>Prezados,</p><p></p><p>Atenciosamente.</p>"
+      if (!emailResponse.ok || emailData?.success === false) {
+        const details = typeof emailData?.details === "string" ? emailData.details : ""
+        throw new Error(emailData?.error || details || "Falha ao enviar e-mail.")
+      }
+
+      const movementResponse = await fetch(
+        `/api/judicial/casos/${encodeURIComponent(caseItem.id)}/movimentacoes`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            type: options?.movementType || (forwardMunicipalityMode ? "encaminhar_demanda_municipio" : "manifestacao_municipio"),
+            description: composedHtml,
+            attachments:
+              uploadedManifestFiles.length > 0
+                ? uploadedManifestFiles
+                : splitCommaNames(manifestAttachments),
+            user,
+          }),
+        },
+      )
+
+      const movementData = await movementResponse.json().catch(() => ({}))
+
+      if (!movementResponse.ok || !movementData?.ok) {
+        throw new Error(movementData?.error || "E-mail enviado, mas houve erro ao salvar a movimentação.")
+      }
+
+      toast.success("E-mail enviado e movimentação registrada.")
+      setManifestSubject("")
+      setManifestHtml("<p>Prezados,</p><p></p><p>Atenciosamente.</p>")
+      setManifestAttachments("")
+      setAdditionalManifestRecipients("")
+      setSelectedManifestFiles(null)
+      setUploadedManifestFiles([])
+      setSelectedManifestTemplateId("")
+      if (editorRef.current) {
+        editorRef.current.innerHTML =
+          "<p>Prezados,</p><p></p><p>Atenciosamente.</p>"
+      }
+
+      if (options?.closeForwardModal || forwardMunicipalityMode) {
+        setForwardMunicipalityMode(false)
+        setNotificationModalOpen(false)
+      }
+
+      window.location.reload()
+    } catch (error) {
+      console.error("[JudicialCaseDetail] erro ao enviar ao município:", error)
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Erro ao enviar e registrar notificação ao município.",
+      )
     }
   }
-
   async function handleFinalizeDemand() {
     if (!user) return
 
@@ -2439,7 +2821,7 @@ function JudicialCaseDetailContent({
                   <select
                     className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                     value={movementType}
-                    onChange={(e) => setMovementType(e.target.value as MovementType)}
+                    onChange={(e) => handleMovementTypeChange(e.target.value)}
                   >
                     {MOVEMENT_OPTIONS.map((item) => (
                       <option key={item} value={item}>
@@ -2845,10 +3227,11 @@ function JudicialCaseDetailContent({
                   <select
                     className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                     value={selectedManifestTemplateId}
-                    onChange={(e) => setSelectedManifestTemplateId(e.target.value)}
+                    onChange={(e) => handleSelectManifestTemplate(e.target.value)}
                   >
                     <option value="">Selecione um modelo salvo no Admin Judicial</option>
-                    {judicial.emailTemplates.map((item) => (
+                    <option value="__blank__">EM BRANCO</option>
+                    {availableEmailTemplates.map((item) => (
                       <option key={item.id} value={item.id}>
                         {item.title}
                       </option>
@@ -2876,7 +3259,11 @@ function JudicialCaseDetailContent({
                   <Label className="mb-1 block text-xs">Destinatários</Label>
                   <Input
                     value={manifestRecipients}
-                    onChange={(e) => setManifestRecipients(e.target.value)}
+                    onChange={(e) =>
+                      setManifestRecipients(
+                        mergeRequiredEmails(e.target.value, requiredMunicipalityEmails),
+                      )
+                    }
                     placeholder="email1@municipio.gov.br, email2@..."
                   />
                 </div>
@@ -2909,6 +3296,39 @@ function JudicialCaseDetailContent({
                     <option value="<p>">Parágrafo</option>
                     <option value="<h2>">Título</option>
                     <option value="<blockquote>">Citação</option>
+                  </select>
+                  <select
+                    className="h-9 rounded-md border border-input bg-background px-2 text-xs"
+                    defaultValue=""
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        runEditorCommand("fontName", e.target.value)
+                        e.currentTarget.value = ""
+                      }
+                    }}
+                  >
+                    <option value="">Fonte</option>
+                    <option value="Arial">Arial</option>
+                    <option value="Times New Roman">Times New Roman</option>
+                    <option value="Verdana">Verdana</option>
+                    <option value="Courier New">Courier New</option>
+                  </select>
+                  <select
+                    className="h-9 rounded-md border border-input bg-background px-2 text-xs"
+                    defaultValue=""
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        runEditorCommand("fontSize", e.target.value)
+                        e.currentTarget.value = ""
+                      }
+                    }}
+                  >
+                    <option value="">Tamanho</option>
+                    <option value="2">Pequeno</option>
+                    <option value="3">Normal</option>
+                    <option value="4">Medio</option>
+                    <option value="5">Grande</option>
+                    <option value="6">Muito grande</option>
                   </select>
                   <Button
                     type="button"
@@ -2945,6 +3365,16 @@ function JudicialCaseDetailContent({
                     size="icon"
                     variant="outline"
                     className="bg-transparent"
+                    title="Tachado"
+                    onClick={() => runEditorCommand("strikeThrough")}
+                  >
+                    <Strikethrough className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="outline"
+                    className="bg-transparent"
                     title="Alinhar à esquerda"
                     onClick={() => runEditorCommand("justifyLeft")}
                   >
@@ -2969,6 +3399,16 @@ function JudicialCaseDetailContent({
                     onClick={() => runEditorCommand("justifyRight")}
                   >
                     <AlignRight className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="outline"
+                    className="bg-transparent"
+                    title="Justificar"
+                    onClick={() => runEditorCommand("justifyFull")}
+                  >
+                    <AlignJustify className="h-4 w-4" />
                   </Button>
                   <Button
                     type="button"
@@ -3273,12 +3713,24 @@ function JudicialCaseDetailContent({
         </DialogContent>
       </Dialog>
 
-      <Dialog open={notificationModalOpen} onOpenChange={setNotificationModalOpen}>
+      <Dialog
+        open={notificationModalOpen}
+        onOpenChange={(open) => {
+          setNotificationModalOpen(open)
+          if (!open) setForwardMunicipalityMode(false)
+        }}
+      >
         <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Notificação/Manifestação do município</DialogTitle>
+            <DialogTitle>
+              {forwardMunicipalityMode
+                ? "ENCAMINHAR DEMANDA AO MUNICÍPIO"
+                : "Notificação/Manifestação do município"}
+            </DialogTitle>
             <DialogDescription>
-              Registre notificação, manifestação e anexos para o município envolvido.
+              {forwardMunicipalityMode
+                ? "Selecione um modelo, edite o texto e envie ao município cadastrado."
+                : "Registre notificação, manifestação e anexos para o município envolvido."}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -3305,10 +3757,11 @@ function JudicialCaseDetailContent({
                     <select
                       className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                       value={selectedManifestTemplateId}
-                      onChange={(e) => setSelectedManifestTemplateId(e.target.value)}
+                      onChange={(e) => handleSelectManifestTemplate(e.target.value)}
                     >
                       <option value="">Selecione um modelo salvo no Admin Judicial</option>
-                      {judicial.emailTemplates.map((item) => (
+                    <option value="__blank__">EM BRANCO</option>
+                      {availableEmailTemplates.map((item) => (
                         <option key={item.id} value={item.id}>
                           {item.title}
                         </option>
@@ -3328,13 +3781,22 @@ function JudicialCaseDetailContent({
                 </div>
 
                 <div className="grid gap-3 md:grid-cols-2">
-                  <div>
-                    <Label className="mb-1 block text-xs">Destinatários</Label>
+                  <div className="space-y-2">
+                    <Label className="mb-1 block text-xs">Destinat&aacute;rio fixo do munic&iacute;pio</Label>
                     <Input
-                      value={manifestRecipients}
-                      onChange={(e) => setManifestRecipients(e.target.value)}
-                      placeholder="email1@municipio.gov.br, email2@..."
+                      value={requiredMunicipalityEmails.join(", ") || "Municipio sem e-mail cadastrado"}
+                      readOnly
+                      className="bg-muted/50"
                     />
+                    <Label className="mb-1 block text-xs">E-mails adicionais</Label>
+                    <Input
+                      value={additionalManifestRecipients}
+                      onChange={(e) => setAdditionalManifestRecipients(e.target.value)}
+                      placeholder="email.extra@municipio.gov.br, outro@email.gov.br"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      O e-mail cadastrado do munic&iacute;pio n&atilde;o pode ser removido. Use este campo apenas para acrescentar outros destinat&aacute;rios.
+                    </p>
                   </div>
                   <div>
                     <Label className="mb-1 block text-xs">Assunto</Label>
@@ -3346,6 +3808,41 @@ function JudicialCaseDetailContent({
                   </div>
                 </div>
 
+
+                <div className="space-y-2 rounded-xl border border-border bg-muted/10 p-3">
+                  <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-background p-2">
+                    <span className="mr-1 text-xs font-semibold uppercase text-muted-foreground">Editor</span>
+                    <select className="h-9 rounded-md border border-input bg-background px-2 text-xs" defaultValue="" onChange={(e) => { if (e.target.value) { runEditorCommand("formatBlock", e.target.value); e.currentTarget.value = "" } }}>
+                      <option value="">Formato</option>
+                      <option value="<p>">Paragrafo</option>
+                      <option value="<h2>">Titulo</option>
+                      <option value="<blockquote>">Citacao</option>
+                    </select>
+                    <select className="h-9 rounded-md border border-input bg-background px-2 text-xs" defaultValue="" onChange={(e) => { if (e.target.value) { runEditorCommand("fontName", e.target.value); e.currentTarget.value = "" } }}>
+                      <option value="">Fonte</option>
+                      <option value="Arial">Arial</option>
+                      <option value="Times New Roman">Times New Roman</option>
+                      <option value="Verdana">Verdana</option>
+                      <option value="Courier New">Courier New</option>
+                    </select>
+                    <select className="h-9 rounded-md border border-input bg-background px-2 text-xs" defaultValue="" onChange={(e) => { if (e.target.value) { runEditorCommand("fontSize", e.target.value); e.currentTarget.value = "" } }}>
+                      <option value="">Tamanho</option>
+                      <option value="2">Pequeno</option>
+                      <option value="3">Normal</option>
+                      <option value="4">Medio</option>
+                      <option value="5">Grande</option>
+                      <option value="6">Muito grande</option>
+                    </select>
+                    <Button type="button" size="icon" variant="outline" className="bg-transparent" title="Negrito" onClick={() => runEditorCommand("bold")}><Bold className="h-4 w-4" /></Button>
+                    <Button type="button" size="icon" variant="outline" className="bg-transparent" title="Italico" onClick={() => runEditorCommand("italic")}><Italic className="h-4 w-4" /></Button>
+                    <Button type="button" size="icon" variant="outline" className="bg-transparent" title="Tachado" onClick={() => runEditorCommand("strikeThrough")}><Strikethrough className="h-4 w-4" /></Button>
+                    <Button type="button" size="icon" variant="outline" className="bg-transparent" title="Sublinhado" onClick={() => runEditorCommand("underline")}><Underline className="h-4 w-4" /></Button>
+                    <Button type="button" size="icon" variant="outline" className="bg-transparent" title="Alinhar a esquerda" onClick={() => runEditorCommand("justifyLeft")}><AlignLeft className="h-4 w-4" /></Button>
+                    <Button type="button" size="icon" variant="outline" className="bg-transparent" title="Centralizar" onClick={() => runEditorCommand("justifyCenter")}><AlignCenter className="h-4 w-4" /></Button>
+                    <Button type="button" size="icon" variant="outline" className="bg-transparent" title="Alinhar a direita" onClick={() => runEditorCommand("justifyRight")}><AlignRight className="h-4 w-4" /></Button>
+                    <Button type="button" size="icon" variant="outline" className="bg-transparent" title="Justificar" onClick={() => runEditorCommand("justifyFull")}><AlignJustify className="h-4 w-4" /></Button>
+                  </div>
+                </div>
                 <div
                   ref={editorRef}
                   contentEditable
@@ -3421,10 +3918,10 @@ function JudicialCaseDetailContent({
                 </div>
 
                 {selectedHistoryItem.description ? (
-                  selectedHistoryItem.html ? (
+                  (selectedHistoryItem.html || /<[^>]+>/.test(selectedHistoryItem.description)) ? (
                     <div
                       className="prose prose-sm max-w-none rounded-xl border border-border bg-muted/20 p-4"
-                      dangerouslySetInnerHTML={{ __html: selectedHistoryItem.description }}
+                      dangerouslySetInnerHTML={{ __html: sanitizeEmailHtml(selectedHistoryItem.description) }}
                     />
                   ) : (
                     <div className="max-h-[60vh] overflow-y-auto rounded-xl border border-border bg-muted/20 p-4">

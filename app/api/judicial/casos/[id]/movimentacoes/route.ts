@@ -169,6 +169,7 @@ function movementTypeLabel(type: string) {
     resolvido: "Resolvido",
     arquivado: "Arquivado",
     manifestacao_municipio: "Manifestação do município",
+    encaminhar_demanda_municipio: "Encaminhamento de Demanda ao Munic\u00edpio",
   }
 
   return labels[type] || type
