@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { requireAdminRequest } from "@/lib/security/server-session"
 import { ensureEmailTriageTables } from "@/lib/email-triage-processing"
 import { prisma } from "@/lib/prisma"
 
@@ -93,6 +94,9 @@ function bodyText(row: Row) {
 }
 
 export async function GET(req: NextRequest) {
+
+  const adminGuard = await requireAdminRequest(req)
+  if (!adminGuard.ok) return adminGuard.response
   try {
     await ensureEmailTriageTables()
     const page = Math.max(1, Number(req.nextUrl.searchParams.get("page") || 1))

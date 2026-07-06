@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { requireAdminRequest } from "@/lib/security/server-session"
 
 type RouteContext = {
   params: Promise<{
@@ -49,7 +50,11 @@ async function ensurePermissionsTable() {
   `)
 }
 
-export async function GET(_: Request, context: RouteContext) {
+export async function GET(request: Request, context: RouteContext) {
+
+  const adminGuard = await requireAdminRequest(request)
+  if (!adminGuard.ok) return adminGuard.response
+
   try {
     const { id } = await context.params
     const perfilId = normalizeText(id)
@@ -107,6 +112,10 @@ export async function GET(_: Request, context: RouteContext) {
 }
 
 export async function PUT(request: Request, context: RouteContext) {
+
+  const adminGuard = await requireAdminRequest(request)
+  if (!adminGuard.ok) return adminGuard.response
+
   try {
     const { id } = await context.params
     const perfilId = normalizeText(id)

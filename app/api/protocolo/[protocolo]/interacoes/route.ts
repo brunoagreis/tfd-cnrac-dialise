@@ -19,12 +19,49 @@ type InteracaoRow = {
   assinaturaUrl: string | null
 }
 
+type AnexoRow = {
+  id: string
+  demandaId: string
+  interacaoId: string | null
+  nome: string
+  tipo: string | null
+  tamanho: number | null
+  categoria: string | null
+  descricao: string | null
+  criadoPor: string | null
+  criadoPorNome: string | null
+  createdAt: string | null
+  arquivoNomeOriginal: string | null
+  arquivoPath: string | null
+  mimeType: string | null
+}
+
 function normalizeText(value: unknown) {
   return String(value ?? "").trim()
 }
 
 function buildId(prefix: string) {
   return `${prefix}${randomUUID().replace(/-/g, "")}`
+}
+
+function mapAnexo(row: AnexoRow) {
+  return {
+    id: row.id,
+    demandaId: row.demandaId,
+    interacaoId: row.interacaoId ?? "",
+    nome: row.nome ?? "",
+    tipo: row.tipo ?? "",
+    tamanho: Number(row.tamanho ?? 0),
+    categoria: row.categoria ?? "outros",
+    descricao: row.descricao ?? "",
+    criadoPor: row.criadoPor ?? "",
+    criadoPorNome: row.criadoPorNome ?? "",
+    criadoEm: row.createdAt ?? "",
+    arquivoNomeOriginal: row.arquivoNomeOriginal ?? "",
+    arquivoPath: row.arquivoPath ?? "",
+    mimeType: row.mimeType ?? "",
+    arquivoUrl: row.arquivoPath ?? "",
+  }
 }
 
 export async function GET(
@@ -73,6 +110,42 @@ export async function GET(
       demanda.id,
     )
 
+    const anexosRows = await prisma.$queryRawUnsafe<AnexoRow[]>(
+      `
+        SELECT
+          a.id::text AS id,
+          a."demandaId"::text AS "demandaId",
+          a."interacaoId"::text AS "interacaoId",
+          a.nome,
+          a.tipo,
+          a.tamanho,
+          a.categoria::text AS categoria,
+          a.descricao,
+          a."criadoPor" AS "criadoPor",
+          a."criadoPorNome" AS "criadoPorNome",
+          a."createdAt"::text AS "createdAt",
+          a."arquivoNomeOriginal" AS "arquivoNomeOriginal",
+          a."arquivoPath" AS "arquivoPath",
+          a."mimeType" AS "mimeType"
+        FROM public.anexos a
+        WHERE a."demandaId" = $1
+          AND a."interacaoId" IS NOT NULL
+        ORDER BY a."createdAt" DESC, a.id DESC
+      `,
+      demanda.id,
+    )
+
+    const anexosPorInteracao = new Map<string, ReturnType<typeof mapAnexo>[]>()
+
+    for (const anexo of anexosRows) {
+      const interacaoId = anexo.interacaoId ?? ""
+      if (!interacaoId) continue
+
+      const current = anexosPorInteracao.get(interacaoId) ?? []
+      current.push(mapAnexo(anexo))
+      anexosPorInteracao.set(interacaoId, current)
+    }
+
     return NextResponse.json({
       ok: true,
       items: rows.map((row) => ({
@@ -80,7 +153,7 @@ export async function GET(
         demandaId: row.demandaId,
         texto: row.texto ?? "",
         pendencia: row.pendencia ?? undefined,
-        anexos: [],
+        anexos: anexosPorInteracao.get(row.id) ?? [],
         criadoEm: row.createdAt ?? "",
         criadoPor: row.createdBy ?? "",
         criadoPorNome: row.createdByName ?? "",

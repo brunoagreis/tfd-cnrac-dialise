@@ -1,0 +1,10 @@
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'b7sl8jwmqc1rvnz57dd6'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'b7sl8jwmqc1rvnz57dd6'
+}

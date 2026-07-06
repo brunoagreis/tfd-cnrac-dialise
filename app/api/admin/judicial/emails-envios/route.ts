@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { requireAdminRequest } from "@/lib/security/server-session"
 import { sendMunicipalityDemandNotification } from "@/lib/municipality-notifications"
 import { ensureMunicipalityEmailDispatchLogTable } from "@/lib/municipality-email-dispatch-log"
 
@@ -213,6 +214,10 @@ function mapRow(row: EmailProtocolRow) {
 }
 
 export async function GET(req: NextRequest) {
+
+  const adminGuard = await requireAdminRequest(req)
+  if (!adminGuard.ok) return adminGuard.response
+
   try {
     const url = new URL(req.url)
     const filters: FilterInput = {
@@ -237,6 +242,10 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+
+  const adminGuard = await requireAdminRequest(req)
+  if (!adminGuard.ok) return adminGuard.response
+
   try {
     const body = await req.json().catch(() => ({}))
     const allFiltered = Boolean(body?.allFiltered)

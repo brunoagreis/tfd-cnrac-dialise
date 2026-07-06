@@ -43,6 +43,8 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { EmailOsPanel } from "@/components/modules/email-os-panel"
+import { useAuth } from "@/lib/auth-context"
+import { getUserPerfilCodigo } from "@/lib/access-control"
 
 const STATUS_CONFIG: Record<
   DemandaStatus,
@@ -109,6 +111,24 @@ function mapStoreDemandaToListItem(
   }
 }
 
+function medicalAssessmentBadgeConfig(value?: string | null) {
+  if (value === "pendente_avaliacao_medica_ses") {
+    return {
+      label: "AGUARDANDO AVALIAÇÃO MÉDICA SES",
+      className: "bg-red-100 text-red-800 border-red-200 text-xs",
+    }
+  }
+
+  if (value === "avaliacao_medica_concluida") {
+    return {
+      label: "AVALIAÇÃO MÉDICA CONCLUÍDA",
+      className: "bg-emerald-100 text-emerald-800 border-emerald-200 text-xs",
+    }
+  }
+
+  return null
+}
+
 function getApiPathByModule(modulo: Module) {
   if (modulo === "tfd") return "/api/tfd/demandas"
   if (modulo === "cnrac") return "/api/cnrac/demandas"
@@ -118,12 +138,21 @@ function getApiPathByModule(modulo: Module) {
 
 export function DemandListing({ modulo, filterByEmail }: DemandListingProps) {
   const store = useStore()
+  const { user } = useAuth()
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState<DemandaStatus | "todos">("pendente")
   const [dateFrom, setDateFrom] = useState("")
   const [dateTo, setDateTo] = useState("")
   const [dbDemandas, setDbDemandas] = useState<DemandListItem[]>([])
   const [loadingDbDemandas, setLoadingDbDemandas] = useState(false)
+
+  const currentPerfilCodigo = getUserPerfilCodigo(user)
+  const currentRole = String((user as any)?.role ?? "").trim().toUpperCase()
+  const isMedicalUser =
+    currentPerfilCodigo === "MEDICO" ||
+    currentPerfilCodigo === "MEDICO_SES" ||
+    currentRole === "MEDICO" ||
+    currentRole === "MEDICO_SES"
 
   useEffect(() => {
     async function fetchModuleDemandas() {
@@ -190,6 +219,8 @@ export function DemandListing({ modulo, filterByEmail }: DemandListingProps) {
 
   const filtered = useMemo(() => {
     return allDemandas.filter((d) => {
+      if (isMedicalUser && d.pendenciaAtual !== "pendente_avaliacao_medica_ses") return false
+
       if (statusFilter !== "todos" && d.status !== statusFilter) return false
 
       if (dateFrom) {
@@ -213,7 +244,7 @@ export function DemandListing({ modulo, filterByEmail }: DemandListingProps) {
 
       return true
     })
-  }, [allDemandas, statusFilter, dateFrom, dateTo, search])
+  }, [allDemandas, statusFilter, dateFrom, dateTo, search, isMedicalUser])
 
   const statusCounts = useMemo(() => {
     const counts: Record<string, number> = { todos: allDemandas.length }
@@ -402,11 +433,18 @@ function DemandRow({ demanda }: { demanda: DemandListItem }) {
           </span>
           <span>{demanda.interacoesCount} interacao(es)</span>
           <span>{demanda.anexosCount} anexo(s)</span>
-          {demanda.pendenciaAtual && (
+          {medicalAssessmentBadgeConfig(demanda.pendenciaAtual) ? (
+            <Badge
+              variant="outline"
+              className={medicalAssessmentBadgeConfig(demanda.pendenciaAtual)!.className}
+            >
+              {medicalAssessmentBadgeConfig(demanda.pendenciaAtual)!.label}
+            </Badge>
+          ) : demanda.pendenciaAtual ? (
             <Badge variant="outline" className="bg-amber-50 text-amber-800 text-xs">
               {PENDENCIA_LABELS[demanda.pendenciaAtual]}
             </Badge>
-          )}
+          ) : null}
         </div>
       </div>
 

@@ -1,0 +1,618 @@
+MAPA ATUAL - MOTIVOS FINALIZAÇÃO JUDICIAL
+Gerado em: 2026-07-06T15:04:11.830Z
+
+================================================================================
+ARQUIVO: app/api/judicial/casos/[id]/finalizacao/route.ts
+================================================================================
+EXISTE
+
+================================================================================
+STATUS_PERMITIDOS
+================================================================================
+   23: const STATUS_PERMITIDOS = [
+   24:   "pendente",
+   25:   "resolvido",
+   26:   "cumprido",
+   27:   "bloqueio",
+   28:   "sequestro",
+   29:   "obito",
+   30:   "arquivado",
+   31:   "devolvida",
+   32: ] as const
+   33: 
+   34: type StatusFinalizacao = (typeof STATUS_PERMITIDOS)[number]
+   35: 
+   36: const STATUS_TERMINAIS = new Set<StatusFinalizacao>([
+   37:   "resolvido",
+   38:   "cumprido",
+   39:   "bloqueio",
+   40:   "sequestro",
+   41:   "obito",
+   42:   "arquivado",
+
+================================================================================
+STATUS_TERMINAIS
+================================================================================
+   36: const STATUS_TERMINAIS = new Set<StatusFinalizacao>([
+   37:   "resolvido",
+   38:   "cumprido",
+   39:   "bloqueio",
+   40:   "sequestro",
+   41:   "obito",
+   42:   "arquivado",
+   43: ])
+   44: 
+   45: function text(value: unknown) {
+   46:   return String(value ?? "").trim()
+   47: }
+   48: 
+   49: function parseMoney(value: unknown) {
+   50:   const raw = text(value)
+   51:   if (!raw) return null
+   52:   const normalized = raw.replace(/\s/g, "").replace(/\./g, "").replace(",", ".")
+   53:   const number = Number(normalized)
+   54:   if (!Number.isFinite(number)) return null
+   55:   return number
+
+================================================================================
+normalizarStatus
+================================================================================
+   64: function normalizarStatus(value: unknown): StatusFinalizacao | null {
+   65:   const status = text(value)
+   66:     .toLowerCase()
+   67:     .normalize("NFD")
+   68:     .replace(/[\u0300-\u036f]/g, "")
+   69: 
+   70:   if (status === "pendente") return "pendente"
+   71:   if (status === "resolvido" || status === "resolver") return "resolvido"
+   72:   if (status === "cumprido" || status === "cumprida") return "cumprido"
+   73:   if (status === "bloqueio") return "bloqueio"
+   74:   if (status === "sequestro") return "sequestro"
+   75:   if (status === "obito") return "obito"
+   76:   if (status === "arquivado") return "arquivado"
+   77:   if (status === "devolvida" || status === "devolvido") return "devolvida"
+   78:   return null
+   79: }
+   80: 
+   81: function statusParaBanco(status: StatusFinalizacao) {
+   82:   if (status === "devolvida") return "DEVOLVIDA"
+   83:   if (status === "arquivado") return "ARQUIVADO"
+   84:   if (status === "obito") return "OBITO"
+   85:   if (status === "cumprido") return "CUMPRIDO"
+   86:   return status.toUpperCase()
+   87: }
+   88: 
+   89: function statusParaTexto(status: StatusFinalizacao) {
+   90:   const labels: Record<StatusFinalizacao, string> = {
+   91:     pendente: "Pendente",
+   92:     resolvido: "Resolvido",
+   93:     cumprido: "Cumprido",
+   94:     bloqueio: "Bloqueio",
+   95:     sequestro: "Sequestro",
+   96:     obito: "Óbito",
+   97:     arquivado: "Arquivado",
+   98:     devolvida: "Devolvida",
+
+================================================================================
+statusParaBanco
+================================================================================
+   81: function statusParaBanco(status: StatusFinalizacao) {
+   82:   if (status === "devolvida") return "DEVOLVIDA"
+   83:   if (status === "arquivado") return "ARQUIVADO"
+   84:   if (status === "obito") return "OBITO"
+   85:   if (status === "cumprido") return "CUMPRIDO"
+   86:   return status.toUpperCase()
+   87: }
+   88: 
+   89: function statusParaTexto(status: StatusFinalizacao) {
+   90:   const labels: Record<StatusFinalizacao, string> = {
+   91:     pendente: "Pendente",
+   92:     resolvido: "Resolvido",
+   93:     cumprido: "Cumprido",
+   94:     bloqueio: "Bloqueio",
+   95:     sequestro: "Sequestro",
+   96:     obito: "Óbito",
+   97:     arquivado: "Arquivado",
+   98:     devolvida: "Devolvida",
+   99:   }
+  100:   return labels[status]
+
+================================================================================
+statusParaTexto
+================================================================================
+   89: function statusParaTexto(status: StatusFinalizacao) {
+   90:   const labels: Record<StatusFinalizacao, string> = {
+   91:     pendente: "Pendente",
+   92:     resolvido: "Resolvido",
+   93:     cumprido: "Cumprido",
+   94:     bloqueio: "Bloqueio",
+   95:     sequestro: "Sequestro",
+   96:     obito: "Óbito",
+   97:     arquivado: "Arquivado",
+   98:     devolvida: "Devolvida",
+   99:   }
+  100:   return labels[status]
+  101: }
+  102: 
+  103: function normalizarPendingLocation(value: unknown) {
+  104:   const local = text(value)
+  105:     .toLowerCase()
+  106:     .normalize("NFD")
+  107:     .replace(/[\u0300-\u036f]/g, "")
+  108:   if (local === "ses") return "ses"
+  109:   if (local === "core") return "core"
+  110:   if (local === "municipio") return "municipio"
+  111:   return ""
+  112: }
+  113: 
+  114: function pendingLocationParaTexto(value: unknown) {
+  115:   const local = normalizarPendingLocation(value)
+  116:   if (local === "ses") return "Pendente SES"
+  117:   if (local === "core") return "Pendente CORE"
+  118:   if (local === "municipio") return "Pendente Município"
+
+================================================================================
+validação de reason
+================================================================================
+  179:     const userEmail = text(body?.user?.email || body?.userEmail).toLowerCase()
+  180:     const userCpf = text(body?.user?.cpf || body?.userCpf)
+  181: 
+  182:     if (!status) {
+  183:       return NextResponse.json({ ok: false, error: "Status de finalização inválido." }, { status: 400 })
+  184:     }
+  185: 
+  186:     if (status === "pendente") {
+  187:       if (!pendingLocation) {
+  188:         return NextResponse.json({ ok: false, error: "Informe onde está pendente: Pendente SES, Pendente CORE ou Pendente Município." }, { status: 400 })
+  189:       }
+  190:       if (!reason) {
+  191:         return NextResponse.json({ ok: false, error: "Justifique a pendência antes de salvar." }, { status: 400 })
+  192:       }
+  193:     }
+  194: 
+  195:     if ((status === "resolvido" || status === "cumprido") && !reason) {
+  196:       return NextResponse.json({ ok: false, error: status === "cumprido" ? "Justifique o cumprimento antes de salvar." : "Justifique a resolução antes de salvar." }, { status: 400 })
+  197:     }
+  198: 
+  199:     if ((status === "obito" || status === "arquivado") && !reason) {
+  200:       return NextResponse.json({ ok: false, error: status === "obito" ? "Justifique o óbito antes de salvar." : "Justifique o arquivamento antes de salvar." }, { status: 400 })
+  201:     }
+  202: 
+  203:     if (status === "bloqueio" || status === "sequestro") {
+
+================================================================================
+ARQUIVO: app/api/judicial/casos/[id]/movimentacoes/route.ts
+================================================================================
+EXISTE
+
+================================================================================
+TERMINAL_MOVEMENT_STATUS
+================================================================================
+   21: const TERMINAL_MOVEMENT_STATUS: Record<string, string> = {
+   22:   cumprimento: "CUMPRIDO",
+   23:   cumprido: "CUMPRIDO",
+   24:   resolvido: "RESOLVIDO",
+   25:   arquivado: "ARQUIVADO",
+   26:   falta_paciente: "FALTA_PACIENTE",
+   27:   obito: "OBITO",
+   28:   bloqueio: "BLOQUEIO",
+   29:   sequestro: "SEQUESTRO",
+   30:   encerramento_processo: "ARQUIVADO",
+   31: }
+   32: 
+   33: function text(value: unknown) {
+   34:   return String(value ?? "").trim()
+   35: }
+   36: 
+   37: function parseMoney(value: unknown) {
+   38:   const raw = text(value)
+   39: 
+   40:   if (!raw) return null
+
+================================================================================
+movementTypeLabel
+================================================================================
+  154: function movementTypeLabel(type: string) {
+  155:   const labels: Record<string, string> = {
+  156:     monitoramento: "Monitoramento",
+  157:     envio_agendamento_demanda: "Envio ao Agendamento da Demanda",
+  158:     agendamento: "Agendamento",
+  159:     solicitacao_inclusao: "Solicitação de inclusão",
+  160:     reiteracao: "Reiteração",
+  161:     descumprimento: "Descumprimento",
+  162:     cumprimento: "Cumprimento",
+  163:     falta_paciente: "Falta do paciente",
+  164:     obito: "Óbito",
+  165:     bloqueio: "Bloqueio",
+  166:     sequestro: "Sequestro",
+  167:     encerramento_processo: "Encerramento do processo",
+  168:     cumprido: "Cumprido",
+  169:     resolvido: "Resolvido",
+  170:     arquivado: "Arquivado",
+  171:     manifestacao_municipio: "Manifestação do município",
+  172:     encaminhar_demanda_municipio: "Encaminhamento de Demanda ao Munic\u00edpio",
+  173:   }
+  174: 
+  175:   return labels[type] || type
+  176: }
+  177: 
+  178: async function findJudicialCase(decodedId: string) {
+  179:   const rows = await prisma.$queryRawUnsafe<JudicialBaseRow[]>(
+  180:     `
+  181:       SELECT
+  182:         b.id::text AS "monitoramentoId",
+  183:         b.demanda_id::text AS "demandaId",
+  184:         b.nome_paciente AS "pacienteNome",
+  185:         COALESCE(d.protocolo::text, b.demanda_id::text) AS protocolo
+  186:       FROM public.judicial_monitoramento_base b
+  187:       LEFT JOIN public.demandas d
+  188:         ON d.id = b.demanda_id
+
+================================================================================
+ARQUIVO: components/modules/judicial-case-detail.tsx
+================================================================================
+EXISTE
+
+================================================================================
+Finalizar demanda
+================================================================================
+ 2595:                   <Badge variant="outline">
+ 2596:                     {FINALIZATION_STATUS_LABELS[caseItem.finalization.status]}
+ 2597:                   </Badge>
+ 2598:                 )}
+ 2599:               </div>
+ 2600: 
+ 2601:               <div>
+ 2602:                 <h1 className="text-2xl font-bold tracking-tight leading-tight">
+ 2603:                   {caseItem.patientName}
+ 2604:                 </h1>
+ 2605: 
+ 2606:                 <div className="mt-1 space-y-0.5 text-sm leading-tight text-muted-foreground">
+ 2607:                   <div className="flex flex-wrap items-center gap-1.5">
+ 2608:                     <span>
+ 2609:                       <span className="font-semibold text-foreground">
+ 2610:                         Protocolo:
+ 2611:                       </span>{" "}
+ 2612:                       {caseItem.originProtocol}
+ 2613:                     </span>
+ 2614:                     <Badge variant="secondary">{currentFinalizationLabel}</Badge>
+ 2615:                     <Button
+ 2616:                       type="button"
+ 2617:                       size="icon"
+ 2618:                       variant="ghost"
+ 2619:                       className="h-6 w-6"
+ 2620:                       title="Finalizar demanda"
+ 2621:                       onClick={() => setFinalizeOpen(true)}
+ 2622:                     >
+ 2623:                       <Edit3 className="h-3 w-3" />
+ 2624:                     </Button>
+ 2625:                   </div>
+ 2626: 
+ 2627:                   <div className="flex flex-wrap items-center gap-1.5">
+ 2628:                     <span>
+ 2629:                       CPF {caseItem.cpf} | CNS: {formatCns(caseItem.patientId)} | Município: {caseItem.municipalityName}
+ 2630:                     </span>
+ 2631:                     <Button
+ 2632:                       type="button"
+ 2633:                       size="icon"
+ 2634:                       variant="ghost"
+ 2635:                       className="h-6 w-6"
+ 2636:                       title="Ver contatos do município"
+ 2637:                       onClick={() => setMunicipalityContactsOpen(true)}
+ 2638:                     >
+ 2639:                       <Info className="h-3 w-3" />
+ 2640:                     </Button>
+ 2641:                     <Button
+ 2642:                       type="button"
+ 2643:                       size="icon"
+ 2644:                       variant="ghost"
+ 2645:                       className="h-6 w-6"
+
+================================================================================
+RESOLVIDO
+================================================================================
+NÃO ENCONTRADO: RESOLVIDO
+
+================================================================================
+Cumprimento
+================================================================================
+  111:     | "core"
+  112:   title: string
+  113:   subtitle?: string
+  114:   description?: string
+  115:   badges?: string[]
+  116:   attachments?: JudicialAttachment[]
+  117:   html?: boolean
+  118: }
+  119: 
+  120: const MOVEMENT_OPTIONS: MovementType[] = [
+  121:   "monitoramento",
+  122:   "encaminhar_demanda_municipio",
+  123:   "envio_agendamento_demanda",
+  124:   "agendamento",
+  125:   "solicitacao_inclusao",
+  126:   "reiteracao",
+  127:   "descumprimento",
+  128:   "cumprimento",
+  129:   "falta_paciente",
+  130:   "obito",
+  131:   "bloqueio",
+  132:   "sequestro",
+  133:   "encerramento_processo",
+  134: ]
+  135: const CLOSE_REASONS = [
+  136:   "Cumprimento da decisão",
+  137:   "Perda do objeto",
+  138:   "Óbito do paciente",
+  139:   "Inércia do município",
+  140:   "Determinação judicial revogada",
+  141:   "Duplicidade de cadastro",
+  142:   "Outros",
+  143: ]
+  144: 
+  145: function mergeCommaNames(currentValue: string, newNames: string[]) {
+  146:   const current = currentValue
+  147:     .split(",")
+  148:     .map((item) => item.trim())
+  149:     .filter(Boolean)
+  150: 
+  151:   const merged = [...current]
+  152: 
+  153:   for (const name of newNames) {
+  154:     if (!merged.includes(name)) merged.push(name)
+  155:   }
+  156: 
+  157:   return merged.join(", ")
+  158: }
+  159: 
+  160: function splitCommaNames(value: string) {
+  161:   return value
+
+================================================================================
+movementType
+================================================================================
+  488: 
+  489:   if (!caseItem) {
+  490:     return (
+  491:       <div className="rounded-xl border border-dashed border-border p-12 text-center text-muted-foreground">
+  492:         {caseError || "Processo judicial não encontrado."}
+  493:       </div>
+  494:     )
+  495:   }
+  496: 
+  497:   return <JudicialCaseDetailContent caseId={caseId} caseItem={caseItem} />
+  498: }
+  499: 
+  500: function JudicialCaseDetailContent({
+  501:   caseId,
+  502:   caseItem,
+  503: }: {
+  504:   caseId: string
+  505:   caseItem: JudicialCase
+  506: }) {
+  507:   const { user } = useAuth()
+  508:   const judicial = useJudicial()
+  509: 
+  510:   const editorRef = useRef<HTMLDivElement | null>(null)
+  511:   const lastTrackedTabRef = useRef<string>("")
+  512: 
+  513:   const [movementType, setMovementType] = useState<MovementType>("monitoramento")
+  514:   const [description, setDescription] = useState("")
+  515:   const [stateAmount, setStateAmount] = useState("")
+  516:   const [municipalityAmount, setMunicipalityAmount] = useState("")
+  517:   const [appointmentDate, setAppointmentDate] = useState("")
+  518:   const [responseRequestedAt, setResponseRequestedAt] = useState("")
+  519:   const [closeReason, setCloseReason] = useState("")
+  520:   const [attachmentNames, setAttachmentNames] = useState("")
+  521: 
+  522:   const [selectedMovementFiles, setSelectedMovementFiles] = useState<FileList | null>(null)
+  523:   const [uploadedMovementFiles, setUploadedMovementFiles] = useState<UploadedFileMeta[]>([])
+  524:   const [uploadingMovement, setUploadingMovement] = useState(false)
+  525: 
+  526:   const [procedureSearch, setProcedureSearch] = useState("")
+  527:   const [procedureOptions, setProcedureOptions] = useState<SigtapOption[]>([])
+  528:   const [loadingProcedures, setLoadingProcedures] = useState(false)
+  529:   const [specialtyOptions, setSpecialtyOptions] = useState<SpecialtyOption[]>([])
+  530:   const [subSpecialtyOptions, setSubSpecialtyOptions] = useState<SubSpecialtyOption[]>([])
+  531:   const [loadingSpecialties, setLoadingSpecialties] = useState(false)
+  532:   const [loadingSubSpecialties, setLoadingSubSpecialties] = useState(false)
+  533:   const [cidSearch, setCidSearch] = useState("")
+  534:   const [cidOptions, setCidOptions] = useState<CidOption[]>([])
+  535:   const [loadingCids, setLoadingCids] = useState(false)
+  536:   const [selectedProcedure, setSelectedProcedure] = useState("")
+  537:   const [selectedProcedureSpecialty, setSelectedProcedureSpecialty] = useState("")
+  538:   const [selectedProcedureSubSpecialty, setSelectedProcedureSubSpecialty] = useState("")
+
+================================================================================
+ARQUIVO: lib/judicial-types.ts
+================================================================================
+EXISTE
+
+================================================================================
+MOVEMENT_TYPES
+================================================================================
+   15: export const MOVEMENT_TYPES = [
+   16:   "monitoramento",
+   17:   "descumprimento",
+   18:   "sequestro",
+   19:   "bloqueio",
+   20:   "agendamento",
+   21:   "manifestacao_municipio",
+   22:   "encaminhar_demanda_municipio",
+   23:   "solicitacao_inclusao",
+   24:   "reiteracao",
+   25:   "envio_agendamento_demanda",
+   26:   "reserva_agendamento",
+   27:   "nao_agendado",
+   28:   "cumprimento",
+   29:   "falta_paciente",
+   30:   "obito",
+   31:   "encerramento_inercia",
+   32:   "encerramento_processo",
+   33:   "reabertura",
+   34:   "retorno_fluxo_automatico",
+   35:   "monitoramento_automatico_core",
+   36: ] as const
+   37: export type MovementType = (typeof MOVEMENT_TYPES)[number]
+   38: 
+   39: export const QUEUE_REASONS = [
+   40:   "monitoramento",
+   41:   "1_reiteracao_municipio",
+   42:   "2_reiteracao_municipio",
+   43:   "3_reiteracao_municipio",
+   44:   "inercia_municipio",
+   45:   "obrigacao_municipio",
+   46:   "nao_sus",
+   47:   "transferencia",
+   48:   "paciente_agendado_verificar",
+   49:   "confirmacao_core_automatica",
+
+================================================================================
+MOVEMENT_TYPE_LABELS
+================================================================================
+  340: export const MOVEMENT_TYPE_LABELS: Record<MovementType, string> = {
+  341:   monitoramento: "Monitoramento",
+  342:   descumprimento: "Descumprimento",
+  343:   sequestro: "Sequestro",
+  344:   bloqueio: "Bloqueio",
+  345:   agendamento: "Agendamento",
+  346:   manifestacao_municipio: "Manifestação do município",
+  347:   encaminhar_demanda_municipio: "Encaminhamento de Demanda ao Munic\u00edpio",
+  348:   solicitacao_inclusao: "Solicitação de inclusão",
+  349:   reiteracao: "Reiteração",
+  350:   envio_agendamento_demanda: "Envio para agendamento da demanda",
+  351:   reserva_agendamento: "Reserva de agendamento",
+  352:   nao_agendado: "Não agendado",
+  353:   cumprimento: "Cumprimento",
+  354:   falta_paciente: "Falta do paciente",
+  355:   obito: "Óbito",
+  356:   encerramento_inercia: "Encerramento por inércia",
+  357:   encerramento_processo: "Encerramento do processo",
+  358:   reabertura: "Reabertura",
+  359:   retorno_fluxo_automatico: "Retorno ao fluxo automático",
+  360:   monitoramento_automatico_core: "Monitoramento automático CORE",
+  361: }
+  362: 
+
+================================================================================
+JudicialFinalization
+================================================================================
+  153: export interface JudicialFinalization {
+  154:   status: "pendente" | "resolvido" | "bloqueio" | "sequestro" | "obito" | "devolvida"
+  155:   createdAt: string
+  156:   createdById: string
+  157:   createdByName: string
+  158:   pendingLocation?: "ses" | "core" | "municipio"
+  159:   reason?: string
+  160: }
+  161: 
+  162: export interface MunicipalityManifestation {
+  163:   id: string
+  164:   createdAt: string
+  165:   createdByName: string
+  166:   description: string
+  167:   attachments: JudicialAttachment[]
+  168: }
+  169: 
+  170: export interface CoreHistoryEntry {
+  171:   id: string
+  172:   table: CoreTable
+
+================================================================================
+ARQUIVO: components/modules/judicial-types.ts
+================================================================================
+EXISTE
+
+================================================================================
+MOVEMENT_TYPES
+================================================================================
+   15: export const MOVEMENT_TYPES = [
+   16:   "monitoramento",
+   17:   "descumprimento",
+   18:   "sequestro",
+   19:   "bloqueio",
+   20:   "agendamento",
+   21:   "manifestacao_municipio",
+   22:   "solicitacao_inclusao",
+   23:   "reiteracao",
+   24:   "envio_agendamento_demanda",
+   25:   "reserva_agendamento",
+   26:   "nao_agendado",
+   27:   "cumprimento",
+   28:   "falta_paciente",
+   29:   "obito",
+   30:   "encerramento_inercia",
+   31:   "reabertura",
+   32:   "retorno_fluxo_automatico",
+   33:   "monitoramento_automatico_core",
+   34:   "encerramento",
+   35: ] as const
+   36: export type MovementType = (typeof MOVEMENT_TYPES)[number]
+   37: 
+   38: export const QUEUE_REASONS = [
+   39:   "monitoramento",
+   40:   "1_reiteracao_municipio",
+   41:   "2_reiteracao_municipio",
+   42:   "3_reiteracao_municipio",
+   43:   "inercia_municipio",
+   44:   "obrigacao_municipio",
+   45:   "nao_sus",
+   46:   "transferencia",
+   47:   "paciente_agendado_verificar",
+   48:   "confirmacao_core_automatica",
+   49: ] as const
+
+================================================================================
+MOVEMENT_TYPE_LABELS
+================================================================================
+  278: export const MOVEMENT_TYPE_LABELS: Record<MovementType, string> = {
+  279:   monitoramento: "Monitoramento",
+  280:   descumprimento: "Descumprimento",
+  281:   sequestro: "Sequestro",
+  282:   bloqueio: "Bloqueio",
+  283:   agendamento: "Agendamento",
+  284:   manifestacao_municipio: "Manifestação do Município",
+  285:   solicitacao_inclusao: "Solicitação de Inclusão",
+  286:   reiteracao: "Reiteração",
+  287:   envio_agendamento_demanda: "Envio para Agendamento da Demanda",
+  288:   reserva_agendamento: "Reserva de Agendamento",
+  289:   nao_agendado: "Não Agendado",
+  290:   cumprimento: "Cumprimento",
+  291:   falta_paciente: "Falta do Paciente",
+  292:   obito: "Óbito",
+  293:   encerramento_inercia: "Encerramento por Inércia do Município",
+  294:   encerramento: "Encerramento do Processo",
+  295:   reabertura: "Reabertura",
+  296:   retorno_fluxo_automatico: "Retorno ao Fluxo Automático",
+  297:   monitoramento_automatico_core: "Monitoramento Automático CORE",
+  298: }
+  299: 
+  300: export const SYSTEM_LABELS: Record<JudicialSystem, string> = {
+  301:   CORE: "CORE",
+  302:   SISREG: "SISREG",
+  303:   OUTRO: "Outro",
+  304: }
+  305: 
+  306: export const CORE_TABLE_LABELS: Record<CoreTable, string> = {
+  307:   core_ambulatorial: "CORE Ambulatorial",
+  308:   core_leito: "CORE Leito",
+  309:   core_urgencia: "CORE Urgência",
+  310: }
+  311: 
+  312: export const SCHEDULING_STATUS_LABELS: Record<SchedulingStatus, string> = {
+  313:   fora_fila: "Fora da fila",
+  314:   pendente: "Pendente",
+  315:   reservado: "Reservado",
+  316: }
+  317: 
+
+================================================================================
+JudicialFinalization
+================================================================================
+NÃO ENCONTRADO: export interface JudicialFinalization
+
+================================================================================
+SCRIPTS TEMPORÁRIOS EXISTENTES
+================================================================================
+__incluir_motivos_finalizacao_judicial.cjs
+__incluir_motivos_finalizacao_judicial_v2.cjs

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import bcrypt from "bcryptjs"
 import { prisma } from "@/lib/prisma"
+import { requireAdminRequest } from "@/lib/security/server-session"
 
 const DEFAULT_UNIT_PASSWORD = process.env.DEFAULT_UNIT_PASSWORD || "unidade123"
 
@@ -29,6 +30,10 @@ function serializeUnit(unit: {
 }
 
 export async function GET(request: Request) {
+
+  const adminGuard = await requireAdminRequest(request)
+  if (!adminGuard.ok) return adminGuard.response
+
   try {
     const { searchParams } = new URL(request.url)
     const q = normalizeText(searchParams.get("q"))
@@ -71,6 +76,10 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+
+  const adminGuard = await requireAdminRequest(request)
+  if (!adminGuard.ok) return adminGuard.response
+
   try {
     const body = await request.json()
 
@@ -175,6 +184,10 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
+
+  const adminGuard = await requireAdminRequest(request)
+  if (!adminGuard.ok) return adminGuard.response
+
   try {
     const body = await request.json()
 

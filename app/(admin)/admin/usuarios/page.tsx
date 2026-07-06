@@ -196,6 +196,21 @@ function isUnitProfile(value: unknown) {
   return code === "UNIDADE" || code === "UNIDADE_HOSPITALAR"
 }
 
+function isProfessionalCouncilProfile(value: unknown) {
+  const code = normalizeCode(value)
+
+  return (
+    code === "MEDICO" ||
+    code === "MEDICO_SES" ||
+    code === "ENFERMEIRO" ||
+    code === "ENFERMAGEM"
+  )
+}
+
+function sanitizeProfessionalRegistration(value: unknown) {
+  return String(value ?? "").replace(/[^\d.]/g, "")
+}
+
 function normalizeUser(item: any): UiUser {
   const perfilCodigo = normalizeCode(
     item?.perfilCodigo || item?.role || item?.perfil?.codigo,
@@ -413,6 +428,19 @@ export default function UsuariosPage() {
       return
     }
 
+    const requiresProfessionalRegistration = isProfessionalCouncilProfile(form.perfilCodigo)
+    const professionalRegistration = sanitizeProfessionalRegistration(form.cargo)
+
+    if (requiresProfessionalRegistration && !professionalRegistration) {
+      toast.error("Informe Cargo, CRM, COREN.")
+      return
+    }
+
+    if (requiresProfessionalRegistration && professionalRegistration !== form.cargo.trim()) {
+      toast.error("Cargo, CRM, COREN aceita apenas números e ponto.")
+      return
+    }
+
     if (isUnitProfile(form.perfilCodigo) && !form.unidadeId) {
       toast.error("Selecione a unidade do usuário.")
       return
@@ -430,7 +458,9 @@ export default function UsuariosPage() {
           nome: form.nome,
           email: form.email,
           telefone: form.telefone || null,
-          cargo: form.cargo || null,
+          cargo: isProfessionalCouncilProfile(form.perfilCodigo)
+            ? sanitizeProfessionalRegistration(form.cargo)
+            : form.cargo || null,
           senha: form.senha,
           perfilCodigo: form.perfilCodigo,
           role: form.perfilCodigo,
@@ -871,13 +901,26 @@ export default function UsuariosPage() {
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="usuario-cargo">Cargo</Label>
+              <Label htmlFor="usuario-cargo">Cargo, CRM, COREN</Label>
               <Input
                 id="usuario-cargo"
                 value={form.cargo}
-                onChange={(event) => updateForm("cargo", event.target.value)}
-                placeholder="Opcional"
+                onChange={(event) =>
+                  updateForm(
+                    "cargo",
+                    isProfessionalCouncilProfile(form.perfilCodigo)
+                      ? sanitizeProfessionalRegistration(event.target.value)
+                      : event.target.value,
+                  )
+                }
+                placeholder="Cargo, CRM, COREN"
+                inputMode={isProfessionalCouncilProfile(form.perfilCodigo) ? "decimal" : undefined}
               />
+              {isProfessionalCouncilProfile(form.perfilCodigo) ? (
+                <p className="text-xs text-muted-foreground">
+                  Obrigatório para Médico/Enfermeiro. Use apenas números e ponto.
+                </p>
+              ) : null}
             </div>
 
             <div className="flex flex-col gap-1.5">
@@ -886,6 +929,10 @@ export default function UsuariosPage() {
                 value={form.perfilCodigo}
                 onValueChange={(value) => {
                   updateForm("perfilCodigo", value)
+
+                  if (isProfessionalCouncilProfile(value)) {
+                    updateForm("cargo", sanitizeProfessionalRegistration(form.cargo))
+                  }
 
                   if (!isUnitProfile(value)) {
                     updateForm("unidadeId", "")

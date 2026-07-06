@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { requireAdminRequest } from "@/lib/security/server-session"
 import {
   listMunicipalityPortalAccesses,
   setMunicipalityAccessActive,
@@ -12,7 +13,11 @@ function text(value: unknown) {
   return String(value ?? "").trim()
 }
 
-export async function GET() {
+export async function GET(req: Request) {
+
+  const adminGuard = await requireAdminRequest(req)
+  if (!adminGuard.ok) return adminGuard.response
+
   try {
     const items = await listMunicipalityPortalAccesses()
     return NextResponse.json({ ok: true, items })
@@ -26,6 +31,10 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+
+  const adminGuard = await requireAdminRequest(req)
+  if (!adminGuard.ok) return adminGuard.response
+
   try {
     const body = await req.json().catch(() => ({}))
     const id = text(body?.id)

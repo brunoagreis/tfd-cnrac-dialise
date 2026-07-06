@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { requireAdminRequest } from "@/lib/security/server-session"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -52,6 +53,10 @@ async function ensureManualAssignmentTable() {
 }
 
 export async function GET(req: NextRequest) {
+
+  const adminGuard = await requireAdminRequest(req)
+  if (!adminGuard.ok) return adminGuard.response
+
   try {
     const field = text(req.nextUrl.searchParams.get("field")).toLowerCase()
     const q = text(req.nextUrl.searchParams.get("q"))

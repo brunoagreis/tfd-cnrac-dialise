@@ -1,0 +1,34 @@
+Error: Socket timeout
+    at TLSSocket.<anonymous> (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\[root-of-the-server]__56dd5725._.js:2:137983) {
+  code: 'ETIMEOUT',
+  _connId: '1dxofkne2pt7j5sy2if3'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at TLSSocket.<anonymous> (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\[root-of-the-server]__56dd5725._.js:2:137983) {
+  code: 'ETIMEOUT',
+  _connId: '1dxofkne2pt7j5sy2if3'
+}
+[email-integracao/processar] erro assíncrono: Error: Connection not available
+    at L.createNoConnectionError (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\[root-of-the-server]__56dd5725._.js:2:152269)
+    at t (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\[root-of-the-server]__56dd5725._.js:2:153498)
+    at L.close (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\[root-of-the-server]__56dd5725._.js:2:153566)
+    at Immediate.<anonymous> (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\[root-of-the-server]__56dd5725._.js:2:152227) {
+  code: 'NoConnection'
+}
+Error: Socket timeout
+    at TLSSocket.<anonymous> (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\[root-of-the-server]__56dd5725._.js:2:137983) {
+  code: 'ETIMEOUT',
+  _connId: 'ot5ktcple3g5fwc5mo6o'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at TLSSocket.<anonymous> (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\[root-of-the-server]__56dd5725._.js:2:137983) {
+  code: 'ETIMEOUT',
+  _connId: 'ot5ktcple3g5fwc5mo6o'
+}
+[email-integracao/processar] erro assíncrono: Error: Connection not available
+    at L.createNoConnectionError (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\[root-of-the-server]__56dd5725._.js:2:152269)
+    at t (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\[root-of-the-server]__56dd5725._.js:2:153498)
+    at L.close (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\[root-of-the-server]__56dd5725._.js:2:153566)
+    at Immediate.<anonymous> (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\[root-of-the-server]__56dd5725._.js:2:152227) {
+  code: 'NoConnection'
+}

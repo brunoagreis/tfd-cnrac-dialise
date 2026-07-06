@@ -126,6 +126,8 @@ const MOVEMENT_OPTIONS: MovementType[] = [
   "reiteracao",
   "descumprimento",
   "cumprimento",
+  "procedimento_nao_sus",
+  "competencia_municipio",
   "falta_paciente",
   "obito",
   "bloqueio",
@@ -352,6 +354,8 @@ const PROCESS_STATUS_LABELS = {
 const FINALIZATION_STATUS_LABELS = {
   pendente: "Pendente",
   resolvido: "Resolvido",
+  competencia_municipio: "Competência do Município",
+  nao_sus: "Não SUS",
   cumprido: "Cumprido",
   bloqueio: "Bloqueio",
   sequestro: "Sequestro",
@@ -988,6 +992,7 @@ function JudicialCaseDetailContent({
         title: MOVEMENT_TYPE_LABELS[item.type],
         subtitle: item.createdByName,
         description: item.description,
+        html: /<[^>]+>/.test(item.description),
         badges: [
           item.appointmentDate
             ? `Agendamento: ${new Date(item.appointmentDate).toLocaleString("pt-BR")}`
@@ -1496,6 +1501,14 @@ function JudicialCaseDetailContent({
           },
           body: JSON.stringify({
             reason: reason.trim() || undefined,
+            sigtapCode: item.sigtapCode,
+            codigo: item.sigtapCode,
+            description: item.description,
+            descricao: item.description,
+            specialty: item.specialty,
+            especialidade: item.specialty,
+            subSpecialty: item.subSpecialty,
+            subespecialidade: item.subSpecialty,
             user,
           }),
         },
@@ -1938,8 +1951,8 @@ function JudicialCaseDetailContent({
       }
     }
 
-    if ((finalizeStatus === "resolvido" || finalizeStatus === "cumprido") && !finalizeReason.trim()) {
-      toast.error(finalizeStatus === "cumprido" ? "Justifique o cumprimento." : "Justifique a resolução.")
+    if ((["resolvido", "cumprido", "nao_sus", "competencia_municipio"].includes(finalizeStatus)) && !finalizeReason.trim()) {
+      toast.error(finalizeStatus === "cumprido" ? "Justifique o cumprimento." : "Justifique a finalização.")
       return
     }
 
@@ -2473,16 +2486,18 @@ function JudicialCaseDetailContent({
                     {item.subtitle ? ` • ${item.subtitle}` : ""}
                   </p>
 
-                  {item.description && !item.html && (
+                  {item.description && !(item.html || /<[^>]+>/.test(item.description)) && (
                     <p className="mt-2 whitespace-pre-line text-sm leading-6">
                       {item.description}
                     </p>
                   )}
 
-                  {item.description && item.html && (
+                  {item.description && (item.html || /<[^>]+>/.test(item.description)) && (
                     <div
                       className="mt-2 text-sm leading-6"
-                      dangerouslySetInnerHTML={{ __html: item.description }}
+                      dangerouslySetInnerHTML={{
+                        __html: sanitizeEmailHtml(item.description),
+                      }}
                     />
                   )}
 
@@ -3012,16 +3027,11 @@ function JudicialCaseDetailContent({
                       {item.subtitle ? ` • ${item.subtitle}` : ""}
                     </p>
                     {item.description && (
-                      item.html ? (
-                        <div
-                          className="prose prose-sm mt-1 line-clamp-4 max-w-none text-sm text-muted-foreground"
-                          dangerouslySetInnerHTML={{ __html: item.description }}
-                        />
-                      ) : (
-                        <p className="mt-1 line-clamp-4 whitespace-pre-line text-sm text-muted-foreground">
-                          {item.description}
-                        </p>
-                      )
+                      <p className="mt-1 line-clamp-4 whitespace-pre-line text-sm text-muted-foreground">
+                        {/<[^>]+>/.test(item.description)
+                          ? htmlToText(sanitizeEmailHtml(item.description))
+                          : item.description}
+                      </p>
                     )}
                     {item.description && (
                       <Button
@@ -3531,7 +3541,7 @@ function JudicialCaseDetailContent({
                     {/<[^>]+>/.test(item.description) ? (
                       <div
                         className="prose prose-sm mt-3 max-w-none"
-                        dangerouslySetInnerHTML={{ __html: item.description }}
+                        dangerouslySetInnerHTML={{ __html: sanitizeEmailHtml(item.description) }}
                       />
                     ) : (
                       <p className="mt-2 text-sm text-muted-foreground">
@@ -3587,7 +3597,7 @@ function JudicialCaseDetailContent({
                     (item.html ? (
                       <div
                         className="prose prose-sm mt-2 max-w-none"
-                        dangerouslySetInnerHTML={{ __html: item.description }}
+                        dangerouslySetInnerHTML={{ __html: sanitizeEmailHtml(item.description) }}
                       />
                     ) : (
                       <p className="mt-2 text-sm text-muted-foreground">
@@ -3984,7 +3994,7 @@ function JudicialCaseDetailContent({
                   (item.html ? (
                     <div
                       className="prose prose-sm mt-2 max-w-none"
-                      dangerouslySetInnerHTML={{ __html: item.description }}
+                      dangerouslySetInnerHTML={{ __html: sanitizeEmailHtml(item.description) }}
                     />
                   ) : (
                     <p className="mt-2 whitespace-pre-line text-sm text-muted-foreground">
@@ -4377,6 +4387,8 @@ function JudicialCaseDetailContent({
                   [
                     "pendente",
                     "resolvido",
+                    "nao_sus",
+                    "competencia_municipio",
                     "cumprido",
                     "bloqueio",
                     "sequestro",
@@ -4441,7 +4453,7 @@ function JudicialCaseDetailContent({
               </div>
             )}
 
-            {(finalizeStatus === "resolvido" || finalizeStatus === "cumprido") && (
+            {(["resolvido", "cumprido", "nao_sus", "competencia_municipio"].includes(finalizeStatus)) && (
               <div>
                 <Label className="mb-1 block text-xs">
                   Justificativa obrigatória

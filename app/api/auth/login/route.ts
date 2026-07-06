@@ -2,6 +2,8 @@ import { NextResponse } from "next/server"
 import bcrypt from "bcryptjs"
 import { prisma } from "@/lib/prisma"
 
+import { checkLoginRateLimit, clearSuccessfulLoginAttempts, delayInvalidLogin, registerFailedLogin } from "@/lib/security/login-rate-limit"
+import { createServerSessionCookieValue, getServerSessionCookieOptions, SESSION_COOKIE_NAME } from "@/lib/security/server-session"
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
@@ -209,6 +211,20 @@ export async function POST(req: Request) {
       )
     }
 
+    const rateLimit = await checkLoginRateLimit(req, email)
+
+    if (rateLimit.blocked) {
+      return NextResponse.json(
+        { ok: false, error: "Muitas tentativas de login. Tente novamente mais tarde." },
+        {
+          status: 429,
+          headers: {
+            "Retry-After": String(rateLimit.retryAfterSeconds),
+          },
+        },
+      )
+    }
+
     const columns = await getUsuariosColumns()
 
     const idCol = pickFirstExisting(["id"], columns)
@@ -283,6 +299,9 @@ export async function POST(req: Request) {
     const user = users[0]
 
     if (!user) {
+      await registerFailedLogin(req, email)
+      await delayInvalidLogin()
+
       return NextResponse.json(
         { ok: false, error: "Credenciais inválidas." },
         { status: 401 },
@@ -290,9 +309,12 @@ export async function POST(req: Request) {
     }
 
     if (user.ativo === false) {
+      await registerFailedLogin(req, email)
+      await delayInvalidLogin()
+
       return NextResponse.json(
-        { ok: false, error: "Usuário inativo." },
-        { status: 403 },
+        { ok: false, error: "Credenciais inválidas." },
+        { status: 401 },
       )
     }
 
@@ -306,11 +328,16 @@ export async function POST(req: Request) {
     }
 
     if (!senhaOk) {
+      await registerFailedLogin(req, email)
+      await delayInvalidLogin()
+
       return NextResponse.json(
         { ok: false, error: "Credenciais inválidas." },
         { status: 401 },
       )
     }
+
+    await clearSuccessfulLoginAttempts(req, email)
 
     if (columns.has("ultimoLoginEm")) {
       await prisma.$executeRawUnsafe(
@@ -330,7 +357,7 @@ export async function POST(req: Request) {
       ? await assignJudicialMonitoringOnLogin(user)
       : null
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       ok: true,
       user: {
         id: user.id,
@@ -347,6 +374,21 @@ export async function POST(req: Request) {
       },
       monitoramento,
     })
+
+    response.cookies.set(
+      SESSION_COOKIE_NAME,
+      createServerSessionCookieValue({
+        id: user.id,
+        nome: user.nome,
+        email: user.email,
+        role: uiRole,
+        perfilCodigo: user.perfilCodigo || uiRole,
+        unidadeId: user.unidadeId,
+      }),
+      getServerSessionCookieOptions(req),
+    )
+
+    return response
   } catch (error) {
     console.error("LOGIN_ERROR", error)
 

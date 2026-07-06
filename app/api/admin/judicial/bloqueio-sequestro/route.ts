@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { requireAdminRequest } from "@/lib/security/server-session"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -37,7 +38,11 @@ function statusLabel(value: unknown) {
   return text(value) || "Não informado"
 }
 
-export async function GET() {
+export async function GET(req: Request) {
+
+  const adminGuard = await requireAdminRequest(req)
+  if (!adminGuard.ok) return adminGuard.response
+
   try {
     const rows = await prisma.$queryRawUnsafe<ReportRow[]>(
       `

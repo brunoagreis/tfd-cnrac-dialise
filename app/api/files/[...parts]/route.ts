@@ -1,7 +1,7 @@
 import fs from "fs/promises"
 import path from "path"
 import { NextResponse } from "next/server"
-import { resolveFromRelative } from "@/lib/protocol-storage"
+import { resolveFromRelative, STORAGE_ROOT } from "@/lib/protocol-storage"
 
 export const runtime = "nodejs"
 
@@ -19,6 +19,33 @@ function contentTypeByExt(filePath: string) {
   return "application/octet-stream"
 }
 
+function resolvePublicUpload(relativePath: string) {
+  const normalized = relativePath.split("/").join(path.sep)
+  const publicRoot = path.join(process.cwd(), "public")
+  const full = path.join(publicRoot, normalized)
+
+  const safeRoot = path.resolve(publicRoot)
+  const safeFull = path.resolve(full)
+
+  if (!safeFull.startsWith(safeRoot)) {
+    throw new Error("Caminho inválido.")
+  }
+
+  return safeFull
+}
+
+async function findReadableFile(relativePath: string) {
+  if (relativePath.startsWith("uploads/")) {
+    const publicPath = resolvePublicUpload(relativePath)
+    await fs.access(publicPath)
+    return publicPath
+  }
+
+  const storagePath = resolveFromRelative(relativePath)
+  await fs.access(storagePath)
+  return storagePath
+}
+
 export async function GET(
   req: Request,
   context: { params: Promise<{ parts: string[] }> },
@@ -34,7 +61,7 @@ export async function GET(
       )
     }
 
-    const fullPath = resolveFromRelative(relativePath)
+    const fullPath = await findReadableFile(relativePath)
     const fileBuffer = await fs.readFile(fullPath)
     const stat = await fs.stat(fullPath)
     const url = new URL(req.url)

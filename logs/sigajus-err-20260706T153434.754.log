@@ -1,0 +1,14 @@
+⨯ Error [InvariantError]: Invariant: The client reference manifest for route "/judicial/[caseId]" does not exist. This is a bug in Next.js.
+    at Object.get (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\[root-of-the-server]__6ac8ec31._.js:5:25923)
+⨯ Error [InvariantError]: Invariant: The client reference manifest for route "/judicial/[caseId]" does not exist. This is a bug in Next.js.
+    at Object.get (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\[root-of-the-server]__6ac8ec31._.js:5:25923)
+⨯ Error: Failed to load static file for page: /500 ENOENT: no such file or directory, open 'C:\Sistemas\tfd-cnrac-dialise\.next\server\pages\500.html'
+    at ignore-listed frames
+⨯ Error [InvariantError]: Invariant: The client reference manifest for route "/judicial/[caseId]" does not exist. This is a bug in Next.js.
+    at Object.get (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\[root-of-the-server]__6ac8ec31._.js:5:25923)
+    at async m (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\ssr\_cbdfc24d._.js:1:7406)
+⨯ Error [InvariantError]: Invariant: The client reference manifest for route "/judicial/[caseId]" does not exist. This is a bug in Next.js.
+    at Object.get (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\[root-of-the-server]__6ac8ec31._.js:5:25923)
+    at async m (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\ssr\_cbdfc24d._.js:1:7406)
+⨯ Error: Failed to load static file for page: /500 ENOENT: no such file or directory, open 'C:\Sistemas\tfd-cnrac-dialise\.next\server\pages\500.html'
+    at ignore-listed frames

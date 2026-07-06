@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { requireAdminRequest } from "@/lib/security/server-session"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -24,6 +25,10 @@ function normalizeCidCode(value: unknown) {
 }
 
 export async function GET(req: NextRequest) {
+
+  const adminGuard = await requireAdminRequest(req)
+  if (!adminGuard.ok) return adminGuard.response
+
   try {
     const rawQuery = normalizeText(req.nextUrl.searchParams.get("q"))
     const q = rawQuery.toLowerCase()

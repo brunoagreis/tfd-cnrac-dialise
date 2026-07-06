@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { requireAdminRequest } from "@/lib/security/server-session"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -62,7 +63,11 @@ async function findSubespecialidadeIdByNome(especialidadeId: string, nome: strin
   return rows[0]?.id ?? null
 }
 
-export async function GET() {
+export async function GET(req: Request) {
+
+  const adminGuard = await requireAdminRequest(req)
+  if (!adminGuard.ok) return adminGuard.response
+
   try {
     const rows = await prisma.$queryRawUnsafe<EspecialidadeSubRow[]>(`
       SELECT
@@ -94,6 +99,10 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+
+  const adminGuard = await requireAdminRequest(req)
+  if (!adminGuard.ok) return adminGuard.response
+
   try {
     const body = await req.json().catch(() => null)
 

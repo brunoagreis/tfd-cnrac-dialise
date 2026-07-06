@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { requireAdminRequest } from "@/lib/security/server-session"
 import { prisma } from "@/lib/prisma"
 import { ensureEmailTriageTables } from "@/lib/email-triage-processing"
 
@@ -28,7 +29,10 @@ async function getUsersByIds(ids: string[]) {
   return prisma.$queryRawUnsafe<UserRow[]>(`SELECT id::text AS id, nome, email FROM public.usuarios WHERE id::text = ANY($1::text[]) ORDER BY nome ASC`, ids)
 }
 
-export async function GET() {
+export async function GET(req: Request) {
+
+  const adminGuardGet = await requireAdminRequest(req)
+  if (!adminGuardGet.ok) return adminGuardGet.response
   try {
     await ensureAuditColumns()
     const [rules, users] = await Promise.all([
@@ -51,6 +55,9 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+
+  const adminGuardPost = await requireAdminRequest(req)
+  if (!adminGuardPost.ok) return adminGuardPost.response
   try {
     await ensureAuditColumns()
     const body = await req.json().catch(() => ({}))
@@ -77,6 +84,9 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+
+  const adminGuardDelete = await requireAdminRequest(req)
+  if (!adminGuardDelete.ok) return adminGuardDelete.response
   try {
     await ensureAuditColumns()
     const body = await req.json().catch(() => ({}))

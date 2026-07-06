@@ -26,6 +26,8 @@ export const MOVEMENT_TYPES = [
   "reserva_agendamento",
   "nao_agendado",
   "cumprimento",
+  "competencia_municipio",
+  "procedimento_nao_sus",
   "falta_paciente",
   "obito",
   "encerramento_inercia",
@@ -151,7 +153,7 @@ export interface JudicialProcessStatusEntry {
 }
 
 export interface JudicialFinalization {
-  status: "pendente" | "resolvido" | "bloqueio" | "sequestro" | "obito" | "devolvida"
+  status: "pendente" | "resolvido" | "nao_sus" | "competencia_municipio" | "cumprido" | "bloqueio" | "sequestro" | "obito" | "arquivado" | "devolvida"
   createdAt: string
   createdById: string
   createdByName: string
@@ -351,6 +353,8 @@ export const MOVEMENT_TYPE_LABELS: Record<MovementType, string> = {
   reserva_agendamento: "Reserva de agendamento",
   nao_agendado: "Não agendado",
   cumprimento: "Cumprimento",
+  competencia_municipio: "Competência do Município",
+  procedimento_nao_sus: "Procedimento Não SUS",
   falta_paciente: "Falta do paciente",
   obito: "Óbito",
   encerramento_inercia: "Encerramento por inércia",

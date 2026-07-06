@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { requireAdminRequest } from "@/lib/security/server-session"
 
 function normalizeText(value: unknown) {
   return String(value ?? "").trim()
@@ -35,7 +36,11 @@ function serializePerfil(item: PerfilRow) {
   }
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+
+  const adminGuard = await requireAdminRequest(request)
+  if (!adminGuard.ok) return adminGuard.response
+
   try {
     const perfis = await prisma.$queryRaw<PerfilRow[]>`
       SELECT
@@ -63,6 +68,10 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+
+  const adminGuard = await requireAdminRequest(request)
+  if (!adminGuard.ok) return adminGuard.response
+
   try {
     const body = await request.json()
 

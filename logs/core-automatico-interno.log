@@ -1,0 +1,337 @@
+[24/06/2026, 09:28:42] Agendador interno iniciado para execução diária às 06:00.
+[24/06/2026, 09:30:42] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[24/06/2026, 09:30:42] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[24/06/2026, 09:33:45] Agendador interno iniciado para execução diária às 06:00.
+[24/06/2026, 09:35:44] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[24/06/2026, 09:35:44] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[24/06/2026, 09:44:45] Agendador interno iniciado para execução diária às 06:00.
+[24/06/2026, 09:46:45] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[24/06/2026, 09:46:45] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[24/06/2026, 09:54:15] Agendador interno iniciado para execução diária às 06:00.
+[24/06/2026, 09:56:15] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[24/06/2026, 09:56:15] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[24/06/2026, 10:02:31] Agendador interno iniciado para execução diária às 06:00.
+[24/06/2026, 10:04:31] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[24/06/2026, 10:04:31] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[24/06/2026, 10:30:46] Agendador interno iniciado para execução diária às 06:00.
+[24/06/2026, 10:32:46] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[24/06/2026, 10:32:46] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[24/06/2026, 10:59:05] Agendador interno iniciado para execução diária às 06:00.
+[24/06/2026, 11:01:04] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[24/06/2026, 11:01:05] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[24/06/2026, 11:06:12] Agendador interno iniciado para execução diária às 06:00.
+[24/06/2026, 11:08:11] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[24/06/2026, 11:08:11] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[24/06/2026, 11:19:59] Agendador interno iniciado para execução diária às 06:00.
+[24/06/2026, 11:21:58] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[24/06/2026, 11:21:58] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[24/06/2026, 11:31:59] Agendador interno iniciado para execução diária às 06:00.
+[24/06/2026, 11:33:59] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[24/06/2026, 11:33:59] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[24/06/2026, 12:54:35] Agendador interno iniciado para execução diária às 06:00.
+[24/06/2026, 12:56:35] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[24/06/2026, 12:56:35] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[24/06/2026, 13:33:24] Agendador interno iniciado para execução diária às 06:00.
+[24/06/2026, 13:35:23] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[24/06/2026, 13:35:23] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[24/06/2026, 14:34:20] Agendador interno iniciado para execução diária às 06:00.
+[24/06/2026, 14:36:20] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[24/06/2026, 14:36:20] Execução concluída: {"ok":true,"quantidade":1,"items":[{"monitoramentoId":"3","ficha":"3420030","tabela":"core_ambulatorial","situacao":"ABERTA","situacaoProcedimento":"AGUARDANDO REGULADOR","acao":"automatico"}]}
+[24/06/2026, 15:09:07] Agendador interno iniciado para execução diária às 06:00.
+[24/06/2026, 15:11:07] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[24/06/2026, 15:11:07] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[24/06/2026, 15:44:15] Agendador interno iniciado para execução diária às 06:00.
+[24/06/2026, 15:46:14] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[24/06/2026, 15:46:14] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[24/06/2026, 16:06:12] Agendador interno iniciado para execução diária às 06:00.
+[24/06/2026, 16:08:12] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[24/06/2026, 16:08:12] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[24/06/2026, 16:15:15] Agendador interno iniciado para execução diária às 06:00.
+[24/06/2026, 16:17:14] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[24/06/2026, 16:17:14] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[25/06/2026, 06:00:15] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[25/06/2026, 06:00:15] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[25/06/2026, 08:05:41] Agendador interno iniciado para execução diária às 06:00.
+[25/06/2026, 08:07:40] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[25/06/2026, 08:07:40] Execução concluída: {"ok":true,"quantidade":1,"items":[{"monitoramentoId":"2","ficha":"3419105","tabela":"core_ambulatorial","situacao":"REGULADA","situacaoProcedimento":"AGUARDANDO AGENDAMENTO","acao":"automatico"}]}
+[25/06/2026, 08:13:10] Agendador interno iniciado para execução diária às 06:00.
+[25/06/2026, 08:15:10] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[25/06/2026, 08:15:10] Falha HTTP 500: {"ok":false,"error":"Erro ao executar monitoramento automático CORE.","detail":"SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string"}
+[25/06/2026, 08:28:10] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[25/06/2026, 08:28:10] Falha HTTP 500: {"ok":false,"error":"Erro ao executar monitoramento automático CORE.","detail":"SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string"}
+[25/06/2026, 08:43:10] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[25/06/2026, 08:43:10] Falha HTTP 500: {"ok":false,"error":"Erro ao executar monitoramento automático CORE.","detail":"SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string"}
+[25/06/2026, 08:54:45] Agendador interno iniciado para execução diária às 06:00.
+[25/06/2026, 08:56:44] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[25/06/2026, 08:56:44] Falha HTTP 500: {"ok":false,"error":"Erro ao executar monitoramento automático CORE.","detail":"SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string"}
+[25/06/2026, 09:09:44] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[25/06/2026, 09:09:44] Falha HTTP 500: {"ok":false,"error":"Erro ao executar monitoramento automático CORE.","detail":"SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string"}
+[25/06/2026, 09:41:49] Agendador interno iniciado para execução diária às 06:00.
+[25/06/2026, 09:43:48] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[25/06/2026, 09:43:49] Falha HTTP 500: {"ok":false,"error":"Erro ao executar monitoramento automático CORE.","detail":"SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string"}
+[25/06/2026, 09:56:48] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[25/06/2026, 09:56:48] Falha HTTP 500: {"ok":false,"error":"Erro ao executar monitoramento automático CORE.","detail":"SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string"}
+[25/06/2026, 10:11:48] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[25/06/2026, 10:11:48] Falha HTTP 500: {"ok":false,"error":"Erro ao executar monitoramento automático CORE.","detail":"SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string"}
+[25/06/2026, 10:26:48] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[25/06/2026, 10:26:48] Falha HTTP 500: {"ok":false,"error":"Erro ao executar monitoramento automático CORE.","detail":"SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string"}
+[25/06/2026, 10:28:20] Agendador interno iniciado para execução diária às 06:00.
+[25/06/2026, 10:30:19] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[25/06/2026, 10:30:19] Falha HTTP 500: {"ok":false,"error":"Erro ao executar monitoramento automático CORE.","detail":"SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string"}
+[25/06/2026, 10:43:19] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[25/06/2026, 10:43:19] Falha HTTP 500: {"ok":false,"error":"Erro ao executar monitoramento automático CORE.","detail":"SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string"}
+[25/06/2026, 10:55:44] Agendador interno iniciado para execução diária às 06:00.
+[25/06/2026, 10:57:44] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[25/06/2026, 10:57:44] Falha HTTP 500: {"ok":false,"error":"Erro ao executar monitoramento automático CORE.","detail":"SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string"}
+[25/06/2026, 11:09:58] Agendador interno iniciado para execução diária às 06:00.
+[25/06/2026, 11:11:58] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[25/06/2026, 11:11:58] Falha HTTP 500: {"ok":false,"error":"Erro ao executar monitoramento automático CORE.","detail":"SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string"}
+[25/06/2026, 11:24:58] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[25/06/2026, 11:24:58] Falha HTTP 500: {"ok":false,"error":"Erro ao executar monitoramento automático CORE.","detail":"SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string"}
+[25/06/2026, 11:39:58] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[25/06/2026, 11:39:58] Falha HTTP 500: {"ok":false,"error":"Erro ao executar monitoramento automático CORE.","detail":"SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string"}
+[25/06/2026, 11:54:58] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[25/06/2026, 11:54:58] Falha HTTP 500: {"ok":false,"error":"Erro ao executar monitoramento automático CORE.","detail":"SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string"}
+[25/06/2026, 12:04:38] Agendador interno iniciado para execução diária às 06:00.
+[25/06/2026, 12:06:38] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[25/06/2026, 12:06:38] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[25/06/2026, 13:11:46] Agendador interno iniciado para execução diária às 06:00.
+[25/06/2026, 13:13:45] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[25/06/2026, 13:13:45] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[25/06/2026, 13:52:38] Agendador interno iniciado para execução diária às 06:00.
+[25/06/2026, 13:54:38] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[25/06/2026, 13:54:38] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[25/06/2026, 14:23:59] Agendador interno iniciado para execução diária às 06:00.
+[25/06/2026, 14:25:58] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[25/06/2026, 14:25:58] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[25/06/2026, 15:18:28] Agendador interno iniciado para execução diária às 06:00.
+[25/06/2026, 15:20:27] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[25/06/2026, 15:20:27] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[25/06/2026, 15:35:40] Agendador interno iniciado para execução diária às 06:00.
+[25/06/2026, 15:37:39] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[25/06/2026, 15:37:39] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[25/06/2026, 15:52:37] Agendador interno iniciado para execução diária às 06:00.
+[25/06/2026, 15:54:36] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[25/06/2026, 15:54:36] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[25/06/2026, 15:59:28] Agendador interno iniciado para execução diária às 06:00.
+[25/06/2026, 16:01:27] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[25/06/2026, 16:01:27] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[25/06/2026, 16:22:36] Agendador interno iniciado para execução diária às 06:00.
+[25/06/2026, 16:24:35] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[25/06/2026, 16:24:35] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[25/06/2026, 16:36:34] Agendador interno iniciado para execução diária às 06:00.
+[25/06/2026, 16:38:33] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[25/06/2026, 16:38:33] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[26/06/2026, 06:06:33] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[26/06/2026, 06:06:33] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[26/06/2026, 08:30:10] Agendador interno iniciado para execução diária às 06:00.
+[26/06/2026, 08:32:09] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[26/06/2026, 08:32:09] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[26/06/2026, 11:25:56] Agendador interno iniciado para execução diária às 06:00.
+[26/06/2026, 11:27:55] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[26/06/2026, 11:27:55] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[26/06/2026, 13:55:55] Agendador interno iniciado para execução diária às 06:00.
+[26/06/2026, 13:57:54] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[26/06/2026, 13:57:54] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[26/06/2026, 14:21:04] Agendador interno iniciado para execução diária às 06:00.
+[26/06/2026, 14:23:03] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[26/06/2026, 14:23:03] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[26/06/2026, 16:13:04] Agendador interno iniciado para execução diária às 06:00.
+[26/06/2026, 16:15:03] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[26/06/2026, 16:15:03] Execução concluída: {"ok":true,"quantidade":1,"items":[{"monitoramentoId":"3","ficha":"3420030","tabela":"core_ambulatorial","situacao":"ABERTA","situacaoProcedimento":"AGUARDANDO REGULADOR","acao":"automatico"}]}
+[26/06/2026, 16:24:55] Agendador interno iniciado para execução diária às 06:00.
+[26/06/2026, 16:26:54] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[26/06/2026, 16:26:54] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[26/06/2026, 16:30:47] Agendador interno iniciado para execução diária às 06:00.
+[26/06/2026, 16:31:57] Agendador interno iniciado para execução diária às 06:00.
+[26/06/2026, 16:33:56] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[26/06/2026, 16:33:56] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[26/06/2026, 16:36:46] Agendador interno iniciado para execução diária às 06:00.
+[26/06/2026, 16:38:45] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[26/06/2026, 16:38:45] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[27/06/2026, 06:06:45] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[27/06/2026, 06:06:46] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[28/06/2026, 06:06:46] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[28/06/2026, 06:06:46] Execução concluída: {"ok":true,"quantidade":1,"items":[{"monitoramentoId":"2","ficha":"3419105","tabela":"core_ambulatorial","situacao":"REGULADA","situacaoProcedimento":"AGUARDANDO AGENDAMENTO","acao":"automatico"}]}
+[29/06/2026, 06:06:46] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[29/06/2026, 06:06:46] Execução concluída: {"ok":true,"quantidade":1,"items":[{"monitoramentoId":"3","ficha":"3420030","tabela":"core_ambulatorial","situacao":"ABERTA","situacaoProcedimento":"AGUARDANDO REGULADOR","acao":"automatico"}]}
+[29/06/2026, 08:00:18] Agendador interno iniciado para execução diária às 06:00.
+[29/06/2026, 08:02:17] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[29/06/2026, 08:02:18] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[29/06/2026, 08:05:30] Agendador interno iniciado para execução diária às 06:00.
+[29/06/2026, 08:07:29] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[29/06/2026, 08:07:29] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[29/06/2026, 08:49:41] Agendador interno iniciado para execução diária às 06:00.
+[29/06/2026, 08:51:40] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[29/06/2026, 08:51:40] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[29/06/2026, 10:58:42] Agendador interno iniciado para execução diária às 06:00.
+[29/06/2026, 11:00:39] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[29/06/2026, 11:00:39] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[30/06/2026, 06:13:40] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[30/06/2026, 06:13:40] Execução concluída: {"ok":true,"quantidade":1,"items":[{"monitoramentoId":"2","ficha":"3419105","tabela":"core_ambulatorial","situacao":"REGULADA","situacaoProcedimento":"AGUARDANDO AGENDAMENTO","acao":"automatico"}]}
+[01/07/2026, 06:13:40] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[01/07/2026, 06:13:40] Execução concluída: {"ok":true,"quantidade":1,"items":[{"monitoramentoId":"3","ficha":"3420030","tabela":"core_ambulatorial","situacao":"ABERTA","situacaoProcedimento":"AGUARDANDO REGULADOR","acao":"automatico"}]}
+[01/07/2026, 09:52:33] Agendador interno iniciado para execução diária às 06:00.
+[01/07/2026, 09:54:32] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[01/07/2026, 09:54:32] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[01/07/2026, 10:19:03] Agendador interno iniciado para execução diária às 06:00.
+[01/07/2026, 10:21:02] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[01/07/2026, 10:21:02] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[01/07/2026, 10:31:32] Agendador interno iniciado para execução diária às 06:00.
+[01/07/2026, 10:33:32] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[01/07/2026, 10:33:32] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[01/07/2026, 10:43:45] Agendador interno iniciado para execução diária às 06:00.
+[01/07/2026, 10:45:45] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[01/07/2026, 10:45:45] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[01/07/2026, 10:57:51] Agendador interno iniciado para execução diária às 06:00.
+[01/07/2026, 10:59:50] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[01/07/2026, 10:59:50] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[01/07/2026, 11:20:09] Agendador interno iniciado para execução diária às 06:00.
+[01/07/2026, 11:22:09] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[01/07/2026, 11:22:09] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[01/07/2026, 11:49:13] Agendador interno iniciado para execução diária às 06:00.
+[01/07/2026, 11:51:12] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[01/07/2026, 11:51:12] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[01/07/2026, 13:50:08] Agendador interno iniciado para execução diária às 06:00.
+[01/07/2026, 13:52:07] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[01/07/2026, 13:52:07] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[01/07/2026, 15:57:03] Agendador interno iniciado para execução diária às 06:00.
+[01/07/2026, 15:59:00] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[01/07/2026, 15:59:00] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[01/07/2026, 16:25:51] Agendador interno iniciado para execução diária às 06:00.
+[01/07/2026, 16:27:50] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[01/07/2026, 16:27:51] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[02/07/2026, 06:10:51] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[02/07/2026, 06:10:51] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[02/07/2026, 08:09:59] Agendador interno iniciado para execução diária às 06:00.
+[02/07/2026, 08:11:58] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[02/07/2026, 08:11:58] Execução concluída: {"ok":true,"quantidade":1,"items":[{"monitoramentoId":"2","ficha":"3419105","tabela":"core_ambulatorial","situacao":"REGULADA","situacaoProcedimento":"AGUARDANDO AGENDAMENTO","acao":"automatico"}]}
+[02/07/2026, 08:50:12] Agendador interno iniciado para execução diária às 06:00.
+[02/07/2026, 08:52:11] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[02/07/2026, 08:52:11] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[02/07/2026, 09:23:09] Agendador interno iniciado para execução diária às 06:00.
+[02/07/2026, 09:25:08] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[02/07/2026, 09:25:09] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[02/07/2026, 09:33:06] Agendador interno iniciado para execução diária às 06:00.
+[02/07/2026, 09:35:06] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[02/07/2026, 09:35:06] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[02/07/2026, 10:08:45] Agendador interno iniciado para execução diária às 06:00.
+[02/07/2026, 10:10:44] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[02/07/2026, 10:10:44] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[02/07/2026, 12:35:38] Agendador interno iniciado para execução diária às 06:00.
+[02/07/2026, 12:37:37] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[02/07/2026, 12:37:37] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[02/07/2026, 16:22:50] Agendador interno iniciado para execução diária às 06:00.
+[02/07/2026, 16:24:49] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[02/07/2026, 16:24:49] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[03/07/2026, 06:07:49] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[03/07/2026, 06:07:50] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[03/07/2026, 08:27:17] Agendador interno iniciado para execução diária às 06:00.
+[03/07/2026, 08:29:16] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[03/07/2026, 08:29:16] Execução concluída: {"ok":true,"quantidade":1,"items":[{"monitoramentoId":"3","ficha":"3420030","tabela":"core_ambulatorial","situacao":"ABERTA","situacaoProcedimento":"AGUARDANDO REGULADOR","acao":"automatico"}]}
+[03/07/2026, 09:04:11] Agendador interno iniciado para execução diária às 06:00.
+[03/07/2026, 09:06:10] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[03/07/2026, 09:06:10] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[03/07/2026, 09:22:14] Agendador interno iniciado para execução diária às 06:00.
+[03/07/2026, 09:24:13] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[03/07/2026, 09:24:13] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[03/07/2026, 09:33:16] Agendador interno iniciado para execução diária às 06:00.
+[03/07/2026, 09:35:15] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[03/07/2026, 09:35:15] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[03/07/2026, 09:48:15] Agendador interno iniciado para execução diária às 06:00.
+[03/07/2026, 09:50:14] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[03/07/2026, 09:50:15] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[03/07/2026, 10:06:21] Agendador interno iniciado para execução diária às 06:00.
+[03/07/2026, 10:08:20] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[03/07/2026, 10:08:21] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[03/07/2026, 10:18:28] Agendador interno iniciado para execução diária às 06:00.
+[03/07/2026, 10:20:27] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[03/07/2026, 10:20:28] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[03/07/2026, 11:18:28] Agendador interno iniciado para execução diária às 06:00.
+[03/07/2026, 11:20:27] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[03/07/2026, 11:20:28] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[04/07/2026, 06:03:26] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[04/07/2026, 06:03:26] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[05/07/2026, 06:03:26] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[05/07/2026, 06:03:26] Execução concluída: {"ok":true,"quantidade":1,"items":[{"monitoramentoId":"2","ficha":"3419105","tabela":"core_ambulatorial","situacao":"REGULADA","situacaoProcedimento":"AGUARDANDO AGENDAMENTO","acao":"automatico"}]}
+[05/07/2026, 20:44:47] Agendador interno iniciado para execução diária às 06:00.
+[05/07/2026, 20:46:46] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[05/07/2026, 20:46:47] Execução concluída: {"ok":true,"quantidade":1,"items":[{"monitoramentoId":"3","ficha":"3420030","tabela":"core_ambulatorial","situacao":"ABERTA","situacaoProcedimento":"AGUARDANDO REGULADOR","acao":"automatico"}]}
+[05/07/2026, 20:59:23] Agendador interno iniciado para execução diária às 06:00.
+[05/07/2026, 21:01:22] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[05/07/2026, 21:01:22] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[06/07/2026, 06:14:22] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[06/07/2026, 06:14:23] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[06/07/2026, 07:23:47] Agendador interno iniciado para execução diária às 06:00.
+[06/07/2026, 07:25:46] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[06/07/2026, 07:25:46] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[06/07/2026, 08:29:28] Agendador interno iniciado para execução diária às 06:00.
+[06/07/2026, 08:31:27] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[06/07/2026, 08:31:27] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[06/07/2026, 08:39:39] Agendador interno iniciado para execução diária às 06:00.
+[06/07/2026, 08:41:39] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[06/07/2026, 08:41:39] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[06/07/2026, 08:52:50] Agendador interno iniciado para execução diária às 06:00.
+[06/07/2026, 08:54:49] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[06/07/2026, 08:54:49] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[06/07/2026, 08:59:19] Agendador interno iniciado para execução diária às 06:00.
+[06/07/2026, 09:01:18] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[06/07/2026, 09:01:18] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[06/07/2026, 09:03:01] Agendador interno iniciado para execução diária às 06:00.
+[06/07/2026, 09:05:00] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[06/07/2026, 09:05:00] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[06/07/2026, 09:05:20] Agendador interno iniciado para execução diária às 06:00.
+[06/07/2026, 09:07:20] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[06/07/2026, 09:07:20] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[06/07/2026, 09:09:54] Agendador interno iniciado para execução diária às 06:00.
+[06/07/2026, 09:12:05] Agendador interno iniciado para execução diária às 06:00.
+[06/07/2026, 09:14:04] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[06/07/2026, 09:14:04] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[06/07/2026, 09:34:33] Agendador interno iniciado para execução diária às 06:00.
+[06/07/2026, 09:36:32] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[06/07/2026, 09:36:32] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[06/07/2026, 09:45:13] Agendador interno iniciado para execução diária às 06:00.
+[06/07/2026, 09:47:12] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[06/07/2026, 09:47:12] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[06/07/2026, 09:54:40] Agendador interno iniciado para execução diária às 06:00.
+[06/07/2026, 09:56:40] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[06/07/2026, 09:56:40] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[06/07/2026, 10:01:11] Agendador interno iniciado para execução diária às 06:00.
+[06/07/2026, 10:03:11] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[06/07/2026, 10:03:11] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[06/07/2026, 10:07:54] Agendador interno iniciado para execução diária às 06:00.
+[06/07/2026, 10:09:54] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[06/07/2026, 10:09:54] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[06/07/2026, 10:23:24] Agendador interno iniciado para execução diária às 06:00.
+[06/07/2026, 10:25:24] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[06/07/2026, 10:25:24] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[06/07/2026, 10:31:54] Agendador interno iniciado para execução diária às 06:00.
+[06/07/2026, 10:33:54] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[06/07/2026, 10:33:54] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[06/07/2026, 10:38:50] Agendador interno iniciado para execução diária às 06:00.
+[06/07/2026, 10:40:50] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[06/07/2026, 10:40:50] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[06/07/2026, 10:50:05] Agendador interno iniciado para execução diária às 06:00.
+[06/07/2026, 10:52:05] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[06/07/2026, 10:52:05] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[06/07/2026, 10:54:18] Agendador interno iniciado para execução diária às 06:00.
+[06/07/2026, 10:56:17] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[06/07/2026, 10:56:17] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[06/07/2026, 11:20:36] Agendador interno iniciado para execução diária às 06:00.
+[06/07/2026, 11:22:35] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[06/07/2026, 11:22:35] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[06/07/2026, 11:22:48] Agendador interno iniciado para execução diária às 06:00.
+[06/07/2026, 11:24:47] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[06/07/2026, 11:24:47] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[06/07/2026, 11:26:56] Agendador interno iniciado para execução diária às 06:00.
+[06/07/2026, 11:28:56] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[06/07/2026, 11:28:56] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[06/07/2026, 11:35:16] Agendador interno iniciado para execução diária às 06:00.
+[06/07/2026, 11:37:16] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[06/07/2026, 11:37:16] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[06/07/2026, 11:42:44] Agendador interno iniciado para execução diária às 06:00.
+[06/07/2026, 11:44:43] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[06/07/2026, 11:44:43] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+[06/07/2026, 11:48:16] Agendador interno iniciado para execução diária às 06:00.
+[06/07/2026, 11:50:16] Executando monitoramento automático CORE em http://127.0.0.1:3000.
+[06/07/2026, 11:50:16] Execução concluída: {"ok":true,"quantidade":0,"items":[]}

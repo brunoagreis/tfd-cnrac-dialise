@@ -63,6 +63,10 @@ type NewPatientFormState = {
 
 type ApiPatientItem = Paciente & {
   totalDemandas?: number
+  telefone?: string
+  cep?: string
+  bairro?: string
+  cidade?: string
 }
 
 const PAGE_SIZE = 8
@@ -127,6 +131,29 @@ function initialNewPatientForm(prefill = ""): NewPatientFormState {
   }
 }
 
+function patientToForm(patient: ApiPatientItem | Paciente): NewPatientFormState {
+  const rawTelefone = String(
+    (patient as any).telefone ??
+      (Array.isArray((patient as any).telefones) ? (patient as any).telefones[0] : "") ??
+      "",
+  )
+
+  return {
+    cpf: formatCpf(String((patient as any).cpf ?? "")),
+    cns: onlyDigits(String((patient as any).cns ?? (patient as any).cartaoSus ?? "")).slice(0, 15),
+    nome: String((patient as any).nome ?? ""),
+    dataNascimento: String((patient as any).dataNascimento ?? "").slice(0, 10),
+    telefone: rawTelefone ? formatPhone(rawTelefone) : "",
+    email: String((patient as any).email ?? ""),
+    endereco: String((patient as any).endereco ?? ""),
+    numero: "",
+    complemento: "",
+    cep: formatCep(String((patient as any).cep ?? "")),
+    bairro: String((patient as any).bairro ?? ""),
+    cidade: String((patient as any).cidade ?? (patient as any).municipio ?? ""),
+  }
+}
+
 function normalizeApiPatient(item: any): ApiPatientItem {
   return {
     id: String(item?.id ?? ""),
@@ -134,10 +161,18 @@ function normalizeApiPatient(item: any): ApiPatientItem {
     cartaoSus: String(item?.cartaoSus ?? item?.cns ?? ""),
     nome: String(item?.nome ?? ""),
     dataNascimento: String(item?.dataNascimento ?? ""),
-    telefones: [],
+    telefones: Array.isArray(item?.telefones)
+      ? item.telefones.map((value: unknown) => String(value ?? "")).filter(Boolean)
+      : item?.telefone
+        ? [String(item.telefone)]
+        : [],
+    telefone: String(item?.telefone ?? ""),
     email: String(item?.email ?? ""),
     municipio: String(item?.municipio ?? ""),
     endereco: String(item?.endereco ?? ""),
+    cep: String(item?.cep ?? ""),
+    bairro: String(item?.bairro ?? ""),
+    cidade: String(item?.cidade ?? item?.municipio ?? ""),
     criadoEm: String(item?.criadoEm ?? ""),
     atualizadoEm: String(item?.atualizadoEm ?? ""),
     totalDemandas: Number(item?.totalDemandas ?? 0),
@@ -158,6 +193,11 @@ export default function PacientesPage() {
   const [createPatientOpen, setCreatePatientOpen] = useState(false)
   const [createPatientForm, setCreatePatientForm] = useState<NewPatientFormState>(initialNewPatientForm())
   const [savingPatient, setSavingPatient] = useState(false)
+
+  const [editPatientOpen, setEditPatientOpen] = useState(false)
+  const [editingPatient, setEditingPatient] = useState<ApiPatientItem | null>(null)
+  const [editPatientForm, setEditPatientForm] = useState<NewPatientFormState>(initialNewPatientForm())
+  const [savingEditPatient, setSavingEditPatient] = useState(false)
 
   const [apiPatients, setApiPatients] = useState<ApiPatientItem[]>([])
   const [loadingPatients, setLoadingPatients] = useState(false)
@@ -282,11 +322,79 @@ export default function PacientesPage() {
     setCreatePatientOpen(true)
   }
 
+  function openEditPatientDialog(patient: ApiPatientItem) {
+    setEditingPatient(patient)
+    setEditPatientForm(patientToForm(patient))
+    setEditPatientOpen(true)
+  }
+
+  function closeEditPatientDialog() {
+    if (savingEditPatient) return
+    setEditPatientOpen(false)
+    setEditingPatient(null)
+    setEditPatientForm(initialNewPatientForm())
+  }
+
   function updateCreatePatientField<K extends keyof NewPatientFormState>(
     field: K,
     value: NewPatientFormState[K],
   ) {
     setCreatePatientForm((prev) => ({ ...prev, [field]: value }))
+  }
+
+  function updateEditPatientField<K extends keyof NewPatientFormState>(
+    field: K,
+    value: NewPatientFormState[K],
+  ) {
+    setEditPatientForm((prev) => ({ ...prev, [field]: value }))
+  }
+
+  function validateEditPatientForm() {
+    const cpfDigits = onlyDigits(editPatientForm.cpf)
+    const phoneDigits = onlyDigits(editPatientForm.telefone)
+    const cepDigits = onlyDigits(editPatientForm.cep)
+
+    if (cpfDigits.length !== 11) {
+      window.alert("Informe um CPF valido.")
+      return false
+    }
+
+    if (!editPatientForm.nome.trim()) {
+      window.alert("Informe o nome do paciente.")
+      return false
+    }
+
+    if (!editPatientForm.dataNascimento) {
+      window.alert("Informe a data de nascimento.")
+      return false
+    }
+
+    if (editPatientForm.telefone && phoneDigits.length < 10) {
+      window.alert("Informe um telefone valido.")
+      return false
+    }
+
+    if (!editPatientForm.endereco.trim()) {
+      window.alert("Informe o endereco.")
+      return false
+    }
+
+    if (!editPatientForm.bairro.trim()) {
+      window.alert("Informe o bairro.")
+      return false
+    }
+
+    if (!editPatientForm.cidade.trim()) {
+      window.alert("Selecione a cidade cadastrada em Admin Judicial > Municipios.")
+      return false
+    }
+
+    if (editPatientForm.cep && cepDigits.length !== 8) {
+      window.alert("Informe um CEP valido.")
+      return false
+    }
+
+    return true
   }
 
   function validateNewPatientForm() {
@@ -376,6 +484,55 @@ export default function PacientesPage() {
       toast.error("Erro ao salvar paciente.")
     } finally {
       setSavingPatient(false)
+    }
+  }
+
+  async function handleSaveEditPatient() {
+    if (savingEditPatient || !editingPatient) return
+    if (!validateEditPatientForm()) return
+
+    try {
+      setSavingEditPatient(true)
+
+      const response = await fetch("/api/pacientes", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...editPatientForm,
+          id: (editingPatient as any).id,
+        }),
+      })
+
+      const json = await response.json().catch(() => ({}))
+
+      if (!response.ok || !json?.ok) {
+        toast.error(json?.error || "Erro ao atualizar paciente.")
+        return
+      }
+
+      const patient = normalizeApiPatient(json.item)
+
+      setApiPatients((current) =>
+        current.map((item) => ((item as any).id === (patient as any).id ? patient : item)),
+      )
+
+      setHistoryPatient((current) =>
+        current && (current as any).id === (patient as any).id ? patient : current,
+      )
+
+      setDemandPatient((current) =>
+        current && (current as any).id === (patient as any).id ? patient : current,
+      )
+
+      setEditPatientOpen(false)
+      setEditingPatient(null)
+      setEditPatientForm(initialNewPatientForm())
+      toast.success("Paciente atualizado.")
+    } catch (error) {
+      console.error("UPDATE_PATIENT_ERROR", error)
+      toast.error("Erro ao atualizar paciente.")
+    } finally {
+      setSavingEditPatient(false)
     }
   }
 
@@ -503,6 +660,15 @@ export default function PacientesPage() {
                       type="button"
                       variant="outline"
                       className="bg-transparent"
+                      onClick={() => openEditPatientDialog(patient)}
+                    >
+                      Ver/Editar dados
+                    </Button>
+
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="bg-transparent"
                       onClick={() => setHistoryPatient(patient)}
                     >
                       <Eye className="mr-2 h-4 w-4" />
@@ -590,6 +756,82 @@ export default function PacientesPage() {
                 </Link>
               ))
             )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={editPatientOpen} onOpenChange={(open) => !open && closeEditPatientDialog()}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>Ver/Editar paciente</DialogTitle>
+            <DialogDescription>
+              Consulte e corrija os dados cadastrais do paciente. O municipio deve estar cadastrado em Admin Judicial &gt; Municipios.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <Label className="mb-1 block text-xs">CPF</Label>
+                <Input value={editPatientForm.cpf} onChange={(e) => updateEditPatientField("cpf", formatCpf(e.target.value))} placeholder="000.000.000-00" />
+              </div>
+
+              <div>
+                <Label className="mb-1 block text-xs">CNS</Label>
+                <Input value={editPatientForm.cns} onChange={(e) => updateEditPatientField("cns", onlyDigits(e.target.value).slice(0, 15))} placeholder="000000000000000" />
+              </div>
+            </div>
+
+            <div>
+              <Label className="mb-1 block text-xs">Nome do paciente</Label>
+              <Input value={editPatientForm.nome} onChange={(e) => updateEditPatientField("nome", e.target.value)} placeholder="Nome completo" />
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-3">
+              <div>
+                <Label className="mb-1 block text-xs">Data de nascimento</Label>
+                <Input type="date" value={editPatientForm.dataNascimento} onChange={(e) => updateEditPatientField("dataNascimento", e.target.value)} />
+              </div>
+
+              <div>
+                <Label className="mb-1 block text-xs">Telefone</Label>
+                <Input value={editPatientForm.telefone} onChange={(e) => updateEditPatientField("telefone", formatPhone(e.target.value))} placeholder="(00) 00000-0000" />
+              </div>
+
+              <div>
+                <Label className="mb-1 block text-xs">E-mail</Label>
+                <Input value={editPatientForm.email} onChange={(e) => updateEditPatientField("email", e.target.value)} placeholder="email@exemplo.com" />
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <Label className="mb-1 block text-xs">CEP</Label>
+                <Input value={editPatientForm.cep} onChange={(e) => updateEditPatientField("cep", formatCep(e.target.value))} placeholder="00000-000" />
+              </div>
+
+              <div>
+                <Label className="mb-1 block text-xs">Bairro</Label>
+                <Input value={editPatientForm.bairro} onChange={(e) => updateEditPatientField("bairro", e.target.value)} placeholder="Bairro" />
+              </div>
+            </div>
+
+            <div>
+              <Label className="mb-1 block text-xs">Endereco</Label>
+              <Input value={editPatientForm.endereco} onChange={(e) => updateEditPatientField("endereco", e.target.value)} placeholder="Rua / Avenida / Travessa" />
+            </div>
+
+            <MunicipalitySelectField value={editPatientForm.cidade} onChange={(value) => updateEditPatientField("cidade", value)} label="Cidade" />
+
+            <div className="flex flex-wrap gap-2 pt-2">
+              <Button type="button" onClick={handleSaveEditPatient} disabled={savingEditPatient}>
+                {savingEditPatient ? "Salvando..." : "Salvar alteracoes"}
+              </Button>
+
+              <Button type="button" variant="outline" className="bg-transparent" onClick={closeEditPatientDialog} disabled={savingEditPatient}>
+                Fechar
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

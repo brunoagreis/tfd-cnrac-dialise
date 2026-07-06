@@ -1,0 +1,34 @@
+Error: Socket timeout
+    at TLSSocket.<anonymous> (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\[root-of-the-server]__56dd5725._.js:2:137983) {
+  code: 'ETIMEOUT',
+  _connId: 'g1x5rkoj8q4iufh082bv'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at TLSSocket.<anonymous> (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\[root-of-the-server]__56dd5725._.js:2:137983) {
+  code: 'ETIMEOUT',
+  _connId: 'g1x5rkoj8q4iufh082bv'
+}
+[email-integracao/processar] erro: Error: Connection not available
+    at L.createNoConnectionError (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\[root-of-the-server]__56dd5725._.js:2:152269)
+    at t (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\[root-of-the-server]__56dd5725._.js:2:153498)
+    at L.close (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\[root-of-the-server]__56dd5725._.js:2:153566)
+    at Immediate.<anonymous> (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\[root-of-the-server]__56dd5725._.js:2:152227) {
+  code: 'NoConnection'
+}
+Error: Socket timeout
+    at TLSSocket.<anonymous> (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\[root-of-the-server]__56dd5725._.js:2:137983) {
+  code: 'ETIMEOUT',
+  _connId: '13j5nc8tk5egat0fwssc'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at TLSSocket.<anonymous> (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\[root-of-the-server]__56dd5725._.js:2:137983) {
+  code: 'ETIMEOUT',
+  _connId: '13j5nc8tk5egat0fwssc'
+}
+[email-integracao/processar] erro: Error: Connection not available
+    at L.createNoConnectionError (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\[root-of-the-server]__56dd5725._.js:2:152269)
+    at t (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\[root-of-the-server]__56dd5725._.js:2:153498)
+    at L.close (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\[root-of-the-server]__56dd5725._.js:2:153566)
+    at Immediate.<anonymous> (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\[root-of-the-server]__56dd5725._.js:2:152227) {
+  code: 'NoConnection'
+}

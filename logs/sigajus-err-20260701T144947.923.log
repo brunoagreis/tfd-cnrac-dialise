@@ -1,0 +1,11 @@
+[POST /api/protocolo/[protocolo]/anexos] erro: Error [PrismaClientKnownRequestError]: 
+Invalid `prisma.$executeRawUnsafe()` invocation:
+
+
+Raw query failed. Code: `22P02`. Message: `invalid input value for enum "CategoriaAnexo": "manifestacao"`
+    at async x (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\[root-of-the-server]__aa2cabb1._.js:31:1751)
+    at async c (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\[root-of-the-server]__aa2cabb1._.js:49:3974) {
+  code: 'P2010',
+  meta: [Object],
+  clientVersion: '7.8.0'
+}

@@ -23,6 +23,8 @@ type ReturnRule = {
 const STATUS_PERMITIDOS = [
   "pendente",
   "resolvido",
+  "competencia_municipio",
+  "nao_sus",
   "cumprido",
   "bloqueio",
   "sequestro",
@@ -35,6 +37,8 @@ type StatusFinalizacao = (typeof STATUS_PERMITIDOS)[number]
 
 const STATUS_TERMINAIS = new Set<StatusFinalizacao>([
   "resolvido",
+  "competencia_municipio",
+  "nao_sus",
   "cumprido",
   "bloqueio",
   "sequestro",
@@ -69,7 +73,10 @@ function normalizarStatus(value: unknown): StatusFinalizacao | null {
 
   if (status === "pendente") return "pendente"
   if (status === "resolvido" || status === "resolver") return "resolvido"
-  if (status === "cumprido" || status === "cumprida") return "cumprido"
+  
+  if (status === "nao_sus" || status === "nao sus") return "nao_sus"
+  if (status === "competencia_municipio" || status === "competencia municipio" || status === "competencia do municipio") return "competencia_municipio"
+if (status === "cumprido" || status === "cumprida") return "cumprido"
   if (status === "bloqueio") return "bloqueio"
   if (status === "sequestro") return "sequestro"
   if (status === "obito") return "obito"
@@ -83,13 +90,18 @@ function statusParaBanco(status: StatusFinalizacao) {
   if (status === "arquivado") return "ARQUIVADO"
   if (status === "obito") return "OBITO"
   if (status === "cumprido") return "CUMPRIDO"
-  return status.toUpperCase()
+  
+  if (status === "nao_sus") return "RESOLVIDO"
+  if (status === "competencia_municipio") return "RESOLVIDO"
+return status.toUpperCase()
 }
 
 function statusParaTexto(status: StatusFinalizacao) {
   const labels: Record<StatusFinalizacao, string> = {
     pendente: "Pendente",
     resolvido: "Resolvido",
+    nao_sus: "Não SUS",
+    competencia_municipio: "Competência do Município",
     cumprido: "Cumprido",
     bloqueio: "Bloqueio",
     sequestro: "Sequestro",
@@ -191,9 +203,10 @@ export async function POST(
         return NextResponse.json({ ok: false, error: "Justifique a pendência antes de salvar." }, { status: 400 })
       }
     }
+    const exigeJustificativaFinalizacao = ["resolvido", "cumprido", "nao_sus", "competencia_municipio"].includes(status)
 
-    if ((status === "resolvido" || status === "cumprido") && !reason) {
-      return NextResponse.json({ ok: false, error: status === "cumprido" ? "Justifique o cumprimento antes de salvar." : "Justifique a resolução antes de salvar." }, { status: 400 })
+    if (exigeJustificativaFinalizacao && !reason) {
+      return NextResponse.json({ ok: false, error: "Justifique a finalização antes de salvar." }, { status: 400 })
     }
 
     if ((status === "obito" || status === "arquivado") && !reason) {

@@ -1,0 +1,357 @@
+MAPEAMENTO DELETE PROCEDIMENTO JUDICIAL
+Gerado em: 2026-07-06T13:03:54.357Z
+
+================================================================================
+ANTES - COMPONENTE - handleRemoveProcedure
+================================================================================
+async function handleRemoveProcedure(procedureId: string) {
+    if (!user) return
+
+    const item = caseItem.procedures.find((procedure) => procedure.id === procedureId)
+
+    if (!item) {
+      toast.error("Procedimento não encontrado.")
+      return
+    }
+
+    const reason = window.prompt(
+      `Informe o motivo para apagar/inativar o procedimento ${item.sigtapCode}:`,
+      "",
+    )
+
+    if (reason === null) return
+
+    const confirmed = window.confirm(
+      `Confirma apagar/inativar o procedimento ${item.sigtapCode} - ${item.description}?`,
+    )
+
+    if (!confirmed) return
+
+    try {
+      const response = await fetch(
+        `/api/judicial/casos/${encodeURIComponent(caseItem.id)}/procedimentos/${encodeURIComponent(procedureId)}`,
+        {
+          method: "DELETE",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+              reason: reason.trim() || undefined,
+              sigtapCode: item.sigtapCode,
+              codigo: item.sigtapCode,
+              user,
+            }),
+        },
+      )
+
+      const data = await response.json()
+
+      if (!response.ok || !data?.ok) {
+        throw new Error(data?.error || "Erro ao apagar procedimento judicial.")
+      }
+
+      toast.success("Procedimento apagado/inativado e registrado em auditoria.")
+      window.location.reload()
+    } catch (error) {
+      console.error("[JudicialCaseDetail] erro ao apagar procedimento:", error)
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Erro ao apagar procedimento judicial.",
+      )
+    }
+  }
+
+================================================================================
+ANTES - API - CaseRow + findCase
+================================================================================
+type CaseRow = {
+  monitoramentoId: string
+}
+
+type ProcedimentoRow = {
+  id: string
+  monitoramentoId: string
+  demandaId: string | null
+  sigtapCodigo: string | null
+  sigtapDescricao: string | null
+  especialidade: string | null
+  subespecialidade: string | null
+  active: boolean | null
+}
+
+function text(value: unknown) {
+  return String(value ?? "").trim()
+}
+
+async function findCase(caseId: string) {
+  const rows = await prisma.$queryRawUnsafe<CaseRow[]>(
+    `
+      SELECT
+        b.id::text AS "monitoramentoId"
+      FROM public.judicial_monitoramento_base b
+      LEFT JOIN public.demandas d
+        ON d.id = b.demanda_id
+      WHERE UPPER(COALESCE(b.origem_modulo, '')) = 'JUDICIAL'
+        AND (
+          b.id::text = $1
+          OR b.demanda_id::text = $1
+          OR b.origem_registro_id::text = $1
+          OR d.id::text = $1
+          OR d.protocolo::text = $1
+        )
+      ORDER BY b.id DESC
+      LIMIT 1
+    `,
+    caseId,
+  )
+
+  return rows[0] ?? null
+}
+
+================================================================================
+ANTES - API - findProcedure
+================================================================================
+async function findProcedure(params: {
+  monitoramentoId: string
+  procedimentoId: string
+  sigtapCode?: string
+}) {
+  const { monitoramentoId, procedimentoId, sigtapCode } = params
+
+  const rows = await prisma.$queryRawUnsafe<ProcedimentoRow[]>(
+    `
+      SELECT
+        p.id::text AS id,
+        p.monitoramento_id::text AS "monitoramentoId",
+        p.demanda_id::text AS "demandaId",
+        p.sigtap_codigo AS "sigtapCodigo",
+        p.sigtap_descricao AS "sigtapDescricao",
+        p.especialidade,
+        p.subespecialidade,
+        p.active
+      FROM public.judicial_procedimentos p
+      WHERE p.monitoramento_id::text = $1
+        AND (
+          p.id::text = $2
+          OR p.sigtap_codigo = $2
+          OR ($3 <> '' AND p.sigtap_codigo = $3)
+          OR ($2 LIKE '%-procedimento' AND COALESCE(p.active, TRUE) = TRUE)
+        )
+      ORDER BY
+        CASE
+          WHEN p.id::text = $2 THEN 0
+          WHEN p.sigtap_codigo = $2 THEN 1
+          WHEN $3 <> '' AND p.sigtap_codigo = $3 THEN 2
+          ELSE 3
+        END,
+        COALESCE(p.updated_at, p.created_at) DESC,
+        p.id ASC
+      LIMIT 1
+    `,
+    monitoramentoId,
+    procedimentoId,
+    sigtapCode || "",
+  )
+
+  return rows[0] ?? null
+}
+
+================================================================================
+ANTES - API - chamada findProcedure no DELETE
+================================================================================
+const procedimento = await findProcedure({
+      monitoramentoId: caseRow.monitoramentoId,
+      procedimentoId: decodedProcedimentoId,
+      sigtapCode,
+    })
+
+================================================================================
+DEPOIS - COMPONENTE - handleRemoveProcedure
+================================================================================
+async function handleRemoveProcedure(procedureId: string) {
+    if (!user) return
+
+    const item = caseItem.procedures.find((procedure) => procedure.id === procedureId)
+
+    if (!item) {
+      toast.error("Procedimento não encontrado.")
+      return
+    }
+
+    const reason = window.prompt(
+      `Informe o motivo para apagar/inativar o procedimento ${item.sigtapCode}:`,
+      "",
+    )
+
+    if (reason === null) return
+
+    const confirmed = window.confirm(
+      `Confirma apagar/inativar o procedimento ${item.sigtapCode} - ${item.description}?`,
+    )
+
+    if (!confirmed) return
+
+    try {
+      const response = await fetch(
+        `/api/judicial/casos/${encodeURIComponent(caseItem.id)}/procedimentos/${encodeURIComponent(procedureId)}`,
+        {
+          method: "DELETE",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            reason: reason.trim() || undefined,
+            sigtapCode: item.sigtapCode,
+            codigo: item.sigtapCode,
+            user,
+          }),
+        },
+      )
+
+      const data = await response.json()
+
+      if (!response.ok || !data?.ok) {
+        throw new Error(data?.error || "Erro ao apagar procedimento judicial.")
+      }
+
+      toast.success("Procedimento apagado/inativado e registrado em auditoria.")
+      window.location.reload()
+    } catch (error) {
+      console.error("[JudicialCaseDetail] erro ao apagar procedimento:", error)
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Erro ao apagar procedimento judicial.",
+      )
+    }
+  }
+
+================================================================================
+DEPOIS - API - CaseRow + findCase
+================================================================================
+type CaseRow = {
+  monitoramentoId: string
+  demandaId: string | null
+  origemRegistroId: string | null
+}
+
+type ProcedimentoRow = {
+  id: string
+  monitoramentoId: string
+  demandaId: string | null
+  sigtapCodigo: string | null
+  sigtapDescricao: string | null
+  especialidade: string | null
+  subespecialidade: string | null
+  active: boolean | null
+}
+
+function text(value: unknown) {
+  return String(value ?? "").trim()
+}
+
+async function findCase(caseId: string) {
+  const rows = await prisma.$queryRawUnsafe<CaseRow[]>(
+    `
+      SELECT
+        b.id::text AS "monitoramentoId",
+        b.demanda_id::text AS "demandaId",
+        b.origem_registro_id::text AS "origemRegistroId"
+      FROM public.judicial_monitoramento_base b
+      LEFT JOIN public.demandas d
+        ON d.id = b.demanda_id
+      WHERE UPPER(COALESCE(b.origem_modulo, '')) = 'JUDICIAL'
+        AND (
+          b.id::text = $1
+          OR b.demanda_id::text = $1
+          OR b.origem_registro_id::text = $1
+          OR d.id::text = $1
+          OR d.protocolo::text = $1
+        )
+      ORDER BY b.id DESC
+      LIMIT 1
+    `,
+    caseId,
+  )
+
+  return rows[0] ?? null
+}
+
+================================================================================
+DEPOIS - API - findProcedure
+================================================================================
+async function findProcedure(params: {
+  monitoramentoId: string
+  demandaId?: string | null
+  origemRegistroId?: string | null
+  procedimentoId: string
+  sigtapCode?: string
+}) {
+  const { monitoramentoId, demandaId, origemRegistroId, procedimentoId, sigtapCode } = params
+
+  const normalizedProcedimentoId = text(procedimentoId).replace(/\D/g, "")
+  const normalizedSigtapCode = text(sigtapCode).replace(/\D/g, "")
+
+  const rows = await prisma.$queryRawUnsafe<ProcedimentoRow[]>(
+    `
+      SELECT
+        p.id::text AS id,
+        p.monitoramento_id::text AS "monitoramentoId",
+        p.demanda_id::text AS "demandaId",
+        p.sigtap_codigo AS "sigtapCodigo",
+        p.sigtap_descricao AS "sigtapDescricao",
+        p.especialidade,
+        p.subespecialidade,
+        p.active
+      FROM public.judicial_procedimentos p
+      WHERE
+        p.id::text = $2
+        OR (
+          (
+            p.monitoramento_id::text = $1
+            OR ($4 <> '' AND p.demanda_id::text = $4)
+            OR ($5 <> '' AND p.demanda_id::text = $5)
+          )
+          AND (
+            p.sigtap_codigo = $2
+            OR ($3 <> '' AND p.sigtap_codigo = $3)
+            OR ($6 <> '' AND regexp_replace(COALESCE(p.sigtap_codigo, ''), '[^0-9]', '', 'g') = $6)
+            OR ($7 <> '' AND regexp_replace(COALESCE(p.sigtap_codigo, ''), '[^0-9]', '', 'g') = $7)
+          )
+        )
+      ORDER BY
+        CASE
+          WHEN p.id::text = $2 THEN 0
+          WHEN p.sigtap_codigo = $2 THEN 1
+          WHEN $3 <> '' AND p.sigtap_codigo = $3 THEN 2
+          WHEN $7 <> '' AND regexp_replace(COALESCE(p.sigtap_codigo, ''), '[^0-9]', '', 'g') = $7 THEN 3
+          WHEN $6 <> '' AND regexp_replace(COALESCE(p.sigtap_codigo, ''), '[^0-9]', '', 'g') = $6 THEN 4
+          ELSE 5
+        END,
+        COALESCE(p.updated_at, p.created_at) DESC,
+        p.id ASC
+      LIMIT 1
+    `,
+    monitoramentoId,
+    procedimentoId,
+    sigtapCode || "",
+    demandaId || "",
+    origemRegistroId || "",
+    normalizedProcedimentoId,
+    normalizedSigtapCode,
+  )
+
+  return rows[0] ?? null
+}
+
+================================================================================
+DEPOIS - API - chamada findProcedure no DELETE
+================================================================================
+const procedimento = await findProcedure({
+      monitoramentoId: caseRow.monitoramentoId,
+      demandaId: caseRow.demandaId,
+      origemRegistroId: caseRow.origemRegistroId,
+      procedimentoId: decodedProcedimentoId,
+      sigtapCode,
+    })

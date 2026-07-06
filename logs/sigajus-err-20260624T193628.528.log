@@ -1,0 +1,202 @@
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'dmar0hbe2clxheavxa9u'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'dmar0hbe2clxheavxa9u'
+}
+[email-integracao/processar] erro: Error: Connection not available
+    at ignore-listed frames {
+  code: 'NoConnection'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'lmcsv59gaqcco0ob6du1'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'lmcsv59gaqcco0ob6du1'
+}
+[email-integracao/processar] erro: Error: Connection not available
+    at ignore-listed frames {
+  code: 'NoConnection'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'f5076bvukupxfibtl4gz'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'f5076bvukupxfibtl4gz'
+}
+[email-triage-scheduler] erro: Error: Connection not available
+    at ignore-listed frames {
+  code: 'NoConnection'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1hbpmr37po9jksk55gib'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1hbpmr37po9jksk55gib'
+}
+[email-integracao/processar] erro: Error: Connection not available
+    at ignore-listed frames {
+  code: 'NoConnection'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'qbgr7zfnl9sxa5nrj8ke'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'qbgr7zfnl9sxa5nrj8ke'
+}
+[email-integracao/processar] erro: Error: Connection not available
+    at ignore-listed frames {
+  code: 'NoConnection'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '11bf8ax1ee9foe91kvae'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '11bf8ax1ee9foe91kvae'
+}
+[email-integracao/processar] erro: Error: Connection not available
+    at ignore-listed frames {
+  code: 'NoConnection'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'ytambinvh7buawwxvxlr'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'ytambinvh7buawwxvxlr'
+}
+[email-integracao/processar] erro: Error: Connection not available
+    at ignore-listed frames {
+  code: 'NoConnection'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'wb0eudltp4w5ppvjy34l'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'wb0eudltp4w5ppvjy34l'
+}
+[email-triage-scheduler] erro: Error: Connection not available
+    at ignore-listed frames {
+  code: 'NoConnection'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1h8s1k1et5q2k4udmvx7'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1h8s1k1et5q2k4udmvx7'
+}
+[email-integracao/processar] erro: Error: Connection not available
+    at ignore-listed frames {
+  code: 'NoConnection'
+}
+DASHBOARD_SUMMARY_COUNT_ERROR Error [PrismaClientKnownRequestError]: 
+Invalid `prisma.$queryRawUnsafe()` invocation:
+
+
+Raw query failed. Code: `42703`. Message: `column b.modulo_codigo does not exist`
+    at async s (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\[root-of-the-server]__5bde31da._.js:1:1441)
+    at async c (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\[root-of-the-server]__5bde31da._.js:33:47)
+    at async u (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\[root-of-the-server]__5bde31da._.js:49:3649) {
+  code: 'P2010',
+  meta: [Object],
+  clientVersion: '7.8.0'
+}
+DASHBOARD_SUMMARY_COUNT_ERROR Error [PrismaClientKnownRequestError]: 
+Invalid `prisma.$queryRawUnsafe()` invocation:
+
+
+Raw query failed. Code: `42703`. Message: `column b.modulo_codigo does not exist`
+    at async s (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\[root-of-the-server]__5bde31da._.js:1:1441)
+    at async c (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\[root-of-the-server]__5bde31da._.js:33:69)
+    at async u (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\[root-of-the-server]__5bde31da._.js:49:3649) {
+  code: 'P2010',
+  meta: [Object],
+  clientVersion: '7.8.0'
+}
+DASHBOARD_SUMMARY_COUNT_ERROR Error [PrismaClientKnownRequestError]: 
+Invalid `prisma.$queryRawUnsafe()` invocation:
+
+
+Raw query failed. Code: `42703`. Message: `column b.modulo_codigo does not exist`
+    at async s (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\[root-of-the-server]__5bde31da._.js:1:1441)
+    at async c (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\[root-of-the-server]__5bde31da._.js:33:47)
+    at async u (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\[root-of-the-server]__5bde31da._.js:49:3649) {
+  code: 'P2010',
+  meta: [Object],
+  clientVersion: '7.8.0'
+}
+DASHBOARD_SUMMARY_COUNT_ERROR Error [PrismaClientKnownRequestError]: 
+Invalid `prisma.$queryRawUnsafe()` invocation:
+
+
+Raw query failed. Code: `42703`. Message: `column b.modulo_codigo does not exist`
+    at async s (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\[root-of-the-server]__5bde31da._.js:1:1441)
+    at async c (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\[root-of-the-server]__5bde31da._.js:33:69)
+    at async u (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\[root-of-the-server]__5bde31da._.js:49:3649) {
+  code: 'P2010',
+  meta: [Object],
+  clientVersion: '7.8.0'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '7t15flwg4u28m6kkq6ny'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '7t15flwg4u28m6kkq6ny'
+}
+[email-integracao/processar] erro: Error: Connection not available
+    at ignore-listed frames {
+  code: 'NoConnection'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '5ar8fs7ghgrimol4z8rm'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '5ar8fs7ghgrimol4z8rm'
+}
+[email-triage-scheduler] erro: Error: Connection not available
+    at ignore-listed frames {
+  code: 'NoConnection'
+}

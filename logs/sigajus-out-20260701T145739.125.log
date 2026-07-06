@@ -1,0 +1,18 @@
+
+> my-project@0.1.0 start
+> next start
+
+▲ Next.js 16.1.6
+- Local:         http://localhost:3000
+- Network:       http://100.120.59.83:3000
+
+✓ Starting...
+[CORE automático] Agendador interno iniciado para execução diária às 06:00.
+✓ Ready in 266ms
+[CORE automático] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+prisma:error 
+Invalid `prisma.$executeRawUnsafe()` invocation:
+
+
+Raw query failed. Code: `22P02`. Message: `invalid input value for enum "CategoriaAnexo": "manifestacao"`
+Deseja finalizar o arquivo em lotes (S/N)? 

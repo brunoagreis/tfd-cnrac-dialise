@@ -1,0 +1,23 @@
+
+> my-project@0.1.0 start
+> next start
+
+▲ Next.js 16.1.6
+- Local:         http://localhost:3000
+- Network:       http://100.120.59.83:3000
+
+✓ Starting...
+[CORE automático] Agendador interno iniciado para execução diária às 06:00.
+✓ Ready in 272ms
+prisma:error 
+Invalid `prisma.$executeRawUnsafe()` invocation:
+
+
+Raw query failed. Code: `42P18`. Message: `could not determine data type of parameter $1`
+prisma:error 
+Invalid `prisma.$executeRawUnsafe()` invocation:
+
+
+Raw query failed. Code: `42P18`. Message: `could not determine data type of parameter $1`
+[CORE automático] Execução concluída: {"ok":true,"quantidade":0,"items":[]}
+Deseja finalizar o arquivo em lotes (S/N)? 

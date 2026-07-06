@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { requireAdminRequest } from "@/lib/security/server-session"
 import { syncMunicipalityPortalAccess } from "@/lib/municipality-portal-access"
 
 export const runtime = "nodejs"
@@ -55,7 +56,11 @@ function mapRow(row: MunicipioRow) {
   }
 }
 
-export async function GET() {
+export async function GET(req: Request) {
+
+  const adminGuard = await requireAdminRequest(req)
+  if (!adminGuard.ok) return adminGuard.response
+
   try {
     const rows = await prisma.$queryRawUnsafe<MunicipioRow[]>(`
       SELECT
@@ -84,6 +89,10 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+
+  const adminGuard = await requireAdminRequest(req)
+  if (!adminGuard.ok) return adminGuard.response
+
   try {
     const body = await req.json().catch(() => null)
 

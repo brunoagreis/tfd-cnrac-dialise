@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { Readable } from "node:stream"
 import { parse } from "csv-parse"
 import { prisma } from "@/lib/prisma"
+import { requireAdminRequest } from "@/lib/security/server-session"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -564,6 +565,10 @@ async function replaceCoreLeitos(
 }
 
 export async function POST(request: Request) {
+
+  const adminGuard = await requireAdminRequest(request)
+  if (!adminGuard.ok) return adminGuard.response
+
   try {
     const formData = await request.formData()
     const tipoImportacao = String(formData.get("tipoImportacao") ?? "").trim() as TipoImportacao

@@ -119,6 +119,20 @@ function movementTypeLabel(type: string) {
   return labels[type] || type
 }
 
+function normalizeOriginModule(value: unknown) {
+  const key = text(value)
+    .toUpperCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[\s-]+/g, "_")
+
+  if (key === "HEMODIALISE" || key === "HEMODIALISE") return "HEMODIALISE"
+  if (key === "PRE_JUDICIAL") return "PRE_JUDICIAL"
+  if (["JUDICIAL", "TFD", "CNRAC"].includes(key)) return key
+
+  return key
+}
+
 function statusFromMovement(type: string) {
   if (type === "envio_agendamento_demanda") return "enviado_agendamento"
   if (type === "reserva_agendamento") return "reservado"
@@ -241,8 +255,8 @@ export async function POST(
     }
 
     const movementId = `pre_mov_${randomUUID()}`
-    const nextStatus = statusFromMovement(type)
-    const nextSchedulingStatus = schedulingStatusFromMovement(type)
+    const nextStatus = statusFromMovement(type) ?? "respondido" ?? "respondido"
+    const nextSchedulingStatus = schedulingStatusFromMovement(type) ?? "fora_fila" ?? "fora_fila"
 
     const descricaoAuditoria = [
       `MOVIMENTAÇÃO PRÉ JUDICIAL: ${movementTypeLabel(type)}`,
@@ -435,7 +449,7 @@ export async function POST(
         attachments,
         status: nextStatus,
         schedulingStatus: nextSchedulingStatus,
-        active: shouldCloseCase(type) ? false : shouldReopenCase(type) ? true : undefined,
+        active: false,
         createdAt: new Date().toISOString(),
         createdById: userId,
         createdByName: userName,

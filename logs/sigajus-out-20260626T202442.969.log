@@ -1,0 +1,28 @@
+
+> my-project@0.1.0 start
+> next start
+
+▲ Next.js 16.1.6
+- Local:         http://localhost:3000
+- Network:       http://100.120.59.83:3000
+
+✓ Starting...
+[CORE automático] Agendador interno iniciado para execução diária às 06:00.
+✓ Ready in 279ms
+prisma:error 
+Invalid `prisma.$queryRawUnsafe()` invocation:
+
+
+Raw query failed. Code: `42703`. Message: `column p.cep does not exist`
+prisma:error 
+Invalid `prisma.$queryRawUnsafe()` invocation:
+
+
+Raw query failed. Code: `42703`. Message: `column p.cep does not exist`
+prisma:error 
+Invalid `prisma.$queryRawUnsafe()` invocation:
+
+
+Raw query failed. Code: `42703`. Message: `column p.cep does not exist`
+[CORE automático] Execução concluída: {"ok":true,"quantidade":1,"items":[{"monitoramentoId":"3","ficha":"3420030","tabela":"core_ambulatorial","situacao":"ABERTA","situacaoProcedimento":"AGUARDANDO REGULADOR","acao":"automatico"}]}
+Deseja finalizar o arquivo em lotes (S/N)? 

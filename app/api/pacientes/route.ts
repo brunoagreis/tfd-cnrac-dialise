@@ -14,6 +14,9 @@ type PacienteRow = {
   email: string | null
   municipio: string | null
   endereco: string | null
+  telefone: string | null
+  cep: string | null
+  bairro: string | null
   createdAt: string | null
   updatedAt: string | null
   totalDemandas: number | bigint | null
@@ -50,6 +53,11 @@ function normalizePatient(row: PacienteRow) {
     email: row.email ?? "",
     municipio: row.municipio ?? "",
     endereco: row.endereco ?? "",
+    telefone: row.telefone ?? "",
+    telefones: row.telefone ? [row.telefone] : [],
+    cep: row.cep ?? "",
+    bairro: row.bairro ?? "",
+    cidade: row.municipio ?? "",
     criadoEm: row.createdAt ?? "",
     atualizadoEm: row.updatedAt ?? "",
     totalDemandas: Number(row.totalDemandas ?? 0),
@@ -59,23 +67,7 @@ function normalizePatient(row: PacienteRow) {
 export async function GET(req: NextRequest) {
   try {
     const search = normalizeText(req.nextUrl.searchParams.get("q")).toLowerCase()
-
-    const params: unknown[] = []
-    const whereParts: string[] = []
-
-    if (search) {
-      params.push(`%${search}%`)
-      const idx = params.length
-
-      whereParts.push(`
-        (
-          LOWER(COALESCE(p.nome, '')) LIKE $${idx}
-          OR LOWER(COALESCE(p.cpf, '')) LIKE $${idx}
-          OR LOWER(COALESCE(p."cartaoSus", '')) LIKE $${idx}
-          OR LOWER(COALESCE(p.municipio, '')) LIKE $${idx}
-        )
-      `)
-    }
+    const searchLike = `%${search}%`
 
     const rows = await prisma.$queryRawUnsafe<PacienteRow[]>(
       `
@@ -88,13 +80,22 @@ export async function GET(req: NextRequest) {
           NULLIF(p.email, '') AS email,
           NULLIF(p.municipio, '') AS municipio,
           NULLIF(p.endereco, '') AS endereco,
+          NULLIF((SELECT tp.value FROM public.telefone_paciente tp WHERE tp."pacienteId" = p.id ORDER BY tp.id LIMIT 1), '') AS telefone,
+          NULL::text AS cep,
+          NULL::text AS bairro,
           p."createdAt"::text AS "createdAt",
           p."updatedAt"::text AS "updatedAt",
           COUNT(d.id) AS "totalDemandas"
         FROM public.pacientes p
         LEFT JOIN public.demandas d
           ON d."pacienteId" = p.id
-        ${whereParts.length > 0 ? `WHERE ${whereParts.join(" AND ")}` : ""}
+        WHERE (
+          $1::text = ''
+          OR LOWER(COALESCE(p.nome, '')) LIKE $2::text
+          OR LOWER(COALESCE(p.cpf, '')) LIKE $2::text
+          OR LOWER(COALESCE(p."cartaoSus", '')) LIKE $2::text
+          OR LOWER(COALESCE(p.municipio, '')) LIKE $2::text
+        )
         GROUP BY
           p.id,
           p.cpf,
@@ -108,7 +109,8 @@ export async function GET(req: NextRequest) {
           p."updatedAt"
         ORDER BY COALESCE(p.nome, '') ASC
       `,
-      ...params,
+      search,
+      searchLike,
     )
 
     return NextResponse.json({
@@ -119,7 +121,7 @@ export async function GET(req: NextRequest) {
     console.error("[GET /api/pacientes] erro:", error)
 
     return NextResponse.json(
-      { ok: false, error: "Erro ao carregar pacientes do banco." },
+      { ok: false, error: "Erro ao listar pacientes." },
       { status: 500 },
     )
   }
@@ -191,8 +193,6 @@ export async function POST(req: NextRequest) {
               email = $5,
               municipio = $6,
               endereco = $7,
-              cep = $8,
-              bairro = $9,
               "updatedAt" = NOW()
             WHERE id = $1
           `,
@@ -202,10 +202,7 @@ export async function POST(req: NextRequest) {
           dataNascimento,
           email || null,
           municipioOficial,
-          enderecoCompleto,
-          cep || null,
-          bairro || null,
-        )
+          enderecoCompleto,        )
 
         await tx.$executeRawUnsafe(`DELETE FROM public.telefone_paciente WHERE "pacienteId" = $1`, id)
       } else {
@@ -219,14 +216,11 @@ export async function POST(req: NextRequest) {
               "dataNascimento",
               email,
               municipio,
-              endereco,
-              cep,
-              bairro,
-              ativo,
+              endereco,              ativo,
               "createdAt",
               "updatedAt"
             )
-            VALUES ($1, $2, $3, $4, $5::date, $6, $7, $8, $9, $10, TRUE, NOW(), NOW())
+            VALUES ($1, $2, $3, $4, $5::date, $6, $7, $8, TRUE, NOW(), NOW())
           `,
           id,
           cpf,
@@ -235,10 +229,7 @@ export async function POST(req: NextRequest) {
           dataNascimento,
           email || null,
           municipioOficial,
-          enderecoCompleto,
-          cep || null,
-          bairro || null,
-        )
+          enderecoCompleto,        )
       }
 
       if (telefone) {
@@ -261,7 +252,10 @@ export async function POST(req: NextRequest) {
             NULLIF(p.email, '') AS email,
             NULLIF(p.municipio, '') AS municipio,
             NULLIF(p.endereco, '') AS endereco,
-            p."createdAt"::text AS "createdAt",
+          NULLIF((SELECT tp.value FROM public.telefone_paciente tp WHERE tp."pacienteId" = p.id ORDER BY tp.id LIMIT 1), '') AS telefone,
+          NULL::text AS cep,
+          NULL::text AS bairro,
+          p."createdAt"::text AS "createdAt",
             p."updatedAt"::text AS "updatedAt",
             0::int AS "totalDemandas"
           FROM public.pacientes p
@@ -284,3 +278,154 @@ export async function POST(req: NextRequest) {
     )
   }
 }
+
+export async function PATCH(req: NextRequest) {
+  try {
+    const body = await req.json().catch(() => null)
+
+    const id = normalizeText(body?.id)
+    const cpf = onlyDigits(body?.cpf)
+    const cartaoSus = onlyDigits(body?.cns ?? body?.cartaoSus)
+    const nome = normalizeUpper(body?.nome)
+    const dataNascimento = normalizeText(body?.dataNascimento)
+    const telefone = normalizeText(body?.telefone)
+    const email = normalizeText(body?.email).toLowerCase()
+    const endereco = normalizeText(body?.endereco)
+    const numero = normalizeText(body?.numero)
+    const complemento = normalizeText(body?.complemento)
+    const cep = normalizeText(body?.cep)
+    const bairro = normalizeText(body?.bairro)
+    const municipio = normalizeUpper(body?.cidade ?? body?.municipio)
+
+    if (!id || cpf.length !== 11 || !nome || !dataNascimento || !endereco || !municipio) {
+      return NextResponse.json(
+        { ok: false, error: "Informe ID, CPF, nome, nascimento, endereco e municipio." },
+        { status: 400 },
+      )
+    }
+
+    const municipioRows = await prisma.$queryRawUnsafe<MunicipioRow[]>(
+      `
+        SELECT municipio_nome AS "municipalityName"
+        FROM public.admin_judicial_municipios_contatos
+        WHERE LOWER(TRIM(municipio_nome)) = LOWER(TRIM($1))
+        LIMIT 1
+      `,
+      municipio,
+    )
+
+    const municipioOficial = normalizeUpper(municipioRows[0]?.municipalityName)
+
+    if (!municipioOficial) {
+      return NextResponse.json(
+        { ok: false, error: "Selecione um municipio cadastrado em Admin Judicial > Municipios." },
+        { status: 400 },
+      )
+    }
+
+    const duplicateCpf = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+      `
+        SELECT id::text AS id
+        FROM public.pacientes
+        WHERE cpf = $1 AND id::text <> $2
+        LIMIT 1
+      `,
+      cpf,
+      id,
+    )
+
+    if (duplicateCpf.length > 0) {
+      return NextResponse.json(
+        { ok: false, error: "Ja existe outro paciente cadastrado com este CPF." },
+        { status: 409 },
+      )
+    }
+
+    const enderecoCompleto =
+      numero || complemento
+        ? [
+            endereco,
+            numero ? `No ${numero}` : "",
+            complemento,
+            bairro ? `BAIRRO ${bairro}` : "",
+            cep ? `CEP ${cep}` : "",
+          ]
+            .filter(Boolean)
+            .join(" - ")
+        : endereco
+
+    await prisma.$transaction(async (tx) => {
+      const existing = await tx.$queryRawUnsafe<Array<{ id: string }>>(
+        `SELECT id::text AS id FROM public.pacientes WHERE id::text = $1 LIMIT 1`,
+        id,
+      )
+
+      if (existing.length === 0) {
+        throw new Error("Paciente nao encontrado.")
+      }
+
+      await tx.$executeRawUnsafe(
+        `
+          UPDATE public.pacientes
+          SET
+            cpf = $2,
+            "cartaoSus" = $3,
+            nome = $4,
+            "dataNascimento" = $5::date,
+            email = $6,
+            municipio = $7,
+            endereco = $8,
+            "updatedAt" = NOW()
+          WHERE id::text = $1
+        `,
+        id,
+        cpf,
+        cartaoSus,
+        nome,
+        dataNascimento,
+        email || null,
+        municipioOficial,
+        enderecoCompleto,
+      )
+
+      await tx.$executeRawUnsafe(`DELETE FROM public.telefone_paciente WHERE "pacienteId" = $1`, id)
+
+      if (telefone) {
+        await tx.$executeRawUnsafe(
+          `INSERT INTO public.telefone_paciente (id, "pacienteId", value) VALUES ($1, $2, $3)`,
+          buildId("tel_"),
+          id,
+          telefone,
+        )
+      }
+    })
+
+    return NextResponse.json({
+      ok: true,
+      item: normalizePatient({
+        id,
+        cpf,
+        cartaoSus,
+        nome,
+        dataNascimento,
+        email: email || null,
+        municipio: municipioOficial,
+        endereco: enderecoCompleto,
+        telefone: telefone || null,
+        cep: cep || null,
+        bairro: bairro || null,
+        createdAt: null,
+        updatedAt: new Date().toISOString(),
+        totalDemandas: null,
+      }),
+    })
+  } catch (error) {
+    console.error("[PATCH /api/pacientes] erro:", error)
+
+    return NextResponse.json(
+      { ok: false, error: error instanceof Error ? error.message : "Erro ao atualizar paciente." },
+      { status: 500 },
+    )
+  }
+}
+

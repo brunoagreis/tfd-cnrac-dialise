@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import bcrypt from "bcryptjs"
 import { prisma } from "@/lib/prisma"
+import { requireAdminRequest } from "@/lib/security/server-session"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -36,13 +37,28 @@ function normalizePerfilCodigo(value: unknown) {
   return text(value).toUpperCase()
 }
 
+function isProfessionalCouncilProfile(value: unknown) {
+  const codigo = normalizePerfilCodigo(value)
+
+  return (
+    codigo === "MEDICO" ||
+    codigo === "MEDICO_SES" ||
+    codigo === "ENFERMEIRO" ||
+    codigo === "ENFERMAGEM"
+  )
+}
+
+function sanitizeProfessionalRegistration(value: unknown) {
+  return text(value).replace(/[^\d.]/g, "")
+}
+
 function roleTecnicoFromPerfil(perfilCodigo: string) {
   const codigo = normalizePerfilCodigo(perfilCodigo)
 
   if (codigo === "ADMIN") return "admin"
   if (codigo === "UNIDADE") return "unidade"
   if (codigo === "UNIDADE_HOSPITALAR") return "unidade"
-  if (codigo === "MEDICO") return "judicial"
+  if (codigo === "MEDICO" || codigo === "MEDICO_SES" || codigo === "ENFERMEIRO" || codigo === "ENFERMAGEM") return "judicial"
   if (codigo === "MONITORAMENTO") return "judicial"
   if (codigo === "OPERADOR") return "pre_judicial"
 
@@ -159,6 +175,10 @@ async function getUserRoleEnumValues() {
 
 export async function GET(req: NextRequest) {
   try {
+    const adminGuard = await requireAdminRequest(req)
+
+    if (!adminGuard.ok) return adminGuard.response
+
     const { searchParams } = new URL(req.url)
     const q = text(searchParams.get("q"))
     const perfilMap = await getPerfisMap()
@@ -214,6 +234,10 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const adminGuard = await requireAdminRequest(req)
+
+    if (!adminGuard.ok) return adminGuard.response
+
     const body = await req.json().catch(() => ({}))
 
     const nome = text(body?.nome)
@@ -254,6 +278,25 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       )
     }
+
+    const requiresProfessionalRegistration = isProfessionalCouncilProfile(perfilCodigo)
+    const professionalRegistration = sanitizeProfessionalRegistration(cargo)
+
+    if (requiresProfessionalRegistration && !professionalRegistration) {
+      return NextResponse.json(
+        { ok: false, error: "Informe Cargo, CRM, COREN." },
+        { status: 400 },
+      )
+    }
+
+    if (requiresProfessionalRegistration && professionalRegistration !== cargo.trim()) {
+      return NextResponse.json(
+        { ok: false, error: "Cargo, CRM, COREN aceita apenas números e ponto." },
+        { status: 400 },
+      )
+    }
+
+    const cargoForSave = requiresProfessionalRegistration ? professionalRegistration : cargo
 
     const perfilExiste = await prisma.$queryRawUnsafe<Array<{ codigo: string }>>(
       `
@@ -353,7 +396,7 @@ export async function POST(req: NextRequest) {
       nome,
       email,
       telefone || null,
-      cargo || null,
+      cargoForSave || null,
       senhaHash,
       roleTecnico,
       perfilCodigo,
@@ -379,6 +422,10 @@ export async function POST(req: NextRequest) {
 
 export async function PATCH(req: NextRequest) {
   try {
+    const adminGuard = await requireAdminRequest(req)
+
+    if (!adminGuard.ok) return adminGuard.response
+
     const body = await req.json().catch(() => ({}))
 
     const id = text(body?.id)

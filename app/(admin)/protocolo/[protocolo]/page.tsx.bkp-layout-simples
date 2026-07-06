@@ -1,0 +1,752 @@
+"use client"
+
+import { use, useEffect, useMemo, useState } from "react"
+import Link from "next/link"
+import {
+  ArrowLeft,
+  ChevronLeft,
+  ChevronRight,
+  FileText,
+  Paperclip,
+  Printer,
+  ShieldAlert,
+  X,
+} from "lucide-react"
+
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+
+const PAGE_SIZE = 2
+
+type ApiPaciente = {
+  id: string
+  cpf: string
+  cartaoSus: string
+  nome: string
+  dataNascimento: string
+  telefones: string[]
+  email: string
+  municipio: string
+  endereco: string
+}
+
+type ApiDemanda = {
+  id: string
+  protocolo: string
+  pacienteId: string
+  modulo: string
+  localSolicitante: string
+  telefoneSolicitante: string[]
+  emailSolicitante: string
+  codigoSigtap: string
+  descricaoSigtap: string
+  cid10: string
+  especialidade: string
+  subespecialidade: string
+  peso: string
+  altura: string
+  tipoSanguineo: string
+  observacoesUnidade: string
+  tipoSolicitacao: string
+  localSolicitado: string
+  acaoJudicial: boolean
+  status: string
+  criadoEm: string
+  atualizadoEm: string
+  criadoPor: string
+  criadoPorNome: string
+}
+
+type ApiAnexo = {
+  id: string
+  demandaId: string
+  interacaoId: string
+  nome: string
+  tipo: string
+  tamanho: number
+  categoria: string
+  descricao: string
+  criadoPor: string
+  criadoPorNome: string
+  criadoEm: string
+  arquivoNomeOriginal: string
+  arquivoPath: string
+  mimeType: string
+  arquivoUrl: string
+}
+
+type ApiInteracao = {
+  id: string
+  demandaId: string
+  texto: string
+  pendencia?: string
+  anexos: ApiAnexo[]
+  criadoEm: string
+  criadoPor: string
+  criadoPorNome: string
+  criadoPorCpf: string
+  assinaturaUrl: string
+}
+
+type ApiResponse = {
+  ok: boolean
+  item?: {
+    demanda: ApiDemanda
+    paciente: ApiPaciente
+  }
+  error?: string
+}
+
+type ApiInteracoesResponse = {
+  ok: boolean
+  items?: ApiInteracao[]
+  error?: string
+}
+
+type ApiAnexosResponse = {
+  ok: boolean
+  items?: ApiAnexo[]
+  error?: string
+}
+
+type MovementColumnItem =
+  | {
+      type: "interacao"
+      id: string
+      interacao: ApiInteracao
+    }
+  | {
+      type: "anexos-gerais"
+      id: string
+      anexos: ApiAnexo[]
+    }
+
+const MODULE_LABELS: Record<string, string> = {
+  tfd: "TFD",
+  cnrac: "CNRAC",
+  hemodialise: "Hemodiálise",
+  judicial: "Judicial",
+  pre_judicial: "Pré Judicial",
+}
+
+const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
+  pendente: {
+    label: "Pendente",
+    className: "bg-amber-100 text-amber-800",
+  },
+  resolvido: {
+    label: "Resolvido",
+    className: "bg-emerald-100 text-emerald-800",
+  },
+  devolvida: {
+    label: "Devolvida",
+    className: "bg-red-100 text-red-800",
+  },
+}
+
+const TIPO_SOLICITACAO_LABELS: Record<string, string> = {
+  inclusao: "Inclusão",
+  substituicao: "Substituição",
+  alta: "Alta",
+  outros: "Outros",
+  nao_se_aplica: "Não se aplica",
+}
+
+const PENDENCIA_LABELS: Record<string, string> = {
+  finalizar_demanda: "Finalização da demanda",
+  pendente_avaliacao_medica_ses: "Pendente avaliação médica SES",
+}
+
+function moduleLabel(value: string) {
+  const key = String(value ?? "").toLowerCase()
+  return MODULE_LABELS[key] ?? (key ? key.toUpperCase() : "Módulo")
+}
+
+function statusConfig(value: string) {
+  const key = String(value || "pendente").toLowerCase()
+  return STATUS_CONFIG[key] ?? STATUS_CONFIG.pendente
+}
+
+function valueOrNotInformed(value: unknown) {
+  const text = String(value ?? "").trim()
+  return text || "Não informado"
+}
+
+function formatDateOnly(value: string) {
+  if (!value) return "Não informado"
+
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return "Não informado"
+
+  return parsed.toLocaleDateString("pt-BR")
+}
+
+function formatDateTime(value: string) {
+  if (!value) return "Não informado"
+
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return "Não informado"
+
+  return parsed.toLocaleString("pt-BR")
+}
+
+function calculateAge(value: string) {
+  if (!value) return "Não informado"
+
+  const birthDate = new Date(value)
+  if (Number.isNaN(birthDate.getTime())) return "Não informado"
+
+  const today = new Date()
+  let age = today.getFullYear() - birthDate.getFullYear()
+  const monthDiff = today.getMonth() - birthDate.getMonth()
+
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+    age -= 1
+  }
+
+  if (age < 0) return "Não informado"
+
+  return age === 1 ? "1 ano" : `${age} anos`
+}
+
+function tipoSolicitacaoLabel(value: string) {
+  const key = String(value ?? "").trim().toLowerCase()
+
+  if (!key || key === "transito") return "Não informado"
+
+  return TIPO_SOLICITACAO_LABELS[key] ?? "Não informado"
+}
+
+function pendenciaLabel(value?: string) {
+  const key = String(value ?? "").trim()
+  return PENDENCIA_LABELS[key] ?? (key ? key.replaceAll("_", " ") : "Movimentação")
+}
+
+function formatFileSize(value: number) {
+  const size = Number(value ?? 0)
+
+  if (!Number.isFinite(size) || size <= 0) return "Tamanho não informado"
+  if (size < 1024) return `${size} B`
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
+
+  return `${(size / 1024 / 1024).toFixed(1)} MB`
+}
+
+function protocolBackHref(modulo: string) {
+  const key = String(modulo ?? "").toLowerCase()
+
+  if (key === "judicial") return "/judicial"
+  if (key === "pre_judicial") return "/pre-judicial"
+  if (["tfd", "cnrac", "hemodialise"].includes(key)) return `/${key}`
+
+  return "/pacientes"
+}
+
+function pageCount(total: number) {
+  return Math.max(1, Math.ceil(total / PAGE_SIZE))
+}
+
+function pageItems<T>(items: T[], page: number) {
+  const start = (page - 1) * PAGE_SIZE
+  return items.slice(start, start + PAGE_SIZE)
+}
+
+export default function ProtocoloPage({
+  params,
+}: {
+  params: Promise<{ protocolo: string }>
+}) {
+  const { protocolo } = use(params)
+  const decodedProtocol = useMemo(() => decodeURIComponent(protocolo), [protocolo])
+
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState("")
+  const [demanda, setDemanda] = useState<ApiDemanda | null>(null)
+  const [paciente, setPaciente] = useState<ApiPaciente | null>(null)
+  const [interacoes, setInteracoes] = useState<ApiInteracao[]>([])
+  const [anexos, setAnexos] = useState<ApiAnexo[]>([])
+  const [timelineError, setTimelineError] = useState("")
+  const [auditModalOpen, setAuditModalOpen] = useState(false)
+  const [manifestacaoPage, setManifestacaoPage] = useState(1)
+  const [movimentacaoPage, setMovimentacaoPage] = useState(1)
+
+  useEffect(() => {
+    async function loadProtocolo() {
+      try {
+        setLoading(true)
+        setError("")
+        setTimelineError("")
+        setDemanda(null)
+        setPaciente(null)
+        setInteracoes([])
+        setAnexos([])
+
+        const response = await fetch(`/api/protocolo/${encodeURIComponent(decodedProtocol)}`, {
+          method: "GET",
+          cache: "no-store",
+        })
+
+        const json = (await response.json().catch(() => ({}))) as ApiResponse
+
+        if (!response.ok || !json?.ok || !json?.item) {
+          setError(json?.error || "Protocolo não encontrado.")
+          return
+        }
+
+        setDemanda(json.item.demanda)
+        setPaciente(json.item.paciente)
+
+        const [interacoesResponse, anexosResponse] = await Promise.all([
+          fetch(`/api/protocolo/${encodeURIComponent(decodedProtocol)}/interacoes`, {
+            method: "GET",
+            cache: "no-store",
+          }),
+          fetch(`/api/protocolo/${encodeURIComponent(decodedProtocol)}/anexos`, {
+            method: "GET",
+            cache: "no-store",
+          }),
+        ])
+
+        const interacoesJson = (await interacoesResponse.json().catch(() => ({}))) as ApiInteracoesResponse
+        const anexosJson = (await anexosResponse.json().catch(() => ({}))) as ApiAnexosResponse
+
+        if (interacoesResponse.ok && interacoesJson?.ok) {
+          setInteracoes(interacoesJson.items ?? [])
+        } else {
+          setTimelineError(interacoesJson?.error || "Não foi possível carregar manifestações e movimentações.")
+        }
+
+        if (anexosResponse.ok && anexosJson?.ok) {
+          setAnexos(anexosJson.items ?? [])
+        }
+      } catch (err) {
+        console.error("LOAD_PROTOCOLO_ERROR", err)
+        setError("Erro ao carregar protocolo.")
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    void loadProtocolo()
+  }, [decodedProtocol])
+
+  const manifestacoes = useMemo(
+    () =>
+      interacoes.filter((item) => {
+        const hasPendencia = Boolean(String(item.pendencia ?? "").trim())
+        const hasAnexos = Boolean(item.anexos?.length)
+
+        return !hasPendencia && !hasAnexos
+      }),
+    [interacoes],
+  )
+
+  const movimentacoes = useMemo(
+    () =>
+      interacoes.filter((item) => {
+        const hasPendencia = Boolean(String(item.pendencia ?? "").trim())
+        const hasAnexos = Boolean(item.anexos?.length)
+
+        return hasPendencia || hasAnexos
+      }),
+    [interacoes],
+  )
+
+  const anexosSemInteracao = useMemo(
+    () => anexos.filter((anexo) => !String(anexo.interacaoId ?? "").trim()),
+    [anexos],
+  )
+
+  const movementColumnItems = useMemo<MovementColumnItem[]>(() => {
+    const items: MovementColumnItem[] = movimentacoes.map((interacao) => ({
+      type: "interacao",
+      id: interacao.id,
+      interacao,
+    }))
+
+    if (anexosSemInteracao.length) {
+      items.push({
+        type: "anexos-gerais",
+        id: "anexos-sem-movimentacao",
+        anexos: anexosSemInteracao,
+      })
+    }
+
+    return items
+  }, [movimentacoes, anexosSemInteracao])
+
+  const manifestacaoTotalPages = pageCount(manifestacoes.length)
+  const movimentacaoTotalPages = pageCount(movementColumnItems.length)
+
+  const currentManifestacoes = pageItems(manifestacoes, manifestacaoPage)
+  const currentMovimentacoes = pageItems(movementColumnItems, movimentacaoPage)
+
+  useEffect(() => {
+    setManifestacaoPage(1)
+  }, [manifestacoes.length])
+
+  useEffect(() => {
+    setMovimentacaoPage(1)
+  }, [movementColumnItems.length])
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-4 py-16">
+        <FileText className="h-12 w-12 text-muted-foreground" />
+        <h2 className="text-lg font-semibold text-foreground">Carregando protocolo...</h2>
+      </div>
+    )
+  }
+
+  if (!demanda || !paciente) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-4 py-16">
+        <FileText className="h-12 w-12 text-muted-foreground" />
+        <h2 className="text-lg font-semibold text-foreground">Protocolo não encontrado</h2>
+        <p className="text-sm text-muted-foreground">{error || "O protocolo informado não existe no sistema."}</p>
+        <Button asChild variant="outline">
+          <Link href="/dashboard">Voltar ao Dashboard</Link>
+        </Button>
+      </div>
+    )
+  }
+
+  const status = statusConfig(demanda.status)
+  const sigtapText =
+    demanda.codigoSigtap || demanda.descricaoSigtap
+      ? `${demanda.codigoSigtap || "Sem código"} - ${demanda.descricaoSigtap || "Sem descrição"}`
+      : "Não informado"
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-3 print:hidden sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" size="sm" asChild>
+            <Link href={protocolBackHref(demanda.modulo)}>
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Voltar
+            </Link>
+          </Button>
+
+          <Button size="sm" variant="outline" onClick={() => window.print()}>
+            <Printer className="mr-2 h-4 w-4" />
+            Imprimir
+          </Button>
+
+          <Button size="sm" variant="outline" onClick={() => setAuditModalOpen(true)}>
+            <ShieldAlert className="mr-2 h-4 w-4" />
+            Auditoria
+          </Button>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant="outline">{moduleLabel(demanda.modulo)}</Badge>
+          <Badge variant="outline" className={status.className}>
+            {status.label}
+          </Badge>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Protocolo</p>
+            <h1 className="text-2xl font-bold tracking-tight text-foreground">{demanda.protocolo}</h1>
+          </div>
+
+          <div className="text-sm text-muted-foreground sm:text-right">
+            <p>Criado em {formatDateTime(demanda.criadoEm)}</p>
+            <p>Por {demanda.criadoPorNome || "Não informado"}</p>
+          </div>
+        </div>
+      </div>
+
+      <Card className="border-border">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base text-card-foreground">Paciente</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Nome</p>
+            <p className="text-xl font-bold text-card-foreground">{paciente.nome || "Não informado"}</p>
+          </div>
+
+          <div className="grid gap-3 text-sm md:grid-cols-2">
+            <InfoLine
+              label="Data de Nascimento"
+              value={`${formatDateOnly(paciente.dataNascimento)} | Idade: ${calculateAge(paciente.dataNascimento)}`}
+            />
+            <InfoLine
+              label="CNS / CPF"
+              value={`${valueOrNotInformed(paciente.cartaoSus)} | ${valueOrNotInformed(paciente.cpf)}`}
+            />
+            <InfoLine label="E-mail" value={valueOrNotInformed(paciente.email)} />
+            <InfoLine label="Município" value={valueOrNotInformed(paciente.municipio)} />
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="border-border">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base text-card-foreground">Dados Clínicos</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="grid gap-3 text-sm md:grid-cols-2">
+            <InfoLine label="SIGTAP" value={sigtapText} />
+            <InfoLine label="CID-10" value={valueOrNotInformed(demanda.cid10)} />
+            <InfoLine
+              label="Especialidade / Subespecialidade"
+              value={`${valueOrNotInformed(demanda.especialidade)} | ${valueOrNotInformed(demanda.subespecialidade)}`}
+            />
+            <InfoLine label="Tipo da Solicitação" value={tipoSolicitacaoLabel(demanda.tipoSolicitacao)} />
+          </div>
+
+          {demanda.observacoesUnidade ? (
+            <div className="rounded-md border border-border bg-muted/30 p-3">
+              <p className="text-xs font-medium text-muted-foreground">Observações</p>
+              <p className="mt-1 whitespace-pre-wrap text-sm text-card-foreground">{demanda.observacoesUnidade}</p>
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
+
+      {timelineError ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+          {timelineError}
+        </div>
+      ) : null}
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card className="border-border">
+          <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
+            <CardTitle className="text-base text-card-foreground">Manifestação</CardTitle>
+            <Badge variant="outline">{manifestacoes.length}</Badge>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {currentManifestacoes.length ? (
+              currentManifestacoes.map((item) => <ManifestacaoCard key={item.id} item={item} />)
+            ) : (
+              <EmptyTimeline text="Nenhuma manifestação registrada." />
+            )}
+
+            <PaginationControls
+              page={manifestacaoPage}
+              totalPages={manifestacaoTotalPages}
+              onPrevious={() => setManifestacaoPage((current) => Math.max(1, current - 1))}
+              onNext={() => setManifestacaoPage((current) => Math.min(manifestacaoTotalPages, current + 1))}
+            />
+          </CardContent>
+        </Card>
+
+        <Card className="border-border">
+          <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
+            <CardTitle className="text-base text-card-foreground">Movimentação</CardTitle>
+            <Badge variant="outline">{movementColumnItems.length}</Badge>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {currentMovimentacoes.length ? (
+              currentMovimentacoes.map((item) =>
+                item.type === "interacao" ? (
+                  <MovimentacaoCard key={item.id} item={item.interacao} />
+                ) : (
+                  <AnexosGeraisCard key={item.id} anexos={item.anexos} />
+                ),
+              )
+            ) : (
+              <EmptyTimeline text="Nenhuma movimentação registrada." />
+            )}
+
+            <PaginationControls
+              page={movimentacaoPage}
+              totalPages={movimentacaoTotalPages}
+              onPrevious={() => setMovimentacaoPage((current) => Math.max(1, current - 1))}
+              onNext={() => setMovimentacaoPage((current) => Math.min(movimentacaoTotalPages, current + 1))}
+            />
+          </CardContent>
+        </Card>
+      </div>
+
+      {auditModalOpen ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm print:hidden"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="w-full max-w-2xl rounded-xl border border-border bg-card shadow-lg">
+            <div className="flex items-start justify-between gap-4 border-b border-border p-4">
+              <div>
+                <h2 className="text-lg font-semibold text-card-foreground">Auditoria</h2>
+                <p className="text-sm text-muted-foreground">Protocolo {demanda.protocolo}</p>
+              </div>
+
+              <Button variant="ghost" size="icon" onClick={() => setAuditModalOpen(false)} aria-label="Fechar auditoria">
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+
+            <div className="space-y-3 p-4">
+              <div className="rounded-lg border border-border p-3 text-sm">
+                <p className="font-medium text-card-foreground">Registro da demanda</p>
+                <p className="mt-1 text-muted-foreground">ID: {demanda.id}</p>
+                <p className="text-muted-foreground">Módulo: {moduleLabel(demanda.modulo)}</p>
+              </div>
+
+              <div className="rounded-lg border border-border p-3 text-sm text-muted-foreground">
+                As ações do sistema são gravadas em <strong>sistema_auditoria</strong>. Esta tela mantém o botão de
+                auditoria no padrão do Judicial/Pré Judicial, sem incluir controles judiciais como PGE.net, número de
+                processo, responsável, prazo ou monitoramento.
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function InfoLine({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="text-xs font-medium text-muted-foreground">{label}</span>
+      <span className="text-sm text-card-foreground">{value}</span>
+    </div>
+  )
+}
+
+function EmptyTimeline({ text }: { text: string }) {
+  return (
+    <div className="rounded-lg border border-dashed border-border p-4 text-center text-sm text-muted-foreground">
+      {text}
+    </div>
+  )
+}
+
+function ManifestacaoCard({ item }: { item: ApiInteracao }) {
+  return (
+    <div className="rounded-xl border border-border p-4">
+      <div className="flex flex-col gap-1 border-b border-border pb-3">
+        <p className="text-sm font-semibold text-card-foreground">{item.criadoPorNome || "Usuário não informado"}</p>
+        <p className="text-xs text-muted-foreground">{formatDateTime(item.criadoEm)}</p>
+      </div>
+
+      <p className="mt-3 whitespace-pre-wrap text-sm text-card-foreground">{item.texto || "Sem descrição."}</p>
+    </div>
+  )
+}
+
+function MovimentacaoCard({ item }: { item: ApiInteracao }) {
+  return (
+    <div className="rounded-xl border border-border p-4">
+      <div className="flex flex-col gap-2 border-b border-border pb-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant="secondary">{pendenciaLabel(item.pendencia)}</Badge>
+          <span className="text-xs text-muted-foreground">{formatDateTime(item.criadoEm)}</span>
+        </div>
+
+        <p className="text-sm text-muted-foreground">
+          {item.criadoPorNome || "Usuário não informado"}
+        </p>
+      </div>
+
+      <p className="mt-3 whitespace-pre-wrap text-sm text-card-foreground">{item.texto || "Sem descrição."}</p>
+
+      {item.anexos?.length ? <AttachmentList anexos={item.anexos} /> : null}
+    </div>
+  )
+}
+
+function AnexosGeraisCard({ anexos }: { anexos: ApiAnexo[] }) {
+  return (
+    <div className="rounded-xl border border-border p-4">
+      <div className="flex flex-col gap-1 border-b border-border pb-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant="secondary">Anexos sem movimentação vinculada</Badge>
+          <span className="text-xs text-muted-foreground">{anexos.length} arquivo(s)</span>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Arquivos antigos ou enviados antes do vínculo com movimentação.
+        </p>
+      </div>
+
+      <AttachmentList anexos={anexos} />
+    </div>
+  )
+}
+
+function AttachmentList({ anexos }: { anexos: ApiAnexo[] }) {
+  return (
+    <div className="mt-4 rounded-lg border border-border bg-muted/30 p-3">
+      <p className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        <Paperclip className="h-3.5 w-3.5" />
+        Anexos
+      </p>
+
+      <div className="space-y-2">
+        {anexos.map((anexo) => {
+          const url = anexo.arquivoUrl || anexo.arquivoPath
+          const nome = anexo.arquivoNomeOriginal || anexo.nome || "Arquivo"
+
+          return (
+            <div key={anexo.id} className="rounded-md border border-border bg-background p-2">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm font-medium text-card-foreground">{nome}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {formatFileSize(anexo.tamanho)} • {anexo.criadoPorNome || "Usuário não informado"}
+                  </p>
+                </div>
+
+                {url ? (
+                  <div className="flex items-center gap-2 text-xs">
+                    <a className="font-medium text-primary hover:underline" href={url} target="_blank" rel="noreferrer">
+                      Visualizar
+                    </a>
+                    <span className="text-muted-foreground">|</span>
+                    <a className="font-medium text-primary hover:underline" href={url} download>
+                      Baixar
+                    </a>
+                  </div>
+                ) : null}
+              </div>
+
+              {anexo.descricao ? (
+                <p className="mt-2 whitespace-pre-wrap text-xs text-muted-foreground">{anexo.descricao}</p>
+              ) : null}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function PaginationControls({
+  page,
+  totalPages,
+  onPrevious,
+  onNext,
+}: {
+  page: number
+  totalPages: number
+  onPrevious: () => void
+  onNext: () => void
+}) {
+  return (
+    <div className="flex items-center justify-between gap-2 border-t border-border pt-3 print:hidden">
+      <Button variant="outline" size="sm" onClick={onPrevious} disabled={page <= 1}>
+        <ChevronLeft className="mr-1 h-4 w-4" />
+        Anterior
+      </Button>
+
+      <span className="text-xs text-muted-foreground">
+        Página {page} de {totalPages}
+      </span>
+
+      <Button variant="outline" size="sm" onClick={onNext} disabled={page >= totalPages}>
+        Próxima
+        <ChevronRight className="ml-1 h-4 w-4" />
+      </Button>
+    </div>
+  )
+}

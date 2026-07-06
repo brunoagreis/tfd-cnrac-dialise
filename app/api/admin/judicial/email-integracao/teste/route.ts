@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { requireAdminRequest } from "@/lib/security/server-session"
 import { testEmailTriageConnection } from "@/lib/email-triage-test"
 import { previewAllEmailTriage } from "@/lib/email-triage-preview"
 
@@ -6,6 +7,9 @@ export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
 export async function GET(req: NextRequest) {
+
+  const adminGuard = await requireAdminRequest(req)
+  if (!adminGuard.ok) return adminGuard.response
   try {
     const url = new URL(req.url)
     const action = url.searchParams.get("action") || "connection"

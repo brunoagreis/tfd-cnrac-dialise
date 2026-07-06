@@ -380,6 +380,9 @@ export function PreJudicialCaseDetail({ caseId }: { caseId: string }) {
   const [movementAppointmentDate, setMovementAppointmentDate] = useState("")
   const [selectedMovementFiles, setSelectedMovementFiles] = useState<FileList | null>(null)
   const [uploadingMovement, setUploadingMovement] = useState(false)
+  const [latestMovementsPage, setLatestMovementsPage] = useState(1)
+
+  const LATEST_MOVEMENTS_PAGE_SIZE = 3
 
   const [finalizeStatus, setFinalizeStatus] =
     useState<keyof typeof PRE_FINALIZATION_LABELS>("pendente")
@@ -599,9 +602,25 @@ export function PreJudicialCaseDetail({ caseId }: { caseId: string }) {
   )
 
   const latestMovements = useMemo(
-    () => [...(caseItem?.movements ?? [])].reverse().slice(0, 5),
+    () => [...(caseItem?.movements ?? [])].reverse(),
     [caseItem?.movements],
   )
+
+  const totalLatestMovementsPages = Math.max(
+    1,
+    Math.ceil(latestMovements.length / LATEST_MOVEMENTS_PAGE_SIZE),
+  )
+
+  const paginatedLatestMovements = useMemo(() => {
+    const start = (latestMovementsPage - 1) * LATEST_MOVEMENTS_PAGE_SIZE
+    return latestMovements.slice(start, start + LATEST_MOVEMENTS_PAGE_SIZE)
+  }, [latestMovements, latestMovementsPage])
+
+  useEffect(() => {
+    setLatestMovementsPage((current) =>
+      Math.min(Math.max(1, current), totalLatestMovementsPages),
+    )
+  }, [totalLatestMovementsPages])
 
   function ensureUser() {
     if (!user) {
@@ -1570,7 +1589,7 @@ export function PreJudicialCaseDetail({ caseId }: { caseId: string }) {
         <Card className="border-border">
           <CardHeader className="pb-3">
             <CardTitle className="text-base">Últimas movimentações</CardTitle>
-            <CardDescription>Exibe as 5 movimentações mais recentes.</CardDescription>
+            <CardDescription>Exibe as movimentações registradas, com até 3 por página.</CardDescription>
           </CardHeader>
 
           <CardContent className="space-y-3">
@@ -1579,7 +1598,7 @@ export function PreJudicialCaseDetail({ caseId }: { caseId: string }) {
                 Nenhuma movimentação registrada.
               </div>
             ) : (
-              latestMovements.map((item) => (
+              paginatedLatestMovements.map((item) => (
                 <div key={item.id} className="rounded-lg border border-border p-3">
                   <div className="mb-1 flex flex-wrap items-center gap-2">
                     <Badge variant="outline">{getMovementLabel(item.type)}</Badge>
@@ -1614,6 +1633,43 @@ export function PreJudicialCaseDetail({ caseId }: { caseId: string }) {
                 </div>
               ))
             )}
+            {latestMovements.length > 0 ? (
+              <div className="flex items-center justify-between border-t border-border pt-3">
+                <p className="text-xs text-muted-foreground">
+                  Página {latestMovementsPage} de {totalLatestMovementsPages}
+                </p>
+
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="bg-transparent"
+                    disabled={latestMovementsPage <= 1}
+                    onClick={() =>
+                      setLatestMovementsPage((current) => Math.max(1, current - 1))
+                    }
+                  >
+                    Anterior
+                  </Button>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="bg-transparent"
+                    disabled={latestMovementsPage >= totalLatestMovementsPages}
+                    onClick={() =>
+                      setLatestMovementsPage((current) =>
+                        Math.min(totalLatestMovementsPages, current + 1),
+                      )
+                    }
+                  >
+                    Próxima
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+
+
           </CardContent>
         </Card>
       </div>

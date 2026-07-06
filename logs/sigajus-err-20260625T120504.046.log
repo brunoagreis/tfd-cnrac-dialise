@@ -1,0 +1,1993 @@
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1h93oswdhw1jvthqzt3y'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1h93oswdhw1jvthqzt3y'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1euh4eeyskppkydkvusc'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1euh4eeyskppkydkvusc'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '3xpexg3b44jt7wdonue1'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '3xpexg3b44jt7wdonue1'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '9hws70xfy9728e7fnhx3'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '9hws70xfy9728e7fnhx3'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '11lwqlpuerqt47ibo473'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '11lwqlpuerqt47ibo473'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '768qu5wyqzwdez55uca2'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '768qu5wyqzwdez55uca2'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'koamwkjghv57wtefsvlh'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'koamwkjghv57wtefsvlh'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '19396yiq15kymki5yivb'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '19396yiq15kymki5yivb'
+}
+DASHBOARD_SUMMARY_COUNT_ERROR Error [PrismaClientKnownRequestError]: 
+Invalid `prisma.$queryRawUnsafe()` invocation:
+
+
+Raw query failed. Code: `42703`. Message: `column b.modulo_codigo does not exist`
+    at async s (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\[root-of-the-server]__5bde31da._.js:1:1441)
+    at async c (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\[root-of-the-server]__5bde31da._.js:33:47)
+    at async u (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\[root-of-the-server]__5bde31da._.js:49:3649) {
+  code: 'P2010',
+  meta: [Object],
+  clientVersion: '7.8.0'
+}
+DASHBOARD_SUMMARY_COUNT_ERROR Error [PrismaClientKnownRequestError]: 
+Invalid `prisma.$queryRawUnsafe()` invocation:
+
+
+Raw query failed. Code: `42703`. Message: `column b.modulo_codigo does not exist`
+    at async s (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\[root-of-the-server]__5bde31da._.js:1:1441)
+    at async c (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\[root-of-the-server]__5bde31da._.js:33:69)
+    at async u (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\[root-of-the-server]__5bde31da._.js:49:3649) {
+  code: 'P2010',
+  meta: [Object],
+  clientVersion: '7.8.0'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '16mw0kjjabd2c2nbdj54'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '16mw0kjjabd2c2nbdj54'
+}
+DASHBOARD_SUMMARY_COUNT_ERROR Error [PrismaClientKnownRequestError]: 
+Invalid `prisma.$queryRawUnsafe()` invocation:
+
+
+Raw query failed. Code: `42703`. Message: `column b.modulo_codigo does not exist`
+    at async s (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\[root-of-the-server]__5bde31da._.js:1:1441)
+    at async c (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\[root-of-the-server]__5bde31da._.js:33:47)
+    at async u (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\[root-of-the-server]__5bde31da._.js:49:3649) {
+  code: 'P2010',
+  meta: [Object],
+  clientVersion: '7.8.0'
+}
+DASHBOARD_SUMMARY_COUNT_ERROR Error [PrismaClientKnownRequestError]: 
+Invalid `prisma.$queryRawUnsafe()` invocation:
+
+
+Raw query failed. Code: `42703`. Message: `column b.modulo_codigo does not exist`
+    at async s (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\[root-of-the-server]__5bde31da._.js:1:1441)
+    at async c (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\[root-of-the-server]__5bde31da._.js:33:69)
+    at async u (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\[root-of-the-server]__5bde31da._.js:49:3649) {
+  code: 'P2010',
+  meta: [Object],
+  clientVersion: '7.8.0'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '10473bmvshibesduc8lt'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '10473bmvshibesduc8lt'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '7in4189qs3ixgb2caq9p'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '7in4189qs3ixgb2caq9p'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'vbx09v6apuxhya0dvu71'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'vbx09v6apuxhya0dvu71'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1st13af5u1w25jt62od0'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1st13af5u1w25jt62od0'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1emoz8krpiv2jpi3kwzd'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1emoz8krpiv2jpi3kwzd'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'u41avzc99evj53ld699z'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'u41avzc99evj53ld699z'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '48sm9jqpwfoe2igfh2hm'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '48sm9jqpwfoe2igfh2hm'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1fms0ihed0cveyzhgnt7'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1fms0ihed0cveyzhgnt7'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '10b1669r8brxlob863tr'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '10b1669r8brxlob863tr'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '3drtawxfacp45nv6ywzj'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '3drtawxfacp45nv6ywzj'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'oxyvhnuglnqg8ymu82ck'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'oxyvhnuglnqg8ymu82ck'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1gm4u94q3d7i2c7bxdkt'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1gm4u94q3d7i2c7bxdkt'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'neldkceqiumvfajlp6qd'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'neldkceqiumvfajlp6qd'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'cxdggvxeonryyv0hcy5y'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'cxdggvxeonryyv0hcy5y'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'gudpggtd3ut3rsldyoen'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'gudpggtd3ut3rsldyoen'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1x4r6s1tw7muww237cg1'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1x4r6s1tw7muww237cg1'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'v47i6vekep8xtk7arubb'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'v47i6vekep8xtk7arubb'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'x8ltqxr589vogivgjx52'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'x8ltqxr589vogivgjx52'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1073bvfcprpjj1ow6hyd'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1073bvfcprpjj1ow6hyd'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1cdz8quqxmtucdec797c'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1cdz8quqxmtucdec797c'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '19zorc91sy065tta2b5r'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '19zorc91sy065tta2b5r'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'lpo5d7fjs7ofb13ygs1z'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'lpo5d7fjs7ofb13ygs1z'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1hx4naldugtbvmrix6mt'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1hx4naldugtbvmrix6mt'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '18redshtp1v69v2n4ds3'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '18redshtp1v69v2n4ds3'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'ssvexkjfrff5e9yqzru7'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'ssvexkjfrff5e9yqzru7'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'zff4l2fzbobzpapup46w'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'zff4l2fzbobzpapup46w'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '7ayz2pn8fldu1aqkx5vu'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '7ayz2pn8fldu1aqkx5vu'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'jro1u2xg3t4t6libfsaj'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'jro1u2xg3t4t6libfsaj'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '17roiw619vuv86oxh1fb'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '17roiw619vuv86oxh1fb'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '6c0gwfhqihoyi1k9ogvx'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '6c0gwfhqihoyi1k9ogvx'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1h4cettjipaciv0eae8a'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1h4cettjipaciv0eae8a'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'gbztdfvkna6ky8je7bvv'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'gbztdfvkna6ky8je7bvv'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1euk18bqsfgmwh0ay06i'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1euk18bqsfgmwh0ay06i'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1b0ye0ax0gahz3nnougz'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1b0ye0ax0gahz3nnougz'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'm4gqhr588rd2fx49fylg'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'm4gqhr588rd2fx49fylg'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'sexcfrplhw4eybsrxivl'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'sexcfrplhw4eybsrxivl'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'c3n14gubrgjml6ehixm3'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'c3n14gubrgjml6ehixm3'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1bpvxk12geoa5so32d8w'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1bpvxk12geoa5so32d8w'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '4d3uy7jpe0fd6ap29o0y'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '4d3uy7jpe0fd6ap29o0y'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '3rquhfauo5of1i0w7zjk'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '3rquhfauo5of1i0w7zjk'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '139lvni5uw2szabb3wh4'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '139lvni5uw2szabb3wh4'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '04rd1ailf0rncsxp1ok4'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '04rd1ailf0rncsxp1ok4'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'mfrgx0bho3tpwmoghxso'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'mfrgx0bho3tpwmoghxso'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'e4y70b1mfojnu7shvqps'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'e4y70b1mfojnu7shvqps'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'qfzjzvxdg371ug00oy2i'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'qfzjzvxdg371ug00oy2i'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1ev3hu8bmuyddb9ltrit'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1ev3hu8bmuyddb9ltrit'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'niuu74x092lvmqim86g9'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'niuu74x092lvmqim86g9'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '14cgkwbe36c37poulxwm'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '14cgkwbe36c37poulxwm'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'kxf79182d1sg9gal0s13'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'kxf79182d1sg9gal0s13'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '0vani0rl2aph0447x38e'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '0vani0rl2aph0447x38e'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'p6i09iihui5c4wnc0js1'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'p6i09iihui5c4wnc0js1'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '16twq9vse2ag8q672bid'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '16twq9vse2ag8q672bid'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'dnatkkekyoyeauk6qeq0'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'dnatkkekyoyeauk6qeq0'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1ubv1eofcnlxm1ajz8p3'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1ubv1eofcnlxm1ajz8p3'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'cxnbl53zy91rnex4d85z'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'cxnbl53zy91rnex4d85z'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1aqlrq8ue3f2jm54zpqn'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1aqlrq8ue3f2jm54zpqn'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '16n6dyz5ilahp9lmipkk'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '16n6dyz5ilahp9lmipkk'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'yyczcasl198z85isny9l'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'yyczcasl198z85isny9l'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'p5rd2210liijeq6p9piu'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'p5rd2210liijeq6p9piu'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'roi01uu9ht49oi312kvz'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'roi01uu9ht49oi312kvz'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1i72rm4w291q0j68xsfp'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1i72rm4w291q0j68xsfp'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '13bbkza37c8k6uxe2c79'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '13bbkza37c8k6uxe2c79'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '113yg1tmp861vl2bxjt8'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '113yg1tmp861vl2bxjt8'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '10xfrbsuscrva34czsdd'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '10xfrbsuscrva34czsdd'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'g5zjimz5gtvqexsi7vkg'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'g5zjimz5gtvqexsi7vkg'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'zeyybuvy35q7m2g3h4pk'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'zeyybuvy35q7m2g3h4pk'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '183w14ucbpmdtw95gey6'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '183w14ucbpmdtw95gey6'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1gdt02fbsebah7rbbyn2'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1gdt02fbsebah7rbbyn2'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'd8rtnffrcouhiq45nbj0'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'd8rtnffrcouhiq45nbj0'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'k2taqkpk8jzgkg84et8g'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'k2taqkpk8jzgkg84et8g'
+}
+Error: Failed to find Server Action "1c6fe6891e59694892af7a88f71695e97372d5b9". This request might be from an older or newer deployment.
+Read more: https://nextjs.org/docs/messages/failed-to-find-server-action
+    at ignore-listed frames
+Error: Failed to find Server Action. This request might be from an older or newer deployment.
+Read more: https://nextjs.org/docs/messages/failed-to-find-server-action
+    at ignore-listed frames
+Error: Failed to find Server Action. This request might be from an older or newer deployment.
+Read more: https://nextjs.org/docs/messages/failed-to-find-server-action
+    at ignore-listed frames
+Error: Failed to find Server Action. This request might be from an older or newer deployment.
+Read more: https://nextjs.org/docs/messages/failed-to-find-server-action
+    at ignore-listed frames
+Error: Failed to find Server Action. This request might be from an older or newer deployment.
+Read more: https://nextjs.org/docs/messages/failed-to-find-server-action
+    at ignore-listed frames
+Error: Failed to find Server Action. This request might be from an older or newer deployment.
+Read more: https://nextjs.org/docs/messages/failed-to-find-server-action
+    at ignore-listed frames
+Error: Failed to find Server Action. This request might be from an older or newer deployment.
+Read more: https://nextjs.org/docs/messages/failed-to-find-server-action
+    at ignore-listed frames
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'xqp846jgrs16maylrq0s'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'xqp846jgrs16maylrq0s'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'lvosowsh788q8r5sw2j2'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'lvosowsh788q8r5sw2j2'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'd7irmafvn2trr45sqqmh'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'd7irmafvn2trr45sqqmh'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'ailgfv79gb7jngcxuw98'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'ailgfv79gb7jngcxuw98'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'mtv6gm68qwgd7icsekh5'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'mtv6gm68qwgd7icsekh5'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'xxvlomdre2tfqc0az58s'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'xxvlomdre2tfqc0az58s'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'jdemngcb1empcyztwic5'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'jdemngcb1empcyztwic5'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1ajcdjetel6ultpdj9mg'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1ajcdjetel6ultpdj9mg'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1f0dex296s36ggom2pp2'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1f0dex296s36ggom2pp2'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '17ttjcr92ql2689g5t6q'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '17ttjcr92ql2689g5t6q'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '10qiljl4cp7mayc4be80'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '10qiljl4cp7mayc4be80'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '185fea61csmm7drk0m9l'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '185fea61csmm7drk0m9l'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'vmsuacalydxr2osyedgj'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'vmsuacalydxr2osyedgj'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'jvw6dtnh2akb4topo4q6'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'jvw6dtnh2akb4topo4q6'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '187smmzxav2qdvobswrl'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '187smmzxav2qdvobswrl'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1bnco975s1xwzvasnn17'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1bnco975s1xwzvasnn17'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '382qk3zgkae04b4p15jg'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '382qk3zgkae04b4p15jg'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '7yykryzucus9tprl8ffy'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '7yykryzucus9tprl8ffy'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'o6hk58g31c7zea6q0vr8'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'o6hk58g31c7zea6q0vr8'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '053ltelq998qg0v0gdkb'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '053ltelq998qg0v0gdkb'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'glgx1k59ouif39pv9rrg'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'glgx1k59ouif39pv9rrg'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1di9q2hidiqijvfc01e8'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1di9q2hidiqijvfc01e8'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '2lthchzndevdaou7xgba'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '2lthchzndevdaou7xgba'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'vaswi1ob2yd9dbz5vtm3'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'vaswi1ob2yd9dbz5vtm3'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '16idoatcyh6rs5rzuj1p'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '16idoatcyh6rs5rzuj1p'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'gzxge7to2ktw6hb0f8gj'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'gzxge7to2ktw6hb0f8gj'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1bd2y9nqknie38vmdl7x'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1bd2y9nqknie38vmdl7x'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'wnwo4ldc5a7fodrz6xtc'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'wnwo4ldc5a7fodrz6xtc'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1eiowrex8g7x2zppb8xe'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1eiowrex8g7x2zppb8xe'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '6nlruo2vw8jsrjgb7cxd'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '6nlruo2vw8jsrjgb7cxd'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '19danovcpwhd327iyamo'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '19danovcpwhd327iyamo'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'kr9obc4oy8xwykfjd7wk'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'kr9obc4oy8xwykfjd7wk'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'ds7ilf7tntkh7bq8b543'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'ds7ilf7tntkh7bq8b543'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'q2jpm5u0s3a9jrr44ca7'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'q2jpm5u0s3a9jrr44ca7'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '17dk05gjmxmjxm6si7yq'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '17dk05gjmxmjxm6si7yq'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '17weq5d90ny3ggq0sxtf'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '17weq5d90ny3ggq0sxtf'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '0vkzk2ps9jytldgx9sua'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '0vkzk2ps9jytldgx9sua'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '97a44b6dn0xci1qf3s5f'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '97a44b6dn0xci1qf3s5f'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '14mag8913vepolto4c4f'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '14mag8913vepolto4c4f'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1bwaqrxjlx3s7w7ssxto'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1bwaqrxjlx3s7w7ssxto'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '33tkw1cct85n0nnwe2ro'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '33tkw1cct85n0nnwe2ro'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1420d4krck1ei30j0bg5'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1420d4krck1ei30j0bg5'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'o8awcx5h129nidwol1dg'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'o8awcx5h129nidwol1dg'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'fep1vaesxc9c4tyr7pxj'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'fep1vaesxc9c4tyr7pxj'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'ihe5kxdebpafavgq6iwy'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'ihe5kxdebpafavgq6iwy'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'tzmlh7nb0ml675aotpfc'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'tzmlh7nb0ml675aotpfc'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'm3ejb04fnqwiz7jorieo'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'm3ejb04fnqwiz7jorieo'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'rb6u1vr24k18k4k42je5'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'rb6u1vr24k18k4k42je5'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'j7h4eyhteg0iq9bx3znp'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'j7h4eyhteg0iq9bx3znp'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '125gi08yqguhw525zn9w'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '125gi08yqguhw525zn9w'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1dqgb1eyrjayvyspooqm'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1dqgb1eyrjayvyspooqm'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'wsj657gop3w2olg2cvxj'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'wsj657gop3w2olg2cvxj'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1dp6ku1l227rxm8e413u'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1dp6ku1l227rxm8e413u'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'wtsq69zigrdwb6ojj99q'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'wtsq69zigrdwb6ojj99q'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'ad66sp6pl1l2wcfpsi5z'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'ad66sp6pl1l2wcfpsi5z'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '16vlwwyolvk8yjyk5awh'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '16vlwwyolvk8yjyk5awh'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1f4h6ykad1p3aussyd96'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1f4h6ykad1p3aussyd96'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1bo92eunlp8tb1txev3w'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1bo92eunlp8tb1txev3w'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'y65wsa9ohp2aae9x29wk'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'y65wsa9ohp2aae9x29wk'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'l5310dx6awntycfjoma2'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'l5310dx6awntycfjoma2'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1gjrfqiprghxjsdlbwex'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1gjrfqiprghxjsdlbwex'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '14hwnscxqqzd65dw77hw'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '14hwnscxqqzd65dw77hw'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1cudpqubm3dk6odd3trx'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1cudpqubm3dk6odd3trx'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '152f6726p24e50y8rcl4'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '152f6726p24e50y8rcl4'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '12lscjs1a2nvb804hro2'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '12lscjs1a2nvb804hro2'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'lcq61qtk04mz1o6syad4'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'lcq61qtk04mz1o6syad4'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '98d6310bo8ffsiif8cs6'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '98d6310bo8ffsiif8cs6'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'fuoxdtth9o1nfqyx54wc'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'fuoxdtth9o1nfqyx54wc'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '7k5uyuaik9jheziv9efv'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '7k5uyuaik9jheziv9efv'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'gvjexk5ml4tg991u34p1'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'gvjexk5ml4tg991u34p1'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '10mom888vd0kd1zt9g65'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '10mom888vd0kd1zt9g65'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1fu9vdemkzoukfdpca7e'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1fu9vdemkzoukfdpca7e'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'aa5fcg5ukxiu9ao8ueoo'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'aa5fcg5ukxiu9ao8ueoo'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '153zl5cchfjewhnrz51d'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '153zl5cchfjewhnrz51d'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'kn9txf7my32qu82pa2q3'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'kn9txf7my32qu82pa2q3'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'silzb8oeu8w9g7jpi3vl'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'silzb8oeu8w9g7jpi3vl'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1e34au28ijr8jn1ec5um'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1e34au28ijr8jn1ec5um'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'rr1ol0r5fwiqrrhhaoqq'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'rr1ol0r5fwiqrrhhaoqq'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1eoe9y5uhh48kizjs56i'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1eoe9y5uhh48kizjs56i'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'n1o1n8mpmbui2s0mwaw4'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'n1o1n8mpmbui2s0mwaw4'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1ewkd5l5h375p3y4o64e'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1ewkd5l5h375p3y4o64e'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '603cat2ece6gim13fnaj'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '603cat2ece6gim13fnaj'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'ut4e6kj179ndtvrs8vkx'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'ut4e6kj179ndtvrs8vkx'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'zdkgknhqdp6k29n3elbu'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'zdkgknhqdp6k29n3elbu'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '11b208obz53nvt4pd2ir'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '11b208obz53nvt4pd2ir'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1761ej6cldy20ouslyj0'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1761ej6cldy20ouslyj0'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'dubkbtt8fnm88ja7qe6e'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'dubkbtt8fnm88ja7qe6e'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'bdpu12j5ikm65jtvfxx6'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'bdpu12j5ikm65jtvfxx6'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1bxfuwwwi7h2l1mx3ias'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1bxfuwwwi7h2l1mx3ias'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '0ofkxe2k4wj6gzzmr2gh'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '0ofkxe2k4wj6gzzmr2gh'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'p96i1x3bqkau2ntb0s5b'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'p96i1x3bqkau2ntb0s5b'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'h47tlcnc8tys41fuj8sa'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'h47tlcnc8tys41fuj8sa'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '3woke4jyf396mj4ns4sa'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '3woke4jyf396mj4ns4sa'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'ha71xc9hn3qg6roxynqu'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'ha71xc9hn3qg6roxynqu'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '15s31m72qxjlw1zpbmzc'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '15s31m72qxjlw1zpbmzc'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '6wne5ia6lze83sm187sm'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '6wne5ia6lze83sm187sm'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '16oeci4bhbc2xhn6dfyp'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '16oeci4bhbc2xhn6dfyp'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'tnstl7lurqjpwc0ox61h'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'tnstl7lurqjpwc0ox61h'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '135rx1srx2ml2gebp0y3'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '135rx1srx2ml2gebp0y3'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'k5ff3qqlvhng48zq7tvf'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'k5ff3qqlvhng48zq7tvf'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '14uue4o4fmmdgujs6msj'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '14uue4o4fmmdgujs6msj'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'smuqy0vx8fmlanqek96e'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'smuqy0vx8fmlanqek96e'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1v3phbe5tlk4to2eufz3'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '1v3phbe5tlk4to2eufz3'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'e48k47to2wg5v7klx5da'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'e48k47to2wg5v7klx5da'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '14yhlng9ia9lb0cg45m3'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '14yhlng9ia9lb0cg45m3'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '103sgu1rytlvq252xyjb'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '103sgu1rytlvq252xyjb'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'r55ll8gfbaq2oh81hijx'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'r55ll8gfbaq2oh81hijx'
+}
+DASHBOARD_SUMMARY_COUNT_ERROR Error [PrismaClientKnownRequestError]: 
+Invalid `prisma.$queryRawUnsafe()` invocation:
+
+
+Raw query failed. Code: `42703`. Message: `column b.modulo_codigo does not exist`
+    at async s (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\[root-of-the-server]__5bde31da._.js:1:1441)
+    at async c (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\[root-of-the-server]__5bde31da._.js:33:47)
+    at async u (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\[root-of-the-server]__5bde31da._.js:49:3649) {
+  code: 'P2010',
+  meta: [Object],
+  clientVersion: '7.8.0'
+}
+DASHBOARD_SUMMARY_COUNT_ERROR Error [PrismaClientKnownRequestError]: 
+Invalid `prisma.$queryRawUnsafe()` invocation:
+
+
+Raw query failed. Code: `42703`. Message: `column b.modulo_codigo does not exist`
+    at async s (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\[root-of-the-server]__5bde31da._.js:1:1441)
+    at async c (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\[root-of-the-server]__5bde31da._.js:33:69)
+    at async u (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\[root-of-the-server]__5bde31da._.js:49:3649) {
+  code: 'P2010',
+  meta: [Object],
+  clientVersion: '7.8.0'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '30hc55nkycw3hhx15m2u'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '30hc55nkycw3hhx15m2u'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'ozcr7ku2nkbjhm5oqwyz'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: 'ozcr7ku2nkbjhm5oqwyz'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '196pk1aam8x07193u79j'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '196pk1aam8x07193u79j'
+}
+Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '9yxwasf8d3faxdbanh15'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at ignore-listed frames {
+  code: 'ETIMEOUT',
+  _connId: '9yxwasf8d3faxdbanh15'
+}

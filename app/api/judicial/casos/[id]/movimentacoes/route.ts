@@ -20,6 +20,8 @@ type ReturnRule = {
 
 const TERMINAL_MOVEMENT_STATUS: Record<string, string> = {
   cumprimento: "CUMPRIDO",
+  procedimento_nao_sus: "CUMPRIDO",
+  competencia_municipio: "CUMPRIDO",
   cumprido: "CUMPRIDO",
   resolvido: "RESOLVIDO",
   arquivado: "ARQUIVADO",
@@ -160,6 +162,8 @@ function movementTypeLabel(type: string) {
     reiteracao: "Reiteração",
     descumprimento: "Descumprimento",
     cumprimento: "Cumprimento",
+    procedimento_nao_sus: "Procedimento Não SUS",
+    competencia_municipio: "Competência do Município",
     falta_paciente: "Falta do paciente",
     obito: "Óbito",
     bloqueio: "Bloqueio",

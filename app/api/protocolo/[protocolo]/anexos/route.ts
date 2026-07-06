@@ -10,6 +10,7 @@ export const dynamic = "force-dynamic"
 type AnexoRow = {
   id: string
   demandaId: string
+  interacaoId: string | null
   nome: string
   tipo: string | null
   tamanho: number | null
@@ -52,6 +53,22 @@ async function findDemandaIdByProtocol(protocolo: string) {
   return demandaRows[0]?.id ?? null
 }
 
+async function validateInteracaoBelongsToDemanda(interacaoId: string, demandaId: string) {
+  const rows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+    `
+      SELECT id::text AS id
+      FROM public.interacoes
+      WHERE id = $1
+        AND "demandaId" = $2
+      LIMIT 1
+    `,
+    interacaoId,
+    demandaId,
+  )
+
+  return Boolean(rows[0]?.id)
+}
+
 export async function GET(
   _req: NextRequest,
   context: { params: Promise<{ protocolo: string }> },
@@ -74,6 +91,7 @@ export async function GET(
         SELECT
           a.id::text AS id,
           a."demandaId"::text AS "demandaId",
+          a."interacaoId"::text AS "interacaoId",
           a.nome,
           a.tipo,
           a.tamanho,
@@ -97,6 +115,7 @@ export async function GET(
       items: rows.map((row) => ({
         id: row.id,
         demandaId: row.demandaId,
+        interacaoId: row.interacaoId ?? "",
         nome: row.nome ?? "",
         tipo: row.tipo ?? "",
         tamanho: Number(row.tamanho ?? 0),
@@ -108,7 +127,7 @@ export async function GET(
         arquivoNomeOriginal: row.arquivoNomeOriginal ?? "",
         arquivoPath: row.arquivoPath ?? "",
         mimeType: row.mimeType ?? "",
-        arquivoUrl: row.arquivoPath ?? "",
+        arquivoUrl: row.arquivoPath ? `/api/files/${String(row.arquivoPath).split("/").filter(Boolean).join("/")}` : "",
       })),
     })
   } catch (error) {
@@ -144,6 +163,7 @@ export async function POST(
     const descricao = normalizeText(form.get("descricao")) || null
     const criadoPor = normalizeText(form.get("criadoPor")) || null
     const criadoPorNome = normalizeText(form.get("criadoPorNome")) || null
+    const interacaoId = normalizeText(form.get("interacaoId")) || null
 
     if (!(file instanceof File)) {
       return NextResponse.json(
@@ -157,6 +177,17 @@ export async function POST(
         { ok: false, error: "Nome do arquivo inválido." },
         { status: 400 },
       )
+    }
+
+    if (interacaoId) {
+      const interacaoValida = await validateInteracaoBelongsToDemanda(interacaoId, demandaId)
+
+      if (!interacaoValida) {
+        return NextResponse.json(
+          { ok: false, error: "Movimentação inválida para este protocolo." },
+          { status: 400 },
+        )
+      }
     }
 
     const id = buildId("anx_")
@@ -180,6 +211,7 @@ export async function POST(
         INSERT INTO public.anexos (
           id,
           "demandaId",
+          "interacaoId",
           nome,
           tipo,
           tamanho,
@@ -192,10 +224,11 @@ export async function POST(
           "arquivoPath",
           "mimeType"
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), $10, $11, $12)
+        VALUES ($1, $2, $3, $4, $5, $6, $7::"CategoriaAnexo", $8, $9, $10, NOW(), $11, $12, $13)
       `,
       id,
       demandaId,
+      interacaoId,
       nomeOriginal,
       file.type || null,
       Number(file.size ?? 0),
@@ -213,6 +246,7 @@ export async function POST(
       item: {
         id,
         demandaId,
+        interacaoId: interacaoId ?? "",
         nome: nomeOriginal,
         tipo: file.type || "",
         tamanho: Number(file.size ?? 0),
@@ -224,7 +258,7 @@ export async function POST(
         arquivoNomeOriginal: nomeOriginal,
         arquivoPath,
         mimeType: file.type || "",
-        arquivoUrl: arquivoPath,
+        arquivoUrl: `/api/files/${arquivoPath.split("/").filter(Boolean).join("/")}`,
       },
     })
   } catch (error) {

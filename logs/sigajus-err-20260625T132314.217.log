@@ -1,0 +1,298 @@
+[email-integracao/regras GET] erro: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async U.performIO (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:11397)
+    at async U.executeRaw (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:10296) {
+  clientVersion: '7.8.0'
+}
+[GET /api/judicial/casos] erro: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async U.performIO (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:11397)
+    at async U.executeRaw (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:10296) {
+  clientVersion: '7.8.0'
+}
+[GET /api/email-os] ensure: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async U.performIO (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:11397)
+    at async U.executeRaw (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:10296) {
+  clientVersion: '7.8.0'
+}
+[GET /api/email-os] select: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async U.performIO (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:11397)
+    at async U.queryRaw (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:8179) {
+  clientVersion: '7.8.0'
+}
+[GET /api/pre-judicial/casos] erro: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async U.performIO (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:11397)
+    at async U.queryRaw (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:8179) {
+  clientVersion: '7.8.0'
+}
+[GET /api/pre-judicial/casos] erro: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async U.performIO (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:11397)
+    at async U.queryRaw (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:8179) {
+  clientVersion: '7.8.0'
+}
+[mail-loop] erro: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async D.performIO (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_23a0366e._.js:1:11396)
+    at async D.executeRaw (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_23a0366e._.js:1:10295) {
+  clientVersion: '7.8.0'
+}
+[GET /api/agendamento-demanda/fila] erro: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async U.performIO (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:11397)
+    at async U.queryRaw (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:8179) {
+  clientVersion: '7.8.0'
+}
+[email-integracao/status] erro: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async U.performIO (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:11397)
+    at async U.executeRaw (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:10296) {
+  clientVersion: '7.8.0'
+}
+[email-integracao/historico] erro: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async U.performIO (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:11397)
+    at async U.executeRaw (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:10296) {
+  clientVersion: '7.8.0'
+}
+[email-integracao/status] erro: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async U.performIO (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:11397)
+    at async U.executeRaw (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:10296) {
+  clientVersion: '7.8.0'
+}
+[POST /api/judicial/monitoramento/core-automatico] erro: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async U.startTransaction (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:14924)
+    at async p (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_e9954cbf._.js:128:182)
+[CORE automático] Falha HTTP 500: {"ok":false,"error":"Erro ao executar monitoramento automático CORE.","detail":"SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string"}
+[email-integracao/status] erro: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async U.performIO (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:11397)
+    at async U.executeRaw (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:10296) {
+  clientVersion: '7.8.0'
+}
+[email-integracao/status] erro: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async U.performIO (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:11397)
+    at async U.executeRaw (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:10296) {
+  clientVersion: '7.8.0'
+}
+[email-integracao/status] erro: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async U.performIO (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:11397)
+    at async U.executeRaw (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:10296) {
+  clientVersion: '7.8.0'
+}
+[email-integracao/status] erro: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async U.performIO (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:11397)
+    at async U.executeRaw (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:10296) {
+  clientVersion: '7.8.0'
+}
+[email-integracao/status] erro: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async U.performIO (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:11397)
+    at async U.executeRaw (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:10296) {
+  clientVersion: '7.8.0'
+}
+[email-integracao/status] erro: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async U.performIO (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:11397)
+    at async U.executeRaw (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:10296) {
+  clientVersion: '7.8.0'
+}
+[email-integracao/status] erro: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async U.performIO (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:11397)
+    at async U.executeRaw (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:10296) {
+  clientVersion: '7.8.0'
+}
+[mail-loop] erro: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async D.performIO (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_23a0366e._.js:1:11396)
+    at async D.executeRaw (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_23a0366e._.js:1:10295) {
+  clientVersion: '7.8.0'
+}
+[email-integracao/status] erro: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async U.performIO (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:11397)
+    at async U.executeRaw (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:10296) {
+  clientVersion: '7.8.0'
+}
+[email-integracao/status] erro: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async U.performIO (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:11397)
+    at async U.executeRaw (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:10296) {
+  clientVersion: '7.8.0'
+}
+[email-integracao/processar] erro: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async U.performIO (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:11397)
+    at async U.executeRaw (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:10296) {
+  clientVersion: '7.8.0'
+}
+[email-integracao/status] erro: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async U.performIO (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:11397)
+    at async U.executeRaw (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:10296) {
+  clientVersion: '7.8.0'
+}
+[email-integracao/status] erro: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async U.performIO (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:11397)
+    at async U.executeRaw (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:10296) {
+  clientVersion: '7.8.0'
+}
+[email-integracao/status] erro: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async U.performIO (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:11397)
+    at async U.executeRaw (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:10296) {
+  clientVersion: '7.8.0'
+}
+[mail-loop] erro: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async D.performIO (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_23a0366e._.js:1:11396)
+    at async D.executeRaw (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_23a0366e._.js:1:10295) {
+  clientVersion: '7.8.0'
+}
+[email-integracao/status] erro: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async U.performIO (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:11397)
+    at async U.executeRaw (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:10296) {
+  clientVersion: '7.8.0'
+}
+[email-integracao/status] erro: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async U.performIO (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:11397)
+    at async U.executeRaw (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:10296) {
+  clientVersion: '7.8.0'
+}
+[email-integracao/processar] erro: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async U.performIO (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:11397)
+    at async U.executeRaw (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:10296) {
+  clientVersion: '7.8.0'
+}
+[email-integracao/status] erro: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async U.performIO (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:11397)
+    at async U.executeRaw (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:10296) {
+  clientVersion: '7.8.0'
+}
+[email-integracao/status] erro: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async U.performIO (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:11397)
+    at async U.executeRaw (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:10296) {
+  clientVersion: '7.8.0'
+}
+[email-integracao/status] erro: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async U.performIO (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:11397)
+    at async U.executeRaw (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:10296) {
+  clientVersion: '7.8.0'
+}
+[POST /api/judicial/monitoramento/core-automatico] erro: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async U.startTransaction (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:14924)
+    at async p (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_e9954cbf._.js:128:182)
+[CORE automático] Falha HTTP 500: {"ok":false,"error":"Erro ao executar monitoramento automático CORE.","detail":"SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string"}
+[mail-loop] erro: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async D.performIO (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_23a0366e._.js:1:11396)
+    at async D.executeRaw (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_23a0366e._.js:1:10295) {
+  clientVersion: '7.8.0'
+}
+[email-integracao/status] erro: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async U.performIO (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:11397)
+    at async U.executeRaw (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:10296) {
+  clientVersion: '7.8.0'
+}
+[email-integracao/status] erro: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async U.performIO (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:11397)
+    at async U.executeRaw (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:10296) {
+  clientVersion: '7.8.0'
+}
+[email-integracao/processar] erro: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async U.performIO (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:11397)
+    at async U.executeRaw (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:10296) {
+  clientVersion: '7.8.0'
+}
+[email-integracao/status] erro: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async U.performIO (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:11397)
+    at async U.executeRaw (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:10296) {
+  clientVersion: '7.8.0'
+}
+[email-integracao/status] erro: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async U.performIO (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:11397)
+    at async U.executeRaw (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:10296) {
+  clientVersion: '7.8.0'
+}
+[email-integracao/status] erro: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async U.performIO (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:11397)
+    at async U.executeRaw (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:10296) {
+  clientVersion: '7.8.0'
+}
+[mail-loop] erro: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async D.performIO (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_23a0366e._.js:1:11396)
+    at async D.executeRaw (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_23a0366e._.js:1:10295) {
+  clientVersion: '7.8.0'
+}
+[email-integracao/status] erro: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async U.performIO (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:11397)
+    at async U.executeRaw (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:10296) {
+  clientVersion: '7.8.0'
+}
+[email-integracao/status] erro: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async U.performIO (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:11397)
+    at async U.executeRaw (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:10296) {
+  clientVersion: '7.8.0'
+}
+[email-integracao/processar] erro: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async U.performIO (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:11397)
+    at async U.executeRaw (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:10296) {
+  clientVersion: '7.8.0'
+}
+[email-integracao/status] erro: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async U.performIO (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:11397)
+    at async U.executeRaw (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:10296) {
+  clientVersion: '7.8.0'
+}
+[email-integracao/status] erro: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async U.performIO (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:11397)
+    at async U.executeRaw (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:10296) {
+  clientVersion: '7.8.0'
+}
+[email-integracao/status] erro: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async U.performIO (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:11397)
+    at async U.executeRaw (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:10296) {
+  clientVersion: '7.8.0'
+}
+[email-integracao/status] erro: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async U.performIO (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:11397)
+    at async U.executeRaw (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:10296) {
+  clientVersion: '7.8.0'
+}
+[email-integracao/status] erro: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async U.performIO (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:11397)
+    at async U.executeRaw (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:10296) {
+  clientVersion: '7.8.0'
+}
+[email-integracao/status] erro: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async U.performIO (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:11397)
+    at async U.executeRaw (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:10296) {
+  clientVersion: '7.8.0'
+}
+[email-integracao/status] erro: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async U.performIO (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:11397)
+    at async U.executeRaw (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:10296) {
+  clientVersion: '7.8.0'
+}
+[mail-loop] erro: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async D.performIO (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_23a0366e._.js:1:11396)
+    at async D.executeRaw (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_23a0366e._.js:1:10295) {
+  clientVersion: '7.8.0'
+}
+[email-integracao/status] erro: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async U.performIO (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:11397)
+    at async U.executeRaw (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:10296) {
+  clientVersion: '7.8.0'
+}
+[FORGOT_PASSWORD_ERROR] Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async U.performIO (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:11397)
+    at async U.queryRaw (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:8179) {
+  clientVersion: '7.8.0'
+}
+[FORGOT_PASSWORD_ERROR] Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async U.performIO (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:11397)
+    at async U.queryRaw (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:8179) {
+  clientVersion: '7.8.0'
+}
+[email-integracao/status] erro: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async U.performIO (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:11397)
+    at async U.executeRaw (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:10296) {
+  clientVersion: '7.8.0'
+}
+[email-integracao/processar] erro: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async U.performIO (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:11397)
+    at async U.executeRaw (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:10296) {
+  clientVersion: '7.8.0'
+}
+[email-integracao/status] erro: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async U.performIO (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:11397)
+    at async U.executeRaw (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:10296) {
+  clientVersion: '7.8.0'
+}
+[email-integracao/status] erro: Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at async U.performIO (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:11397)
+    at async U.executeRaw (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\_212f7c70._.js:1:10296) {
+  clientVersion: '7.8.0'
+}

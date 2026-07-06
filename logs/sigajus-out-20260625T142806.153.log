@@ -1,0 +1,35 @@
+
+> my-project@0.1.0 start
+> next start
+
+▲ Next.js 16.1.6
+- Local:         http://localhost:3000
+- Network:       http://100.120.59.83:3000
+
+✓ Starting...
+[CORE automático] Agendador interno iniciado para execução diária às 06:00.
+✓ Ready in 286ms
+prisma:error SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+prisma:error SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+prisma:error SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+prisma:error SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+prisma:error SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+prisma:error SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+prisma:error SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+prisma:error SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+prisma:error SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+prisma:error SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+prisma:error SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+prisma:error SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+prisma:error SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+prisma:error SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+prisma:error SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+prisma:error SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+prisma:error SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+prisma:error SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+prisma:error SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+prisma:error SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+prisma:error SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+prisma:error SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+prisma:error SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+Deseja finalizar o arquivo em lotes (S/N)? 

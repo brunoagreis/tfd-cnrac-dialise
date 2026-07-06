@@ -1,0 +1,17 @@
+Error: Socket timeout
+    at TLSSocket.<anonymous> (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\[root-of-the-server]__56dd5725._.js:2:137983) {
+  code: 'ETIMEOUT',
+  _connId: 'm0etv65vo13gso82hz0g'
+}
+⨯ uncaughtException:  Error: Socket timeout
+    at TLSSocket.<anonymous> (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\[root-of-the-server]__56dd5725._.js:2:137983) {
+  code: 'ETIMEOUT',
+  _connId: 'm0etv65vo13gso82hz0g'
+}
+[email-integracao/processar] erro: Error: Connection not available
+    at L.createNoConnectionError (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\[root-of-the-server]__56dd5725._.js:2:152269)
+    at t (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\[root-of-the-server]__56dd5725._.js:2:153498)
+    at L.close (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\[root-of-the-server]__56dd5725._.js:2:153566)
+    at Immediate.<anonymous> (C:\Sistemas\tfd-cnrac-dialise\.next\server\chunks\[root-of-the-server]__56dd5725._.js:2:152227) {
+  code: 'NoConnection'
+}

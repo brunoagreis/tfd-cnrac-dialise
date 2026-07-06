@@ -23,6 +23,7 @@ type TfdFilaRow = {
   criadoEm: string
   atualizadoEm: string
   acaoJudicial: boolean | null
+  pendenciaAtual: string | null
 }
 
 type PacienteDbRow = {
@@ -111,7 +112,15 @@ export async function GET(req: NextRequest) {
 END AS "statusMonitoramentoAtual",
           COALESCE(d."createdAt", b.created_at, NOW())::text AS "criadoEm",
           COALESCE(d."updatedAt", b.updated_at, d."createdAt", NOW())::text AS "atualizadoEm",
-          COALESCE(d."acaoJudicial", FALSE) AS "acaoJudicial"
+          COALESCE(d."acaoJudicial", FALSE) AS "acaoJudicial",
+          (
+            SELECT i.pendencia
+            FROM public.interacoes i
+            WHERE i."demandaId" = d.id
+              AND i.pendencia IN ('pendente_avaliacao_medica_ses', 'avaliacao_medica_concluida')
+            ORDER BY i."createdAt" DESC, i.id DESC
+            LIMIT 1
+          ) AS "pendenciaAtual"
         FROM public.judicial_monitoramento_base b
         LEFT JOIN public.demandas d
           ON d.id::text = b.origem_registro_id
@@ -145,7 +154,7 @@ END AS "statusMonitoramentoAtual",
         acaoJudicial: Boolean(row.acaoJudicial),
         interacoesCount: 0,
         anexosCount: 0,
-        pendenciaAtual: null,
+        pendenciaAtual: row.pendenciaAtual ?? null,
       })),
     })
   } catch (error) {

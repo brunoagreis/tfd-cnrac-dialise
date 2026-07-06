@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { requireAdminRequest } from "@/lib/security/server-session"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -34,6 +35,10 @@ function perfilLabel(value: string) {
 }
 
 export async function GET(_req: NextRequest) {
+
+  const adminGuard = await requireAdminRequest(_req)
+  if (!adminGuard.ok) return adminGuard.response
+
   try {
     const rows = await prisma.$queryRawUnsafe<SolicitacaoRow[]>(
       `

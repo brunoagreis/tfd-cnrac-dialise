@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { requireAdminRequest } from "@/lib/security/server-session"
 import { getEmailTriageConfig } from "@/lib/email-triage-test"
 
 export const runtime = "nodejs"
@@ -13,6 +14,9 @@ function safeFileName(value: unknown) {
 }
 
 export async function GET(req: NextRequest) {
+
+  const adminGuard = await requireAdminRequest(req)
+  if (!adminGuard.ok) return adminGuard.response
   const uid = text(req.nextUrl.searchParams.get("uid"))
   const index = Number(req.nextUrl.searchParams.get("index") || 0)
   const config = getEmailTriageConfig()

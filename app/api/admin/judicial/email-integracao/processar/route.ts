@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { requireAdminRequest } from "@/lib/security/server-session"
 import { startEmailTriageJob } from "@/lib/email-triage-job"
 
 export const runtime = "nodejs"
@@ -20,9 +21,15 @@ async function handle(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
+
+  const adminGuardGet = await requireAdminRequest(req)
+  if (!adminGuardGet.ok) return adminGuardGet.response
   return handle(req)
 }
 
 export async function POST(req: NextRequest) {
+
+  const adminGuardPost = await requireAdminRequest(req)
+  if (!adminGuardPost.ok) return adminGuardPost.response
   return handle(req)
 }

@@ -207,6 +207,7 @@ export const PENDENCIA_TIPOS = [
   "pendente_unidade_origem",
   "pendente_area_tecnica",
   "pendente_avaliacao_medica_ses",
+  "avaliacao_medica_concluida",
   "pendente_ses",
 ] as const
 export type PendenciaTipo = (typeof PENDENCIA_TIPOS)[number]
@@ -215,7 +216,8 @@ export const PENDENCIA_LABELS: Record<PendenciaTipo, string> = {
   pendente_unidade_referencia: "Pendente Unidade de Referencia",
   pendente_unidade_origem: "Pendente Unidade de Origem",
   pendente_area_tecnica: "Pendente Area Tecnica",
-  pendente_avaliacao_medica_ses: "Pendente Avaliacao Medica SES",
+  pendente_avaliacao_medica_ses: "Aguardando Avaliacao Medica SES",
+  avaliacao_medica_concluida: "Avaliacao Medica Concluida",
   pendente_ses: "Pendente SES",
 }
 
