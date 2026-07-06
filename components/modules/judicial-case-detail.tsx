@@ -120,6 +120,7 @@ type HistoryItem = {
 const MOVEMENT_OPTIONS: MovementType[] = [
   "monitoramento",
   "encaminhar_demanda_municipio",
+  "resposta_procuradoria",
   "envio_agendamento_demanda",
   "agendamento",
   "solicitacao_inclusao",
@@ -587,6 +588,10 @@ function JudicialCaseDetailContent({
   const [procedureCidModalOpen, setProcedureCidModalOpen] = useState(false)
   const [notificationModalOpen, setNotificationModalOpen] = useState(false)
   const [forwardMunicipalityMode, setForwardMunicipalityMode] = useState(false)
+  const [procuradoriaModalOpen, setProcuradoriaModalOpen] = useState(false)
+  const [selectedProcuradoriaTemplateId, setSelectedProcuradoriaTemplateId] = useState("")
+  const [procuradoriaHtml, setProcuradoriaHtml] = useState("<p>Prezados,</p><p></p><p>Atenciosamente.</p>")
+  const [generatingProcuradoria, setGeneratingProcuradoria] = useState(false)
   const [historyModalOpen, setHistoryModalOpen] = useState(false)
   const [auditModalOpen, setAuditModalOpen] = useState(false)
   const [municipalityContactsOpen, setMunicipalityContactsOpen] = useState(false)
@@ -627,6 +632,14 @@ function JudicialCaseDetailContent({
       setSelectedManifestTemplateId("__blank__")
       applyBlankManifestEditor()
       setManifestRecipients((prev) => mergeRequiredEmails(prev, requiredMunicipalityEmails))
+      return
+    }
+
+    if (nextType === "resposta_procuradoria") {
+      setMovementType("monitoramento")
+      setSelectedProcuradoriaTemplateId("")
+      setProcuradoriaHtml("<p>Prezados,</p><p></p><p>Atenciosamente.</p>")
+      setProcuradoriaModalOpen(true)
       return
     }
 
@@ -1824,6 +1837,779 @@ function JudicialCaseDetailContent({
     toast.success("Modelo aplicado na notificação ao município.")
   }
 
+  function htmlToPlainText(value: string) {
+    if (typeof document === "undefined") {
+      return String(value ?? "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()
+    }
+
+    const element = document.createElement("div")
+    element.innerHTML = value || ""
+    return element.innerText.replace(/\u00a0/g, " ").replace(/[ \t]+/g, " ").trim()
+  }
+
+  function wrapPdfLine(value: string, maxLength = 92) {
+    const words = value.split(/\s+/).filter(Boolean)
+    const lines: string[] = []
+    let current = ""
+
+    for (const word of words) {
+      const next = current ? current + " " + word : word
+
+      if (next.length > maxLength && current) {
+        lines.push(current)
+        current = word
+      } else {
+        current = next
+      }
+    }
+
+    if (current) lines.push(current)
+    return lines.length ? lines : [""]
+  }
+
+
+  function normalizePdfText(value: string) {
+    return String(value ?? "")
+      .normalize("NFC")
+      .replace(/[\u201c\u201d]/g, '"')
+      .replace(/[\u2018\u2019]/g, "'")
+      .replace(/[\u2013\u2014]/g, "-")
+      .replace(/\u00a0/g, " ")
+      .replace(/[^\x00-\xff]/g, " ")
+  }
+
+  function estimatePdfTextWidth(value: string, fontSize = 12) {
+    const text = normalizePdfText(value)
+    let units = 0
+
+    for (const char of text) {
+      if (char === " ") units += 0.28
+      else if ("ilI.,:;!|'".includes(char)) units += 0.28
+      else if ("mwMW".includes(char)) units += 0.9
+      else if (/[A-ZÁÉÍÓÚÂÊÔÃÕÇ]/.test(char)) units += 0.68
+      else units += 0.55
+    }
+
+    return units * fontSize
+  }
+
+  function wrapPdfParagraph(value: string, maxWidth: number, fontSize = 12) {
+    const words = normalizePdfText(value).split(/\s+/).filter(Boolean)
+    const lines: string[] = []
+    let current = ""
+
+    for (const word of words) {
+      const next = current ? current + " " + word : word
+
+      if (estimatePdfTextWidth(next, fontSize) > maxWidth && current) {
+        lines.push(current)
+        current = word
+      } else {
+        current = next
+      }
+    }
+
+    if (current) lines.push(current)
+    return lines.length ? lines : [""]
+  }
+
+  function formatPdfDateLong(date = new Date()) {
+    const months = [
+      "janeiro",
+      "fevereiro",
+      "março",
+      "abril",
+      "maio",
+      "junho",
+      "julho",
+      "agosto",
+      "setembro",
+      "outubro",
+      "novembro",
+      "dezembro",
+    ]
+
+    return String(date.getDate()).padStart(2, "0") +
+      " de " +
+      months[date.getMonth()] +
+      " de " +
+      date.getFullYear()
+  }
+
+  function resolveProcuradoriaProcedureText() {
+    const procedures = (activeProcedures as Array<Record<string, unknown>>)
+      .map((item) => {
+        const code = String(item.sigtapCode ?? item.code ?? item.codigo ?? "").trim()
+        const description = String(item.description ?? item.descricao ?? item.name ?? "").trim()
+
+        return [code, description].filter(Boolean).join(" - ")
+      })
+      .filter(Boolean)
+
+    return procedures.join(" / ") || "Não informado"
+  }
+
+  function resolveProcuradoriaAuthor() {
+    const currentUser = user as unknown as Record<string, unknown> | null
+
+    return String(
+      currentUser?.nome ||
+      currentUser?.name ||
+      currentUser?.email ||
+      "Sistema",
+    ).trim()
+  }
+
+  function pdfTextCommand(text: string, maxWidth: number, justify = false) {
+    const normalized = normalizePdfText(text)
+    const words = normalized.split(/\s+/).filter(Boolean)
+    const width = estimatePdfTextWidth(normalized, 12)
+
+    if (justify && words.length > 1 && width > 0 && width < maxWidth) {
+      const spaces = words.length - 1
+      const wordSpacing = Math.max(0, Math.min(8, (maxWidth - width) / spaces))
+
+      return wordSpacing.toFixed(2) + " Tw <" + toPdfHex(normalized) + "> Tj 0 Tw"
+    }
+
+    return "0 Tw <" + toPdfHex(normalized) + "> Tj"
+  }
+
+function toPdfHex(value: string) {
+    const normalized = normalizePdfText(value)
+    let hex = ""
+
+    for (let index = 0; index < normalized.length; index++) {
+      hex += normalized.charCodeAt(index).toString(16).padStart(2, "0")
+    }
+
+    return hex.toUpperCase()
+  }
+
+  async function buildSimplePdfBlob(title: string, html: string) {
+    const pageWidth = 595.28
+    const pageHeight = 841.89
+    const marginTop = 85.04
+    const marginLeft = 85.04
+    const marginRight = 56.69
+    const marginBottom = 56.69
+    const bodyFontSize = 12
+    const footerFontSize = 10
+    const lineHeight = 18
+    const maxWidth = pageWidth - marginLeft - marginRight
+    const bodyTop = 135
+    const bodyBottom = pageHeight - marginBottom - 34
+    const footerLineHeight = 12
+    const headerImagePath = "/assets/pdf/cabecalho-ses-ms.png"
+
+    type RichToken = {
+      text: string
+      bold?: boolean
+    }
+
+    type PdfVisualLine = {
+      tokens: RichToken[]
+      align?: "left" | "center" | "right"
+      justify?: boolean
+      fontSize?: number
+      lineHeight?: number
+    }
+
+    function createCanvasPage() {
+      const scale = 2
+      const canvas = document.createElement("canvas")
+      canvas.width = Math.round(pageWidth * scale)
+      canvas.height = Math.round(pageHeight * scale)
+
+      const context = canvas.getContext("2d")
+      if (!context) throw new Error("Não foi possível gerar o PDF.")
+
+      context.scale(scale, scale)
+      context.fillStyle = "#ffffff"
+      context.fillRect(0, 0, pageWidth, pageHeight)
+      context.fillStyle = "#000000"
+      context.textBaseline = "alphabetic"
+
+      return { canvas, context }
+    }
+
+    function setCanvasFont(
+      context: CanvasRenderingContext2D,
+      fontSize = bodyFontSize,
+      bold = false,
+    ) {
+      context.font = (bold ? "bold " : "") + fontSize + "px Arial"
+    }
+
+    function measureTokens(
+      context: CanvasRenderingContext2D,
+      tokens: RichToken[],
+      fontSize = bodyFontSize,
+    ) {
+      let width = 0
+
+      tokens.forEach((token, index) => {
+        setCanvasFont(context, fontSize, Boolean(token.bold))
+        width += context.measureText(token.text).width
+
+        if (index < tokens.length - 1) {
+          setCanvasFont(context, fontSize, false)
+          width += context.measureText(" ").width
+        }
+      })
+
+      return width
+    }
+
+    function splitSegmentWords(segments: RichToken[]) {
+      const words: RichToken[] = []
+
+      for (const segment of segments) {
+        const parts = normalizePdfText(segment.text).split(/\s+/).filter(Boolean)
+
+        for (const part of parts) {
+          words.push({
+            text: part,
+            bold: segment.bold,
+          })
+        }
+      }
+
+      return words
+    }
+
+    function wrapRichParagraph(
+      context: CanvasRenderingContext2D,
+      segments: RichToken[],
+      availableWidth: number,
+      fontSize = bodyFontSize,
+      justify = false,
+      align: "left" | "center" | "right" = "left",
+    ) {
+      const words = splitSegmentWords(segments)
+      const lines: PdfVisualLine[] = []
+
+      if (words.length === 0) {
+        return [{ tokens: [], fontSize, lineHeight }]
+      }
+
+      let current: RichToken[] = []
+
+      for (const word of words) {
+        const next = [...current, word]
+
+        if (current.length > 0 && measureTokens(context, next, fontSize) > availableWidth) {
+          lines.push({
+            tokens: current,
+            align,
+            justify,
+            fontSize,
+            lineHeight,
+          })
+          current = [word]
+        } else {
+          current = next
+        }
+      }
+
+      if (current.length > 0) {
+        lines.push({
+          tokens: current,
+          align,
+          justify: false,
+          fontSize,
+          lineHeight,
+        })
+      }
+
+      return lines
+    }
+
+    function drawRichLine(
+      context: CanvasRenderingContext2D,
+      line: PdfVisualLine,
+      y: number,
+    ) {
+      const tokens = line.tokens || []
+      const fontSize = line.fontSize || bodyFontSize
+
+      if (tokens.length === 0) return
+
+      let x = marginLeft
+      const measuredWidth = measureTokens(context, tokens, fontSize)
+
+      if (line.align === "center") {
+        x = marginLeft + (maxWidth - measuredWidth) / 2
+      } else if (line.align === "right") {
+        x = marginLeft + maxWidth - measuredWidth
+      }
+
+      setCanvasFont(context, fontSize, false)
+      const normalSpaceWidth = context.measureText(" ").width
+      let extraSpace = 0
+
+      if (line.justify && tokens.length > 1 && measuredWidth < maxWidth) {
+        extraSpace = Math.min(8, Math.max(0, (maxWidth - measuredWidth) / (tokens.length - 1)))
+      }
+
+      for (let index = 0; index < tokens.length; index++) {
+        const token = tokens[index]
+        setCanvasFont(context, fontSize, Boolean(token.bold))
+        context.fillText(token.text, x, y)
+        x += context.measureText(token.text).width
+
+        if (index < tokens.length - 1) {
+          x += normalSpaceWidth + extraSpace
+        }
+      }
+    }
+
+    function addBlankLine(lines: PdfVisualLine[]) {
+      lines.push({
+        tokens: [],
+        lineHeight,
+      })
+    }
+
+    function addRichParagraph(
+      context: CanvasRenderingContext2D,
+      lines: PdfVisualLine[],
+      segments: RichToken[],
+      options?: {
+        align?: "left" | "center" | "right"
+        justify?: boolean
+        fontSize?: number
+      },
+    ) {
+      const wrapped = wrapRichParagraph(
+        context,
+        segments,
+        maxWidth,
+        options?.fontSize || bodyFontSize,
+        Boolean(options?.justify),
+        options?.align || "left",
+      )
+
+      lines.push(...wrapped)
+    }
+
+    async function loadHeaderImage() {
+      return await new Promise<HTMLImageElement | null>((resolve) => {
+        const image = new Image()
+        image.onload = () => resolve(image)
+        image.onerror = () => resolve(null)
+        image.src = headerImagePath
+      })
+    }
+
+    function drawHeader(
+      context: CanvasRenderingContext2D,
+      image: HTMLImageElement | null,
+    ) {
+      if (!image) return
+
+      const maxLogoWidth = 240
+      const maxLogoHeight = 62
+      const ratio = Math.min(maxLogoWidth / image.width, maxLogoHeight / image.height)
+      const logoWidth = image.width * ratio
+      const logoHeight = image.height * ratio
+      const logoX = (pageWidth - logoWidth) / 2
+      const logoY = 18
+
+      context.drawImage(image, logoX, logoY, logoWidth, logoHeight)
+    }
+
+    function drawFooter(context: CanvasRenderingContext2D) {
+      const footerLines = [
+        "Endereço: Av. do Poeta, S/N - Bloco 7 - Jardim Veraneio, Campo Grande - MS, 79031-350",
+        "Telefone: (67) 3318-1600",
+      ]
+
+      setCanvasFont(context, footerFontSize, false)
+
+      footerLines.forEach((line, index) => {
+        const y = pageHeight - 35 + index * footerLineHeight
+        const width = context.measureText(line).width
+        const x = (pageWidth - width) / 2
+        context.fillText(line, x, y)
+      })
+    }
+
+    function canvasToJpegBytes(canvas: HTMLCanvasElement) {
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.94)
+      const base64 = dataUrl.split(",")[1] || ""
+      const binary = atob(base64)
+      const bytes = new Uint8Array(binary.length)
+
+      for (let index = 0; index < binary.length; index++) {
+        bytes[index] = binary.charCodeAt(index)
+      }
+
+      return bytes
+    }
+
+    function asciiBytes(value: string) {
+      return new TextEncoder().encode(value)
+    }
+
+    function createImagePdf(pageImages: Array<{ bytes: Uint8Array; width: number; height: number }>) {
+      type PdfObject =
+        | string
+        | {
+            prefix: string
+            data: Uint8Array
+            suffix: string
+          }
+
+      const objects: PdfObject[] = []
+      const pageIds: number[] = []
+
+      objects.push("<< /Type /Catalog /Pages 2 0 R >>")
+      objects.push("__PAGES__")
+
+      pageImages.forEach((image, pageIndex) => {
+        const imageId = objects.length + 1
+        const contentId = imageId + 1
+        const pageId = imageId + 2
+        const imageName = "Im" + (pageIndex + 1)
+        const contentStream =
+          "q\n" +
+          pageWidth +
+          " 0 0 " +
+          pageHeight +
+          " 0 0 cm\n/" +
+          imageName +
+          " Do\nQ"
+
+        pageIds.push(pageId)
+
+        objects.push({
+          prefix:
+            "<< /Type /XObject /Subtype /Image /Width " +
+            image.width +
+            " /Height " +
+            image.height +
+            " /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length " +
+            image.bytes.length +
+            " >>\nstream\n",
+          data: image.bytes,
+          suffix: "\nendstream",
+        })
+
+        objects.push(
+          "<< /Length " +
+            contentStream.length +
+            " >>\nstream\n" +
+            contentStream +
+            "\nendstream",
+        )
+
+        objects.push(
+          "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 " +
+            pageWidth +
+            " " +
+            pageHeight +
+            "] /Resources << /XObject << /" +
+            imageName +
+            " " +
+            imageId +
+            " 0 R >> >> /Contents " +
+            contentId +
+            " 0 R >>",
+        )
+      })
+
+      objects[1] =
+        "<< /Type /Pages /Kids [" +
+        pageIds.map((id) => id + " 0 R").join(" ") +
+        "] /Count " +
+        pageIds.length +
+        " >>"
+
+      const chunks: Uint8Array[] = []
+      const offsets = [0]
+      let length = 0
+
+      function addBytes(bytes: Uint8Array) {
+        chunks.push(bytes)
+        length += bytes.length
+      }
+
+      function addString(value: string) {
+        addBytes(asciiBytes(value))
+      }
+
+      addString("%PDF-1.4\n")
+
+      objects.forEach((object, index) => {
+        offsets.push(length)
+        addString(index + 1 + " 0 obj\n")
+
+        if (typeof object === "string") {
+          addString(object)
+        } else {
+          addString(object.prefix)
+          addBytes(object.data)
+          addString(object.suffix)
+        }
+
+        addString("\nendobj\n")
+      })
+
+      const xrefOffset = length
+      addString("xref\n0 " + (objects.length + 1) + "\n")
+      addString("0000000000 65535 f \n")
+
+      for (let index = 1; index <= objects.length; index++) {
+        addString(String(offsets[index]).padStart(10, "0") + " 00000 n \n")
+      }
+
+      addString(
+        "trailer\n<< /Size " +
+          (objects.length + 1) +
+          " /Root 1 0 R >>\nstartxref\n" +
+          xrefOffset +
+          "\n%%EOF",
+      )
+
+      return new Blob(chunks, { type: "application/pdf" })
+    }
+
+    const selectedTemplate = availableEmailTemplates.find(
+      (item: any) => item.id === selectedProcuradoriaTemplateId,
+    )
+
+    const replacements = buildManifestTemplateReplacements()
+    const currentYear = new Date().getFullYear()
+    const processText = processNumbers.join(" / ") || caseItem.processNumber || "Não informado"
+    const patientText = caseItem.patientName || "Não informado"
+    const municipalityText = caseItem.municipalityName || "Não informado"
+    const protocolText = caseItem.originProtocol || caseItem.id || "Não informado"
+    const procedureText = resolveProcuradoriaProcedureText()
+    const authorText = resolveProcuradoriaAuthor()
+    const rawSubject = String(selectedTemplate?.subject || "").trim()
+    const subjectText =
+      replaceTemplatePlaceholders(rawSubject, replacements) ||
+      "Encaminhamento de informações referente a procedimento não atendido pela Rede Estadual de Saúde - CORE."
+
+    const bodyText = htmlToPlainText(html)
+    const defaultBodyText =
+      "Cumprimentando-o cordialmente, em atenção ao Ofício supracitado, que solicita informações acerca da oferta do procedimento SIGTAP " +
+      procedureText +
+      ", informamos que, no âmbito da Rede Estadual de Saúde de Mato Grosso do Sul, não há contratualização vigente com prestadores habilitados para a execução do referido procedimento."
+
+    const bodyParagraphs = (bodyText || defaultBodyText)
+      .split(/\r?\n+/)
+      .map((item) => item.trim())
+      .filter(Boolean)
+
+    const scratch = createCanvasPage()
+    const allLines: PdfVisualLine[] = []
+
+    addRichParagraph(scratch.context, allLines, [
+      { text: "CI de Resposta nº " + protocolText + "/" + currentYear, bold: true },
+    ])
+    addRichParagraph(scratch.context, allLines, [
+      { text: "Campo Grande/MS, " + formatPdfDateLong(new Date()) + ".", bold: false },
+    ], { align: "right" })
+    addBlankLine(allLines)
+
+    addRichParagraph(scratch.context, allLines, [
+      { text: "PROCESSO Nº ", bold: true },
+      { text: processText, bold: false },
+    ])
+    addRichParagraph(scratch.context, allLines, [
+      { text: "REQUERENTE(S): ", bold: true },
+      { text: patientText, bold: false },
+    ])
+    addRichParagraph(scratch.context, allLines, [
+      { text: "REQUERIDO(S): ", bold: true },
+      { text: "ESTADO DE MATO GROSSO DO SUL E O MUNICÍPIO DE " + municipalityText.toUpperCase() + ".", bold: false },
+    ])
+    addBlankLine(allLines)
+
+    addRichParagraph(scratch.context, allLines, [
+      { text: "Assunto: " + subjectText, bold: true },
+    ])
+    addBlankLine(allLines)
+
+    addRichParagraph(scratch.context, allLines, [
+      { text: "Senhor Procurador,", bold: true },
+    ])
+    addBlankLine(allLines)
+
+    for (const paragraph of bodyParagraphs) {
+      addRichParagraph(scratch.context, allLines, [
+        { text: paragraph, bold: false },
+      ], { justify: true })
+      addBlankLine(allLines)
+    }
+
+    addRichParagraph(scratch.context, allLines, [
+      { text: "Sem mais para o momento, colocamo-nos à disposição para quaisquer esclarecimentos adicionais que se fizerem necessários.", bold: false },
+    ], { justify: true })
+    addBlankLine(allLines)
+
+    addRichParagraph(scratch.context, allLines, [
+      { text: "Atenciosamente,", bold: false },
+    ])
+    addBlankLine(allLines)
+    addBlankLine(allLines)
+
+    addRichParagraph(scratch.context, allLines, [
+      { text: "ED CARLO BRITTO BURGATT", bold: true },
+    ], { align: "center" })
+    addRichParagraph(scratch.context, allLines, [
+      { text: "COORDENADOR DE REGULAÇÃO DA ASSISTÊNCIA", bold: true },
+    ], { align: "center" })
+    addBlankLine(allLines)
+
+    addRichParagraph(scratch.context, allLines, [
+      { text: "Elaborado por:", bold: false },
+    ])
+    addRichParagraph(scratch.context, allLines, [
+      { text: authorText, bold: true },
+    ])
+
+    const headerImage = await loadHeaderImage()
+    const pageImages: Array<{ bytes: Uint8Array; width: number; height: number }> = []
+
+    let page = createCanvasPage()
+    let y = bodyTop
+
+    drawHeader(page.context, headerImage)
+    drawFooter(page.context)
+
+    for (const line of allLines) {
+      const currentLineHeight = line.lineHeight || lineHeight
+
+      if (y + currentLineHeight > bodyBottom) {
+        pageImages.push({
+          bytes: canvasToJpegBytes(page.canvas),
+          width: page.canvas.width,
+          height: page.canvas.height,
+        })
+
+        page = createCanvasPage()
+        drawHeader(page.context, headerImage)
+        drawFooter(page.context)
+        y = bodyTop
+      }
+
+      drawRichLine(page.context, line, y)
+      y += currentLineHeight
+    }
+
+    pageImages.push({
+      bytes: canvasToJpegBytes(page.canvas),
+      width: page.canvas.width,
+      height: page.canvas.height,
+    })
+
+    return createImagePdf(pageImages)
+  }
+
+  async function uploadGeneratedProcuradoriaPdf(file: File) {
+    const form = new FormData()
+    form.append("cpf", caseItem.cpf)
+    form.append("protocol", caseItem.originProtocol)
+    form.append("module", "judicial")
+    form.append("category", "movimentacao")
+    form.append("files", file)
+
+    const response = await fetch("/api/uploads", { method: "POST", body: form })
+    const data = await response.json().catch(() => ({}))
+
+    if (!response.ok || !data?.ok || !Array.isArray(data?.files) || data.files.length === 0) {
+      throw new Error(data?.error || "Erro ao salvar PDF da resposta.")
+    }
+
+    return data.files[0] as UploadedFileMeta
+  }
+
+  function applyProcuradoriaTemplateById(templateId: string) {
+    setSelectedProcuradoriaTemplateId(templateId)
+
+    const template = availableEmailTemplates.find((item: any) => item.id === templateId)
+
+    if (!template) {
+      setProcuradoriaHtml("<p>Prezados,</p><p></p><p>Atenciosamente.</p>")
+      return
+    }
+
+    const replacements = buildManifestTemplateReplacements()
+    const nextHtml = templateBodyToHtml(
+      replaceTemplatePlaceholders(template.body, replacements),
+    )
+
+    setProcuradoriaHtml(nextHtml)
+  }
+
+  async function handleGenerateProcuradoriaResponse() {
+    if (!user) return
+
+    if (!selectedProcuradoriaTemplateId) {
+      toast.error("Selecione um modelo de resposta.")
+      return
+    }
+
+    const textContent = htmlToPlainText(procuradoriaHtml)
+
+    if (!textContent) {
+      toast.error("O modelo selecionado não gerou conteúdo.")
+      return
+    }
+
+    try {
+      setGeneratingProcuradoria(true)
+
+      const pdfBlob = await buildSimplePdfBlob("Resposta a Procuradoria", procuradoriaHtml)
+      const safeProtocol = String(caseItem.originProtocol || caseItem.id || "judicial").replace(/[^a-zA-Z0-9_-]+/g, "_")
+      const file = new File([pdfBlob], "resposta-a-procuradoria-" + safeProtocol + ".pdf", {
+        type: "application/pdf",
+      })
+
+      const uploadedPdf = await uploadGeneratedProcuradoriaPdf(file)
+
+      const response = await fetch(
+        `/api/judicial/casos/${encodeURIComponent(caseItem.id)}/movimentacoes`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            type: "resposta_procuradoria",
+            description: textContent,
+            attachments: [uploadedPdf],
+            user,
+          }),
+        },
+      )
+
+      const data = await response.json().catch(() => ({}))
+
+      if (!response.ok || !data?.ok) {
+        throw new Error(data?.error || "Erro ao salvar resposta a Procuradoria.")
+      }
+
+      toast.success("Resposta a Procuradoria salva nas movimentações.")
+      setProcuradoriaModalOpen(false)
+      setSelectedProcuradoriaTemplateId("")
+      setProcuradoriaHtml("<p>Prezados,</p><p></p><p>Atenciosamente.</p>")
+
+      if (typeof window !== "undefined") {
+        window.setTimeout(() => window.location.reload(), 500)
+      }
+    } catch (error) {
+      console.error(error)
+      toast.error(error instanceof Error ? error.message : "Erro ao gerar resposta a Procuradoria.")
+    } finally {
+      setGeneratingProcuradoria(false)
+    }
+  }
+
+
   async function handleSendMunicipalityNotification(options?: {
     movementType?: MovementType
     closeForwardModal?: boolean
@@ -2698,7 +3484,7 @@ function JudicialCaseDetailContent({
                       : "Não informado"}
                   </p>
                 </div>
-		
+
 
 
               </div>
@@ -4364,6 +5150,63 @@ function JudicialCaseDetailContent({
               </Button>
               <Button type="button" onClick={handleSaveProcedureStatus}>
                 Salvar status
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+
+      <Dialog open={procuradoriaModalOpen} onOpenChange={setProcuradoriaModalOpen}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Gerar Resposta a Procuradoria</DialogTitle>
+            <DialogDescription>
+              Selecione um modelo, confira a resposta gerada e salve o PDF nas últimas movimentações.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div>
+              <Label className="mb-1 block text-xs">Modelo de resposta</Label>
+              <select
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={selectedProcuradoriaTemplateId}
+                onChange={(event) => applyProcuradoriaTemplateById(event.target.value)}
+              >
+                <option value="">Selecione um modelo</option>
+                {availableEmailTemplates.map((template: any) => (
+                  <option key={template.id} value={template.id}>
+                    {template.title} - {template.subject}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <Label className="mb-1 block text-xs">Prévia da resposta</Label>
+              <div
+                className="max-h-[420px] overflow-auto rounded-md border border-input bg-background p-4 text-sm leading-relaxed"
+                dangerouslySetInnerHTML={{ __html: procuradoriaHtml }}
+              />
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="bg-transparent"
+                onClick={() => setProcuradoriaModalOpen(false)}
+                disabled={generatingProcuradoria}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                onClick={handleGenerateProcuradoriaResponse}
+                disabled={generatingProcuradoria || !selectedProcuradoriaTemplateId}
+              >
+                {generatingProcuradoria ? "Gerando..." : "GERAR RESPOSTA/SALVAR"}
               </Button>
             </div>
           </div>
