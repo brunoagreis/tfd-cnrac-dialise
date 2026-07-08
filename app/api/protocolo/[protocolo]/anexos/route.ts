@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto"
 import { mkdir, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { NextRequest, NextResponse } from "next/server"
+import { requireAdminRequest } from "@/lib/security/server-session"
 import { prisma } from "@/lib/prisma"
 
 export const runtime = "nodejs"
@@ -70,10 +71,13 @@ async function validateInteracaoBelongsToDemanda(interacaoId: string, demandaId:
 }
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   context: { params: Promise<{ protocolo: string }> },
 ) {
   try {
+    const adminGuardGet = await requireAdminRequest(req)
+    if (!adminGuardGet.ok) return adminGuardGet.response
+
     const { protocolo } = await context.params
     const decodedProtocol = decodeURIComponent(protocolo)
 
@@ -145,6 +149,9 @@ export async function POST(
   context: { params: Promise<{ protocolo: string }> },
 ) {
   try {
+    const adminGuardPost = await requireAdminRequest(req)
+    if (!adminGuardPost.ok) return adminGuardPost.response
+
     const { protocolo } = await context.params
     const decodedProtocol = decodeURIComponent(protocolo)
     const demandaId = await findDemandaIdByProtocol(decodedProtocol)

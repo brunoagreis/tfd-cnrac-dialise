@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { requireAdminRequest } from "@/lib/security/server-session"
 import { prisma } from "@/lib/prisma"
 
 export const runtime = "nodejs"
@@ -48,10 +49,13 @@ function normalizeStatus(value: unknown) {
 }
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   context: { params: Promise<{ protocolo: string }> },
 ) {
   try {
+    const adminGuard = await requireAdminRequest(req)
+    if (!adminGuard.ok) return adminGuard.response
+
     const { protocolo } = await context.params
     const decodedProtocol = decodeURIComponent(protocolo)
 
