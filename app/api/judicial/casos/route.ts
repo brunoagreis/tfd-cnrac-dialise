@@ -59,9 +59,36 @@ function formatStatus(value: unknown) {
   return raw.toLowerCase().split("_").map((part) => (part ? part[0].toUpperCase() + part.slice(1) : "")).join(" ")
 }
 
+
+async function ensureManualJudicialAssignmentTable() {
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS public.judicial_monitoramento_atribuicoes_manuais (
+      id BIGSERIAL PRIMARY KEY,
+      monitoramento_id BIGINT NOT NULL,
+      usuario_id TEXT NOT NULL,
+      usuario_nome TEXT NOT NULL,
+      usuario_email TEXT,
+      origem_atribuicao TEXT NOT NULL DEFAULT 'MANUAL',
+      motivo TEXT,
+      ativo BOOLEAN NOT NULL DEFAULT TRUE,
+      atribuida_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      removida_em TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `)
+
+  await prisma.$executeRawUnsafe(`
+    CREATE UNIQUE INDEX IF NOT EXISTS judicial_monitoramento_atribuicoes_manuais_uniq_ativa
+    ON public.judicial_monitoramento_atribuicoes_manuais (monitoramento_id)
+    WHERE ativo = TRUE
+  `)
+}
+
 export async function GET(req: NextRequest) {
   try {
     await ensureEmailTriageTables()
+    await ensureManualJudicialAssignmentTable()
 
     const q = normalizeText(req.nextUrl.searchParams.get("q")).toLowerCase()
     const status = normalizeText(req.nextUrl.searchParams.get("status")).toLowerCase()
@@ -76,16 +103,19 @@ export async function GET(req: NextRequest) {
     const whereParts: string[] = [`UPPER(COALESCE(b.origem_modulo, '')) = 'JUDICIAL'`]
     const atribuicaoHojeWhereParts: string[] = [`a.data_referencia = CURRENT_DATE`]
     const atribuicaoEmailWhereParts: string[] = [`ea.ativo = TRUE`]
+    const atribuicaoManualWhereParts: string[] = [`m.ativo = TRUE`]
     const automaticoHojeSql = `(UPPER(COALESCE(b.status_monitoramento_atual, '')) = 'MONITORAMENTO_AUTOMATICO' AND b.data_ultimo_monitoramento::date = CURRENT_DATE)`
 
     if (usuarioId) {
       params.push(usuarioId)
       atribuicaoHojeWhereParts.push(`a.usuario_id = $${params.length}`)
       atribuicaoEmailWhereParts.push(`ea.usuario_id = $${params.length}`)
+      atribuicaoManualWhereParts.push(`m.usuario_id = $${params.length}`)
     } else if (usuarioEmail) {
       params.push(usuarioEmail)
       atribuicaoHojeWhereParts.push(`LOWER(COALESCE(a.usuario_email, '')) = $${params.length}`)
       atribuicaoEmailWhereParts.push(`LOWER(COALESCE(ea.usuario_email, '')) = $${params.length}`)
+      atribuicaoManualWhereParts.push(`LOWER(COALESCE(m.usuario_email, '')) = $${params.length}`)
     }
 
     if (somenteAtribuidos) {
@@ -138,6 +168,7 @@ export async function GET(req: NextRequest) {
     const whereSql = whereParts.length > 0 ? `WHERE ${whereParts.join(" AND ")}` : ""
     const atribuicaoHojeWhereSql = `WHERE ${atribuicaoHojeWhereParts.join(" AND ")}`
     const atribuicaoEmailWhereSql = `WHERE ${atribuicaoEmailWhereParts.join(" AND ")}`
+    const atribuicaoManualWhereSql = `WHERE ${atribuicaoManualWhereParts.join(" AND ")}`
     const orderSql = somenteAtribuidos
       ? `ORDER BY CASE WHEN ${automaticoHojeSql} THEN -1 ELSE 0 END, CASE WHEN atb.status = 'FINALIZADO' THEN 1 ELSE 0 END, atb.bloco_numero NULLS LAST, atb.ordem_no_bloco NULLS LAST, atb.atribuida_em NULLS LAST, b.id DESC`
       : `ORDER BY COALESCE(b.data_ultimo_monitoramento, b.updated_at, b.created_at) DESC, b.id DESC`
@@ -157,7 +188,20 @@ export async function GET(req: NextRequest) {
             1 AS origem_ordem
           FROM public.judicial_monitoramento_atribuicoes a
           ${atribuicaoHojeWhereSql}
+          UNION ALL          SELECT
+            'manual-' || m.id::text AS atribuicao_id,
+            m.monitoramento_id::text AS monitoramento_id,
+            NULL::text AS data_referencia,
+            'ATRIBUIDO'::text AS status,
+            m.atribuida_em,
+            m.usuario_nome,
+            0 AS bloco_numero,
+            0 AS ordem_no_bloco,
+            -1 AS origem_ordem
+          FROM public.judicial_monitoramento_atribuicoes_manuais m
+          ${atribuicaoManualWhereSql}
           UNION ALL
+
           SELECT
             'email-' || ea.id::text AS atribuicao_id,
             ea.monitoramento_id::text AS monitoramento_id,

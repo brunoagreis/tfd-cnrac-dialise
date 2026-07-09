@@ -136,6 +136,15 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    await prisma.$executeRawUnsafe(`
+      ALTER TABLE public.usuarios_solicitacoes_acesso
+        ADD COLUMN IF NOT EXISTS termos_aceitos boolean NOT NULL DEFAULT false,
+        ADD COLUMN IF NOT EXISTS termos_versao text,
+        ADD COLUMN IF NOT EXISTS termos_aceitos_em timestamptz,
+        ADD COLUMN IF NOT EXISTS termos_ip text,
+        ADD COLUMN IF NOT EXISTS termos_user_agent text
+    `)
+
     const senhaHash = await bcrypt.hash(senha, 10)
 
     const created = await prisma.$queryRawUnsafe<Array<{ id: string }>>(

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { requireAdminRequest } from "@/lib/security/server-session"
+import { readServerSession } from "@/lib/security/server-session"
 import { prisma } from "@/lib/prisma"
 
 export const runtime = "nodejs"
@@ -39,6 +39,157 @@ type TelefoneSolicitanteRow = {
   value: string | null
 }
 
+
+type ProtocolPermissionUserRow = {
+  id: string
+  ativo: boolean | null
+  role: string | null
+  perfilCodigo: string | null
+}
+
+type ProtocolPermissionPerfilRow = {
+  id: string
+  codigo: string | null
+  nome: string | null
+}
+
+type ProtocolPermissionRow = {
+  modulo: string | null
+  acao: string | null
+}
+
+function normalizeProtocolAccessValue(value: unknown) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase()
+}
+
+function normalizeProtocolModule(value: unknown) {
+  const normalized = normalizeProtocolAccessValue(value).replace(/[\s-]+/g, "_")
+
+  if (normalized === "prejudicial") return "pre_judicial"
+  if (normalized === "pre_judicial") return "pre_judicial"
+  if (normalized === "hemodialise") return "hemodialise"
+  if (normalized === "judicial") return "judicial"
+  if (normalized === "tfd") return "tfd"
+  if (normalized === "cnrac") return "cnrac"
+
+  return normalized
+}
+
+function isProtocolAdminUser(user: ProtocolPermissionUserRow | null | undefined) {
+  const role = normalizeProtocolAccessValue(user?.role)
+  const perfil = normalizeProtocolAccessValue(user?.perfilCodigo)
+
+  return (
+    role === "admin" ||
+    role === "administrador" ||
+    role.includes("admin") ||
+    perfil === "admin" ||
+    perfil === "administrador" ||
+    perfil.includes("admin")
+  )
+}
+
+function normalizeProtocolPermission(modulo: unknown, acao: unknown) {
+  return `${normalizeProtocolModule(modulo)}.${normalizeProtocolAccessValue(acao)}`
+}
+
+async function loadProtocolUserAndPermissions(userId: string) {
+  const users = await prisma.$queryRawUnsafe<ProtocolPermissionUserRow[]>(
+    `
+      SELECT
+        id::text AS id,
+        ativo,
+        role::text AS role,
+        "perfilCodigo"::text AS "perfilCodigo"
+      FROM public.usuarios
+      WHERE id::text = $1
+      LIMIT 1
+    `,
+    userId,
+  )
+
+  const user = users[0] || null
+
+  if (!user || user.ativo === false) {
+    return { user, permissions: [] as string[] }
+  }
+
+  if (isProtocolAdminUser(user)) {
+    return { user, permissions: ["*"] }
+  }
+
+  const perfilCodigo = String(user.perfilCodigo ?? "").trim()
+
+  if (!perfilCodigo) {
+    return { user, permissions: [] as string[] }
+  }
+
+  const perfis = await prisma.$queryRawUnsafe<ProtocolPermissionPerfilRow[]>(
+    `
+      SELECT
+        id::text AS id,
+        codigo,
+        nome
+      FROM public.perfis
+      WHERE UPPER(COALESCE(codigo, '')) = UPPER($1)
+         OR UPPER(COALESCE(nome, '')) = UPPER($1)
+      ORDER BY id
+      LIMIT 1
+    `,
+    perfilCodigo,
+  )
+
+  const perfil = perfis[0]
+
+  if (!perfil) {
+    return { user, permissions: [] as string[] }
+  }
+
+  const rows = await prisma.$queryRawUnsafe<ProtocolPermissionRow[]>(
+    `
+      SELECT
+        modulo,
+        acao
+      FROM public.perfil_permissoes
+      WHERE perfil_id::text = $1
+        AND permitido = true
+      ORDER BY modulo, acao
+    `,
+    perfil.id,
+  )
+
+  const permissions = Array.from(
+    new Set(rows.map((item) => normalizeProtocolPermission(item.modulo, item.acao)).filter(Boolean)),
+  )
+
+  return { user, permissions }
+}
+
+function canAccessProtocolByModule(args: {
+  user: ProtocolPermissionUserRow | null
+  permissions: string[]
+  modulo: string
+}) {
+  if (isProtocolAdminUser(args.user)) return true
+  if (args.permissions.includes("*")) return true
+
+  const modulo = normalizeProtocolModule(args.modulo)
+  const permissionSet = new Set(args.permissions.map((item) => normalizeProtocolAccessValue(item)))
+
+  return (
+    permissionSet.has("protocolo.visualizar") ||
+    permissionSet.has(`${modulo}.visualizar`) ||
+    (
+      permissionSet.has("pacientes.visualizar") &&
+      permissionSet.has(`${modulo}.visualizar`)
+    )
+  )
+}
+
 function normalizeStatus(value: unknown) {
   const status = String(value ?? "").trim().toLowerCase()
 
@@ -53,8 +204,23 @@ export async function GET(
   context: { params: Promise<{ protocolo: string }> },
 ) {
   try {
-    const adminGuard = await requireAdminRequest(req)
-    if (!adminGuard.ok) return adminGuard.response
+    const session = readServerSession(req)
+
+    if (!session) {
+      return NextResponse.json(
+        { ok: false, error: "Não autenticado." },
+        { status: 401 },
+      )
+    }
+
+    const { user, permissions } = await loadProtocolUserAndPermissions(String(session.id))
+
+    if (!user || user.ativo === false) {
+      return NextResponse.json(
+        { ok: false, error: "Sessão inválida." },
+        { status: 401 },
+      )
+    }
 
     const { protocolo } = await context.params
     const decodedProtocol = decodeURIComponent(protocolo)
@@ -116,6 +282,13 @@ END AS "statusMonitoramentoAtual"
       return NextResponse.json(
         { ok: false, error: "Protocolo não encontrado." },
         { status: 404 },
+      )
+    }
+
+    if (!canAccessProtocolByModule({ user, permissions, modulo: row.modulo })) {
+      return NextResponse.json(
+        { ok: false, error: "Você não tem permissão para visualizar este protocolo." },
+        { status: 403 },
       )
     }
 

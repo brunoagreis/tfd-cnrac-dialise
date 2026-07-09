@@ -353,7 +353,8 @@ export async function POST(req: Request) {
     const unidadeNome = await getUnidadeNome(user.unidadeId)
     const uiRole = normalizeUiRole(user.role)
 
-    const monitoramento = isMonitoringProfile(uiRole, user.perfilCodigo, user.cargo)
+    const shouldAutoAssignJudicialMonitoringOnLogin = false
+    const monitoramento = shouldAutoAssignJudicialMonitoringOnLogin && isMonitoringProfile(uiRole, user.perfilCodigo, user.cargo)
       ? await assignJudicialMonitoringOnLogin(user)
       : null
 

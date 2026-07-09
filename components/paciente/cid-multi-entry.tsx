@@ -55,8 +55,9 @@ export function CidMultiEntry({
 
         const params = new URLSearchParams()
         params.set("q", q)
+        params.set("limit", "1000")
 
-        const response = await fetch(`/api/admin/judicial/cid10?${params.toString()}`, {
+        const response = await fetch(`/api/judicial/cid10?${params.toString()}`, {
           cache: "no-store",
           signal: controller.signal,
         })

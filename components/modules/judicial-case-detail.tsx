@@ -528,6 +528,26 @@ function JudicialCaseDetailContent({
   const [uploadedMovementFiles, setUploadedMovementFiles] = useState<UploadedFileMeta[]>([])
   const [uploadingMovement, setUploadingMovement] = useState(false)
 
+  const [supportMaterialFormOpen, setSupportMaterialFormOpen] = useState(false)
+  const [supportMaterialListOpen, setSupportMaterialListOpen] = useState(false)
+  const [supportMaterialName, setSupportMaterialName] = useState("")
+  const [selectedSupportMaterialFiles, setSelectedSupportMaterialFiles] = useState<FileList | null>(null)
+  const [uploadingSupportMaterial, setUploadingSupportMaterial] = useState(false)
+
+  const supportMaterials = useMemo(() => {
+    const prefix = "[MATERIAL_DE_APOIO]"
+    return (caseItem?.movements || [])
+      .filter((item) => String(item.description || "").startsWith(prefix))
+      .map((item) => ({
+        id: item.id,
+        createdAt: item.createdAt,
+        createdByName: item.createdByName,
+        name: String(item.description || "").replace(prefix, "").trim() || "Material de apoio",
+        attachments: Array.isArray(item.attachments) ? item.attachments : [],
+      }))
+      .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")))
+  }, [caseItem?.movements])
+
   const [procedureSearch, setProcedureSearch] = useState("")
   const [procedureOptions, setProcedureOptions] = useState<SigtapOption[]>([])
   const [loadingProcedures, setLoadingProcedures] = useState(false)
@@ -590,7 +610,11 @@ function JudicialCaseDetailContent({
   const [forwardMunicipalityMode, setForwardMunicipalityMode] = useState(false)
   const [procuradoriaModalOpen, setProcuradoriaModalOpen] = useState(false)
   const [selectedProcuradoriaTemplateId, setSelectedProcuradoriaTemplateId] = useState("")
-  const [procuradoriaHtml, setProcuradoriaHtml] = useState("<p>Prezados,</p><p></p><p>Atenciosamente.</p>")
+  const defaultProcuradoriaHtml = "<p>Prezados,</p><p></p><p>Atenciosamente.</p>"
+  const [procuradoriaHtml, setProcuradoriaHtml] = useState(defaultProcuradoriaHtml)
+  const [procuradoriaEditorKey, setProcuradoriaEditorKey] = useState(0)
+  const procuradoriaEditorRef = useRef<HTMLDivElement | null>(null)
+  const procuradoriaHtmlRef = useRef(defaultProcuradoriaHtml)
   const [generatingProcuradoria, setGeneratingProcuradoria] = useState(false)
   const [historyModalOpen, setHistoryModalOpen] = useState(false)
   const [auditModalOpen, setAuditModalOpen] = useState(false)
@@ -638,7 +662,7 @@ function JudicialCaseDetailContent({
     if (nextType === "resposta_procuradoria") {
       setMovementType("monitoramento")
       setSelectedProcuradoriaTemplateId("")
-      setProcuradoriaHtml("<p>Prezados,</p><p></p><p>Atenciosamente.</p>")
+      setProcuradoriaEditorContent(defaultProcuradoriaHtml)
       setProcuradoriaModalOpen(true)
       return
     }
@@ -1303,6 +1327,71 @@ function JudicialCaseDetailContent({
     setHasJudicialMark(true)
     setSelectedFichaFiles(null)
     setUploadedFichaFiles([])
+  }
+
+  async function handleSaveSupportMaterial() {
+    if (!user || !caseItem) return
+
+    const materialName = supportMaterialName.trim()
+
+    if (!materialName) {
+      toast.error("Informe o nome do material de apoio.")
+      return
+    }
+
+    if (!selectedSupportMaterialFiles || selectedSupportMaterialFiles.length === 0) {
+      toast.error("Selecione o arquivo do material de apoio.")
+      return
+    }
+
+    try {
+      const uploadedFiles = await uploadFiles({
+        files: selectedSupportMaterialFiles,
+        category: "material_apoio",
+        setUploading: setUploadingSupportMaterial,
+      })
+
+      if (uploadedFiles.length === 0) {
+        toast.error("Não foi possível enviar o arquivo do material de apoio.")
+        return
+      }
+
+      const response = await fetch(
+        `/api/judicial/casos/${encodeURIComponent(caseItem.id)}/movimentacoes`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            type: "monitoramento",
+            description: `[MATERIAL_DE_APOIO] ${materialName}`,
+            attachments: uploadedFiles,
+            user,
+          }),
+        },
+      )
+
+      const data = await response.json()
+
+      if (!response.ok || !data?.ok) {
+        throw new Error(data?.error || "Erro ao salvar material de apoio.")
+      }
+
+      toast.success("Material de apoio cadastrado.")
+      setSupportMaterialName("")
+      setSelectedSupportMaterialFiles(null)
+      setSupportMaterialFormOpen(false)
+      setSupportMaterialListOpen(true)
+      window.location.reload()
+    } catch (error) {
+      console.error("[JudicialCaseDetail] erro ao salvar material de apoio:", error)
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível salvar o material de apoio.",
+      )
+    }
   }
 
   async function handleSaveMovement() {
@@ -2193,6 +2282,345 @@ function toPdfHex(value: string) {
       lines.push(...wrapped)
     }
 
+    type PdfHtmlBlock = {
+
+
+      segments: RichToken[]
+
+
+      blank?: boolean
+
+
+      align?: "left" | "center" | "right"
+
+
+      justify?: boolean
+
+
+      fontSize?: number
+
+
+    }
+
+
+
+    function htmlElementAlign(element: Element): "left" | "center" | "right" {
+
+
+      const style = String(element.getAttribute("style") || "").toLowerCase()
+
+
+      const align = String(element.getAttribute("align") || "").toLowerCase()
+
+
+
+      if (align === "center" || style.includes("text-align: center")) return "center"
+
+
+      if (align === "right" || style.includes("text-align: right")) return "right"
+
+
+
+      return "left"
+
+
+    }
+
+
+
+    function htmlElementIsBold(element: Element, inheritedBold: boolean) {
+
+
+      const tagName = element.tagName.toLowerCase()
+
+
+      const style = String(element.getAttribute("style") || "").toLowerCase()
+
+
+
+      return (
+
+
+        inheritedBold ||
+
+
+        tagName === "strong" ||
+
+
+        tagName === "b" ||
+
+
+        /font-weight\s*:\s*(bold|[6-9]00)/.test(style)
+
+
+      )
+
+
+    }
+
+
+
+    function collectHtmlSegments(node: Node, inheritedBold = false): RichToken[] {
+
+
+      if (node.nodeType === Node.TEXT_NODE) {
+
+
+        const text = String(node.textContent || "")
+
+
+          .replace(/\u00a0/g, " ")
+
+
+          .replace(/\s+/g, " ")
+
+
+          .trim()
+
+
+
+        return text ? [{ text, bold: inheritedBold }] : []
+
+
+      }
+
+
+
+      if (node.nodeType !== Node.ELEMENT_NODE) return []
+
+
+
+      const element = node as Element
+
+
+      const tagName = element.tagName.toLowerCase()
+
+
+
+      if (tagName === "br") return []
+
+
+
+      const nextBold = htmlElementIsBold(element, inheritedBold)
+
+
+      const segments: RichToken[] = []
+
+
+
+      element.childNodes.forEach((child) => {
+
+
+        segments.push(...collectHtmlSegments(child, nextBold))
+
+
+      })
+
+
+
+      return segments
+
+
+    }
+
+
+
+    function htmlToPdfRichBlocks(value: string): PdfHtmlBlock[] {
+
+
+      if (typeof document === "undefined") {
+
+
+        const text = htmlToPlainText(value)
+
+
+        return text ? [{ segments: [{ text, bold: false }], justify: true }] : []
+
+
+      }
+
+
+
+      const container = document.createElement("div")
+
+
+      container.innerHTML = value || ""
+
+
+
+      const blocks: PdfHtmlBlock[] = []
+
+
+      const blockTags = new Set(["p", "div", "section", "article", "li", "h1", "h2", "h3", "h4", "h5", "h6"])
+
+
+
+      function pushBlockFromNode(node: Node) {
+
+
+        if (node.nodeType === Node.TEXT_NODE) {
+
+
+          const text = String(node.textContent || "").replace(/\s+/g, " ").trim()
+
+
+          if (text) {
+
+
+            blocks.push({
+
+
+              segments: [{ text, bold: false }],
+
+
+              justify: true,
+
+
+            })
+
+
+          }
+
+
+          return
+
+
+        }
+
+
+
+        if (node.nodeType !== Node.ELEMENT_NODE) return
+
+
+
+        const element = node as Element
+
+
+        const tagName = element.tagName.toLowerCase()
+
+
+
+        if (tagName === "br") {
+
+
+          blocks.push({ segments: [], blank: true })
+
+
+          return
+
+
+        }
+
+
+
+        const isBlock = blockTags.has(tagName)
+
+
+
+        if (!isBlock) {
+
+
+          const segments = collectHtmlSegments(element)
+
+
+          if (segments.length > 0) {
+
+
+            blocks.push({ segments, justify: true })
+
+
+          }
+
+
+          return
+
+
+        }
+
+
+
+        const segments = collectHtmlSegments(element)
+
+
+        const text = segments.map((segment) => segment.text).join(" ").trim()
+
+
+
+        if (!text) {
+
+
+          blocks.push({ segments: [], blank: true })
+
+
+          return
+
+
+        }
+
+
+
+        const fontSize =
+
+
+          tagName === "h1" ? 16 :
+
+
+          tagName === "h2" ? 15 :
+
+
+          tagName === "h3" ? 14 :
+
+
+          undefined
+
+
+
+        blocks.push({
+
+
+          segments,
+
+
+          align: htmlElementAlign(element),
+
+
+          justify: htmlElementAlign(element) === "left",
+
+
+          fontSize,
+
+
+        })
+
+
+      }
+
+
+
+      container.childNodes.forEach(pushBlockFromNode)
+
+
+
+      return blocks.filter((block, index, list) => {
+
+
+        if (!block.blank) return true
+
+
+
+        const previous = list[index - 1]
+
+
+        return previous && !previous.blank
+
+
+      })
+
+
+    }
+
+
+
     async function loadHeaderImage() {
       return await new Promise<HTMLImageElement | null>((resolve) => {
         const image = new Image()
@@ -2392,16 +2820,16 @@ function toPdfHex(value: string) {
       replaceTemplatePlaceholders(rawSubject, replacements) ||
       "Encaminhamento de informações referente a procedimento não atendido pela Rede Estadual de Saúde - CORE."
 
-    const bodyText = htmlToPlainText(html)
     const defaultBodyText =
       "Cumprimentando-o cordialmente, em atenção ao Ofício supracitado, que solicita informações acerca da oferta do procedimento SIGTAP " +
       procedureText +
       ", informamos que, no âmbito da Rede Estadual de Saúde de Mato Grosso do Sul, não há contratualização vigente com prestadores habilitados para a execução do referido procedimento."
 
-    const bodyParagraphs = (bodyText || defaultBodyText)
-      .split(/\r?\n+/)
-      .map((item) => item.trim())
-      .filter(Boolean)
+    const bodyBlocks = htmlToPdfRichBlocks(html)
+    const finalBodyBlocks =
+      bodyBlocks.length > 0
+        ? bodyBlocks
+        : [{ segments: [{ text: defaultBodyText, bold: false }], justify: true }]
 
     const scratch = createCanvasPage()
     const allLines: PdfVisualLine[] = []
@@ -2428,40 +2856,20 @@ function toPdfHex(value: string) {
     ])
     addBlankLine(allLines)
 
-    addRichParagraph(scratch.context, allLines, [
-      { text: "Assunto: " + subjectText, bold: true },
-    ])
-    addBlankLine(allLines)
+    for (const block of finalBodyBlocks) {
+      if (block.blank || block.segments.length === 0) {
+        addBlankLine(allLines)
+        continue
+      }
 
-    addRichParagraph(scratch.context, allLines, [
-      { text: "Senhor Procurador,", bold: true },
-    ])
-    addBlankLine(allLines)
-
-    for (const paragraph of bodyParagraphs) {
-      addRichParagraph(scratch.context, allLines, [
-        { text: paragraph, bold: false },
-      ], { justify: true })
+      addRichParagraph(scratch.context, allLines, block.segments, {
+        align: block.align,
+        justify: block.justify,
+        fontSize: block.fontSize,
+      })
       addBlankLine(allLines)
     }
 
-    addRichParagraph(scratch.context, allLines, [
-      { text: "Sem mais para o momento, colocamo-nos à disposição para quaisquer esclarecimentos adicionais que se fizerem necessários.", bold: false },
-    ], { justify: true })
-    addBlankLine(allLines)
-
-    addRichParagraph(scratch.context, allLines, [
-      { text: "Atenciosamente,", bold: false },
-    ])
-    addBlankLine(allLines)
-    addBlankLine(allLines)
-
-    addRichParagraph(scratch.context, allLines, [
-      { text: "ED CARLO BRITTO BURGATT", bold: true },
-    ], { align: "center" })
-    addRichParagraph(scratch.context, allLines, [
-      { text: "COORDENADOR DE REGULAÇÃO DA ASSISTÊNCIA", bold: true },
-    ], { align: "center" })
     addBlankLine(allLines)
 
     addRichParagraph(scratch.context, allLines, [
@@ -2527,13 +2935,50 @@ function toPdfHex(value: string) {
     return data.files[0] as UploadedFileMeta
   }
 
+  function setProcuradoriaEditorContent(nextHtml: string) {
+    const html = String(nextHtml || defaultProcuradoriaHtml)
+
+    procuradoriaHtmlRef.current = html
+    setProcuradoriaHtml(html)
+    setProcuradoriaEditorKey((current) => current + 1)
+
+    if (typeof window !== "undefined") {
+      window.setTimeout(() => {
+        if (procuradoriaEditorRef.current && procuradoriaEditorRef.current.innerHTML !== html) {
+          procuradoriaEditorRef.current.innerHTML = html
+        }
+      }, 0)
+    }
+  }
+
+  function captureProcuradoriaEditorContent(value: string) {
+    procuradoriaHtmlRef.current = String(value || "")
+  }
+
+  function handleProcuradoriaEditorPaste(event: any) {
+    event.preventDefault()
+
+    const text = String(event.clipboardData?.getData("text/plain") || "")
+    if (!text) return
+
+    document.execCommand("insertText", false, text)
+
+    if (typeof window !== "undefined") {
+      window.setTimeout(() => {
+        if (procuradoriaEditorRef.current) {
+          procuradoriaHtmlRef.current = procuradoriaEditorRef.current.innerHTML
+        }
+      }, 0)
+    }
+  }
+
   function applyProcuradoriaTemplateById(templateId: string) {
     setSelectedProcuradoriaTemplateId(templateId)
 
     const template = availableEmailTemplates.find((item: any) => item.id === templateId)
 
     if (!template) {
-      setProcuradoriaHtml("<p>Prezados,</p><p></p><p>Atenciosamente.</p>")
+      setProcuradoriaEditorContent(defaultProcuradoriaHtml)
       return
     }
 
@@ -2542,7 +2987,7 @@ function toPdfHex(value: string) {
       replaceTemplatePlaceholders(template.body, replacements),
     )
 
-    setProcuradoriaHtml(nextHtml)
+    setProcuradoriaEditorContent(nextHtml)
   }
 
   async function handleGenerateProcuradoriaResponse() {
@@ -2553,7 +2998,13 @@ function toPdfHex(value: string) {
       return
     }
 
-    const textContent = htmlToPlainText(procuradoriaHtml)
+    const rawHtml =
+      procuradoriaEditorRef.current?.innerHTML ||
+      procuradoriaHtmlRef.current ||
+      procuradoriaHtml
+
+    const safeHtml = sanitizeEmailHtml(rawHtml)
+    const textContent = htmlToPlainText(safeHtml)
 
     if (!textContent) {
       toast.error("O modelo selecionado não gerou conteúdo.")
@@ -2563,7 +3014,7 @@ function toPdfHex(value: string) {
     try {
       setGeneratingProcuradoria(true)
 
-      const pdfBlob = await buildSimplePdfBlob("Resposta a Procuradoria", procuradoriaHtml)
+      const pdfBlob = await buildSimplePdfBlob("Resposta a Procuradoria", safeHtml)
       const safeProtocol = String(caseItem.originProtocol || caseItem.id || "judicial").replace(/[^a-zA-Z0-9_-]+/g, "_")
       const file = new File([pdfBlob], "resposta-a-procuradoria-" + safeProtocol + ".pdf", {
         type: "application/pdf",
@@ -2596,7 +3047,7 @@ function toPdfHex(value: string) {
       toast.success("Resposta a Procuradoria salva nas movimentações.")
       setProcuradoriaModalOpen(false)
       setSelectedProcuradoriaTemplateId("")
-      setProcuradoriaHtml("<p>Prezados,</p><p></p><p>Atenciosamente.</p>")
+      setProcuradoriaEditorContent(defaultProcuradoriaHtml)
 
       if (typeof window !== "undefined") {
         window.setTimeout(() => window.location.reload(), 500)
@@ -3616,6 +4067,128 @@ function toPdfHex(value: string) {
             </CardHeader>
 
             <CardContent className="space-y-4">
+              <div className="rounded-2xl border border-dashed border-primary/30 bg-primary/5 p-4">
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-primary">
+                      MATERIAL DE APOIO
+                    </p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Cadastre arquivos de orientação para o Agendamento da Demanda e consulte os materiais já vinculados.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      className="inline-flex h-9 items-center justify-center rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
+                      onClick={() => setSupportMaterialFormOpen((value) => !value)}
+                    >
+                      Cadastrar material
+                    </button>
+
+                    <button
+                      type="button"
+                      className="inline-flex h-9 items-center justify-center rounded-md border border-input bg-background px-3 text-sm font-medium shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground"
+                      onClick={() => setSupportMaterialListOpen((value) => !value)}
+                    >
+                      Visualizar materiais
+                    </button>
+                  </div>
+                </div>
+
+                {supportMaterialFormOpen ? (
+                  <div className="mt-4 grid gap-3 rounded-xl border border-border bg-background p-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                        Nome do material
+                      </label>
+                      <input
+                        type="text"
+                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        placeholder="Ex.: Manual de agendamento"
+                        value={supportMaterialName}
+                        onChange={(event) => setSupportMaterialName(event.target.value)}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                        Arquivo
+                      </label>
+                      <input
+                        type="file"
+                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        onChange={(event) => setSelectedSupportMaterialFiles(event.target.files)}
+                      />
+                    </div>
+
+                    <button
+                      type="button"
+                      className="inline-flex h-10 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:opacity-60"
+                      disabled={uploadingSupportMaterial}
+                      onClick={handleSaveSupportMaterial}
+                    >
+                      {uploadingSupportMaterial ? "Enviando..." : "Salvar"}
+                    </button>
+                  </div>
+                ) : null}
+
+                {supportMaterialListOpen ? (
+                  <div className="mt-4 space-y-2">
+                    {supportMaterials.length === 0 ? (
+                      <p className="rounded-xl border border-border bg-background p-3 text-sm text-muted-foreground">
+                        Nenhum material de apoio cadastrado.
+                      </p>
+                    ) : (
+                      supportMaterials.map((material) => (
+                        <div
+                          key={material.id}
+                          className="flex flex-col gap-2 rounded-xl border border-border bg-background p-3 md:flex-row md:items-center md:justify-between"
+                        >
+                          <div>
+                            <p className="text-sm font-medium text-foreground">{material.name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {material.createdByName || "Usuário"} • {material.createdAt ? new Date(material.createdAt).toLocaleString("pt-BR") : "Data não informada"}
+                            </p>
+                          </div>
+
+                          <div className="flex flex-wrap gap-2">
+                            {material.attachments.length === 0 ? (
+                              <span className="text-xs text-muted-foreground">Sem arquivo</span>
+                            ) : (
+                              material.attachments.map((attachment: any, index: number) => {
+                                const attachmentName = String(attachment?.name || attachment?.filename || `Arquivo ${index + 1}`)
+                                const attachmentUrl = String(attachment?.url || attachment?.relativePath || attachment?.path || "")
+
+                                return attachmentUrl ? (
+                                  <a
+                                    key={`${material.id}-${index}`}
+                                    href={attachmentUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="inline-flex h-8 items-center justify-center rounded-md border border-input bg-background px-3 text-xs font-medium shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground"
+                                  >
+                                    Visualizar {attachmentName}
+                                  </a>
+                                ) : (
+                                  <span
+                                    key={`${material.id}-${index}`}
+                                    className="text-xs text-muted-foreground"
+                                  >
+                                    {attachmentName}
+                                  </span>
+                                )
+                              })
+                            )}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                ) : null}
+              </div>
+
               <div className="grid gap-3 lg:grid-cols-2">
                 <div>
                   <Label className="mb-1 block text-xs">Movimentação</Label>
@@ -5184,11 +5757,24 @@ function toPdfHex(value: string) {
             </div>
 
             <div>
-              <Label className="mb-1 block text-xs">Prévia da resposta</Label>
+              <Label className="mb-1 block text-xs">Texto da resposta editável</Label>
               <div
-                className="max-h-[420px] overflow-auto rounded-md border border-input bg-background p-4 text-sm leading-relaxed"
-                dangerouslySetInnerHTML={{ __html: procuradoriaHtml }}
+                key={procuradoriaEditorKey}
+                ref={procuradoriaEditorRef}
+                contentEditable
+                suppressContentEditableWarning
+                className="prose prose-sm max-h-[420px] min-h-[260px] max-w-none overflow-auto rounded-md border border-input bg-background p-4 text-sm leading-relaxed outline-none"
+                onInput={(event) =>
+                  captureProcuradoriaEditorContent((event.target as HTMLDivElement).innerHTML)
+                }
+                onBlur={(event) =>
+                  captureProcuradoriaEditorContent((event.target as HTMLDivElement).innerHTML)
+                }
+                onPaste={handleProcuradoriaEditorPaste}
               />
+              <p className="mt-2 text-xs text-muted-foreground">
+                Clique no texto acima para editar as informações antes de gerar a resposta.
+              </p>
             </div>
 
             <div className="flex justify-end gap-2">

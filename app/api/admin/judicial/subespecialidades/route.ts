@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { requireAdminRequest } from "@/lib/security/server-session"
+import { requireAdminRequest, readServerSession } from "@/lib/security/server-session"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -27,10 +27,24 @@ function serialize(item: SubespecialidadeRow) {
   }
 }
 
+
+function requireCatalogReadRequest(req: Request) {
+  const session = readServerSession(req)
+
+  if (!session) {
+    return NextResponse.json(
+      { ok: false, error: "Sessão expirada. Faça login novamente." },
+      { status: 401 },
+    )
+  }
+
+  return null
+}
+
 export async function GET(req: Request) {
 
-  const adminGuard = await requireAdminRequest(req)
-  if (!adminGuard.ok) return adminGuard.response
+  const catalogReadGuard = requireCatalogReadRequest(req)
+    if (catalogReadGuard) return catalogReadGuard
 
   try {
     const { searchParams } = new URL(req.url)

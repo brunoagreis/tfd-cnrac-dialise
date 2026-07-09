@@ -1,6 +1,8 @@
 ﻿import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { ensureEmailOsRoutingColumns, inferEmailOsModule, normalizeEmailOsModule } from "@/lib/email-os-routing"
+
+import { readServerSession } from "@/lib/security/server-session"
 import { finalizeEmailMessage } from "@/lib/email-triage-mailbox"
 
 export const runtime = "nodejs"
@@ -35,9 +37,121 @@ function parseObject(value: unknown) { return value && typeof value === "object"
 function files(value: unknown) { return parseArray(value).map((item) => { const record = parseObject(item); return { name: text(record.name || record.filename || record.storedName || "anexo"), url: text(record.url || record.relativePath || record.arquivoPath), mimeType: text(record.mimeType || record.contentType), size: Number(record.size || 0) } }) }
 async function findUser(id: string) { const rows = await prisma.$queryRawUnsafe<UserRow[]>(`SELECT id::text AS id, nome, email FROM public.usuarios WHERE id::text = $1 LIMIT 1`, id); return rows[0] || null }
 
+
+function normalizeEmailOsAccessValue(value: unknown) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase()
+}
+
+function isEmailOsAdminSession(session: any) {
+  const role = normalizeEmailOsAccessValue(
+    session?.role ??
+    session?.perfil ??
+    session?.tipo ??
+    session?.nivel ??
+    session?.perfilCodigo ??
+    session?.perfil_codigo ??
+    "",
+  )
+
+  return (
+    role === "admin" ||
+    role === "administrador" ||
+    role.includes("admin") ||
+    session?.isAdmin === true
+  )
+}
+
+function isEmailOsResponsibleForSession(item: any, session: any) {
+  if (!item || !session) return false
+  if (isEmailOsAdminSession(session)) return true
+
+  const sessionIds = [
+    session?.id,
+    session?.userId,
+    session?.usuarioId,
+    session?.usuario_id,
+  ].map(normalizeEmailOsAccessValue).filter(Boolean)
+
+  const sessionEmails = [
+    session?.email,
+    session?.login,
+  ].map(normalizeEmailOsAccessValue).filter(Boolean)
+
+  const sessionNames = [
+    session?.nome,
+    session?.name,
+    session?.username,
+  ].map(normalizeEmailOsAccessValue).filter(Boolean)
+
+  const responsibleIds = [
+    item?.responsavelId,
+    item?.responsavel_id,
+    item?.responsavelUsuarioId,
+    item?.responsavel_usuario_id,
+    item?.usuarioResponsavelId,
+    item?.usuario_responsavel_id,
+  ].map(normalizeEmailOsAccessValue).filter(Boolean)
+
+  const responsibleEmails = [
+    item?.responsavelEmail,
+    item?.responsavel_email,
+    item?.emailResponsavel,
+    item?.email_responsavel,
+  ].map(normalizeEmailOsAccessValue).filter(Boolean)
+
+  const responsibleNames = [
+    item?.responsavelNome,
+    item?.responsavel_nome,
+    item?.responsavel,
+  ].map(normalizeEmailOsAccessValue).filter(Boolean)
+
+  if (responsibleIds.length) {
+    return responsibleIds.some((id) => sessionIds.includes(id))
+  }
+
+  if (responsibleEmails.length) {
+    return responsibleEmails.some((email) => sessionEmails.includes(email))
+  }
+
+  if (responsibleNames.length) {
+    return responsibleNames.some((name) => sessionNames.includes(name))
+  }
+
+  return false
+}
+
+function filterEmailOsItemsForSession<T>(items: T[], session: any): T[] {
+  if (!Array.isArray(items)) return []
+  if (isEmailOsAdminSession(session)) return items
+  return items.filter((item) => isEmailOsResponsibleForSession(item, session))
+}
+
+function requireEmailOsSession(req: NextRequest) {
+  const session = readServerSession(req)
+
+  if (!session) {
+    return {
+      session: null,
+      response: NextResponse.json(
+        { ok: false, error: "Sessão expirada. Faça login novamente.", items: [] },
+        { status: 401 },
+      ),
+    }
+  }
+
+  return { session, response: null }
+}
+
 export async function GET(req: NextRequest) {
   try {
     const moduleParam = normalizeEmailOsModule(req.nextUrl.searchParams.get("modulo"))
+    const emailOsSessionGuard = requireEmailOsSession(req)
+    if (emailOsSessionGuard.response) return emailOsSessionGuard.response
+    const emailOsSession = emailOsSessionGuard.session
     const rows = await prisma.$queryRawUnsafe<OsRow[]>(`
       SELECT id::text AS id, protocolo, assunto, remetente, recebido_em::text AS "recebidoEm", pge_net AS "pgeNet", processo, classificador, regra_nome AS "regraNome", corpo_resumo AS "corpoResumo", anexos, status, modulo_destino AS "moduloDestino", responsavel_id AS "responsavelId", responsavel_nome AS "responsavelNome", responsavel_email AS "responsavelEmail", convertido_protocolo AS "convertidoProtocolo", created_at::text AS "createdAt"
       FROM public.judicial_email_os
@@ -49,7 +163,8 @@ export async function GET(req: NextRequest) {
       return [] as OsRow[]
     })
     const items = rows.map((row) => { const modulo = normalizeEmailOsModule(row.moduloDestino || inferEmailOsModule(row.assunto, row.classificador)); return { id: row.id, protocolo: row.protocolo || `OS-${row.id}`, assunto: row.assunto || "", remetente: row.remetente || "", recebidoEm: row.recebidoEm || "", pgeNet: row.pgeNet || "", processo: row.processo || "", classificador: row.classificador || "", regraNome: row.regraNome || "", corpoResumo: row.corpoResumo || "", status: row.status || "AGUARDANDO_CADASTRO", moduloDestino: modulo, responsavelId: row.responsavelId || "", responsavelNome: row.responsavelNome || "", responsavelEmail: row.responsavelEmail || "", convertidoProtocolo: row.convertidoProtocolo || "", createdAt: row.createdAt || "", anexos: files(row.anexos) } }).filter((item) => item.moduloDestino === moduleParam)
-    return NextResponse.json({ ok: true, items })
+    const authorizedItems = filterEmailOsItemsForSession(items, emailOsSession)
+    return NextResponse.json({ ok: true, items: authorizedItems })
   } catch (error) {
     console.error("[GET /api/email-os] erro:", error)
     return NextResponse.json({ ok: true, items: [] })
@@ -62,14 +177,19 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({}))
     const action = String(body?.action || "").trim().toLowerCase()
 
-    if (action === "inativar") {
-      const user = body?.user || {}
-      const role = String(user?.role || user?.perfil || user?.tipo || "").toUpperCase()
-      const isAdmin = role === "ADMIN" || role === "ADMINISTRADOR" || user?.isAdmin === true
+    const emailOsMutationSessionGuard = requireEmailOsSession(req)
+    if (emailOsMutationSessionGuard.response) return emailOsMutationSessionGuard.response
+    const emailOsMutationSession = emailOsMutationSessionGuard.session
 
-      if (!isAdmin) {
-        return NextResponse.json({ ok: false, error: "Somente administrador pode inativar OS." }, { status: 403 })
-      }
+    if (["inativar", "transferir", "atribuir", "reatribuir", "alterar_responsavel"].includes(action) && !isEmailOsAdminSession(emailOsMutationSession)) {
+      return NextResponse.json(
+        { ok: false, error: "Apenas administradores podem transferir ou inativar ordens de serviço." },
+        { status: 403 },
+      )
+    }
+
+    if (action === "inativar") {
+      const user = emailOsMutationSession
 
       const id = String(body?.id || "").trim()
       if (!id) {

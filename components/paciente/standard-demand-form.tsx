@@ -95,6 +95,8 @@ export function StandardDemandForm({
 
   const [especialidade, setEspecialidade] = useState("")
   const [subespecialidade, setSubespecialidade] = useState("")
+  const [especialidadeSearchOpen, setEspecialidadeSearchOpen] = useState(false)
+  const [subespecialidadeSearchOpen, setSubespecialidadeSearchOpen] = useState(false)
 
   const [tipoSolicitacao, setTipoSolicitacao] = useState<
     "transito" | "definitiva" | "nao_se_aplica"
@@ -138,6 +140,26 @@ export function StandardDemandForm({
       )
   }, [especialidadeSubItems, especialidade])
 
+  const especialidadesSugeridas = useMemo(() => {
+    const q = especialidade.trim().toLocaleLowerCase("pt-BR")
+
+    if (!q) return especialidades.slice(0, 50)
+
+    return especialidades
+      .filter((item) => item.nome.toLocaleLowerCase("pt-BR").includes(q))
+      .slice(0, 50)
+  }, [especialidades, especialidade])
+
+  const subespecialidadesSugeridas = useMemo(() => {
+    const q = subespecialidade.trim().toLocaleLowerCase("pt-BR")
+
+    if (!q) return subespecialidadesFiltradas.slice(0, 50)
+
+    return subespecialidadesFiltradas
+      .filter((item) => item.subespecialidadeNome.toLocaleLowerCase("pt-BR").includes(q))
+      .slice(0, 50)
+  }, [subespecialidadesFiltradas, subespecialidade])
+
   useEffect(() => {
     void fetchEspecialidades()
   }, [])
@@ -178,6 +200,7 @@ export function StandardDemandForm({
 
       const params = new URLSearchParams()
       params.set("q", query)
+      params.set("limit", "1000")
 
       const response = await fetch(`/api/admin/judicial/sigtap?${params.toString()}`, {
         method: "GET",
@@ -206,8 +229,9 @@ export function StandardDemandForm({
 
       const params = new URLSearchParams()
       params.set("q", query)
+      params.set("limit", "1000")
 
-      const response = await fetch(`/api/admin/judicial/cid10?${params.toString()}`, {
+      const response = await fetch(`/api/judicial/cid10?${params.toString()}`, {
         method: "GET",
         cache: "no-store",
       })
@@ -219,7 +243,20 @@ export function StandardDemandForm({
         return
       }
 
-      setCid10Options(Array.isArray(json?.items) ? json.items : [])
+      setCid10Options(
+        Array.isArray(json?.items)
+          ? json.items
+              .map((item: any) => ({
+                id: String(item?.id ?? item?.codigo ?? item?.code ?? ""),
+                codigo: String(item?.codigo ?? item?.code ?? "").toUpperCase(),
+                descricao: String(item?.descricao ?? item?.description ?? "").toUpperCase(),
+                ativo: item?.ativo !== false,
+                createdAt: String(item?.createdAt ?? ""),
+                updatedAt: String(item?.updatedAt ?? ""),
+              }))
+              .filter((item: Cid10Item) => item.codigo && item.descricao)
+          : [],
+      )
     } catch (error) {
       console.error("LOAD_CID10_STANDARD_DEMAND_ERROR", error)
       toast.error("Erro ao carregar CID-10.")
@@ -506,44 +543,78 @@ export function StandardDemandForm({
             ) : null}
           </div>
 
-          <div>
+          <div className="relative">
             <Label className="mb-1 block text-xs">
               Especialidade <span className="text-destructive">*</span>
             </Label>
-            <select
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            <Input
               value={especialidade}
-              onChange={(e) => handleEspecialidadeChange(e.target.value)}
+              onChange={(e) => {
+                handleEspecialidadeChange(e.target.value)
+                setEspecialidadeSearchOpen(true)
+              }}
+              onFocus={() => setEspecialidadeSearchOpen(true)}
+              onBlur={() => setTimeout(() => setEspecialidadeSearchOpen(false), 150)}
+              placeholder={loadingEspecialidades ? "Carregando..." : "Digite para buscar a especialidade"}
               disabled={loadingEspecialidades}
-            >
-              <option value="">
-                {loadingEspecialidades ? "Carregando..." : "Selecione a especialidade"}
-              </option>
-              {especialidades.map((item) => (
-                <option key={item.id} value={item.nome}>
-                  {item.nome}
-                </option>
-              ))}
-            </select>
+            />
+
+            {especialidadeSearchOpen && especialidadesSugeridas.length > 0 ? (
+              <div className="absolute z-50 mt-1 max-h-60 w-full overflow-y-auto rounded-md border bg-popover p-1 shadow-md">
+                {especialidadesSugeridas.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className="w-full rounded px-2 py-2 text-left text-sm hover:bg-muted"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => {
+                      handleEspecialidadeChange(item.nome)
+                      setEspecialidadeSearchOpen(false)
+                    }}
+                  >
+                    {item.nome}
+                  </button>
+                ))}
+              </div>
+            ) : null}
           </div>
 
-          <div>
+          <div className="relative">
             <Label className="mb-1 block text-xs">Sub Especialidade</Label>
-            <select
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            <Input
               value={subespecialidade}
-              onChange={(e) => setSubespecialidade(e.target.value)}
-              disabled={!especialidade}
-            >
-              <option value="">
-                {especialidade ? "Selecione a sub especialidade" : "Escolha a especialidade primeiro"}
-              </option>
-              {subespecialidadesFiltradas.map((item) => (
-                <option key={item.subespecialidadeId} value={item.subespecialidadeNome}>
-                  {item.subespecialidadeNome}
-                </option>
-              ))}
-            </select>
+              onChange={(e) => {
+                setSubespecialidade(e.target.value)
+                setSubespecialidadeSearchOpen(true)
+              }}
+              onFocus={() => setSubespecialidadeSearchOpen(true)}
+              onBlur={() => setTimeout(() => setSubespecialidadeSearchOpen(false), 150)}
+              placeholder={
+                especialidade
+                  ? "Digite para buscar a subespecialidade, se houver"
+                  : "Escolha a especialidade primeiro"
+              }
+              disabled={!especialidade || loadingEspecialidades}
+            />
+
+            {especialidade && subespecialidadeSearchOpen && subespecialidadesSugeridas.length > 0 ? (
+              <div className="absolute z-50 mt-1 max-h-60 w-full overflow-y-auto rounded-md border bg-popover p-1 shadow-md">
+                {subespecialidadesSugeridas.map((item) => (
+                  <button
+                    key={item.subespecialidadeId || item.subespecialidadeNome}
+                    type="button"
+                    className="w-full rounded px-2 py-2 text-left text-sm hover:bg-muted"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => {
+                      setSubespecialidade(item.subespecialidadeNome)
+                      setSubespecialidadeSearchOpen(false)
+                    }}
+                  >
+                    {item.subespecialidadeNome}
+                  </button>
+                ))}
+              </div>
+            ) : null}
           </div>
 
           <div>

@@ -52,6 +52,7 @@ type NewPatientFormState = {
   nome: string
   dataNascimento: string
   telefone: string
+  telefones: string[]
   email: string
   endereco: string
   numero: string
@@ -70,6 +71,58 @@ type ApiPatientItem = Paciente & {
 }
 
 const PAGE_SIZE = 8
+
+const MAX_PATIENT_PHONES = 5
+const MAX_PATIENT_PHONE_LENGTH = 30
+
+function cleanPatientPhone(value: unknown) {
+  return String(value ?? "")
+    .replace(/[^0-9()+\-\s]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, MAX_PATIENT_PHONE_LENGTH)
+}
+
+function normalizePatientPhones(value: unknown): string[] {
+  const source = Array.isArray(value)
+    ? value
+    : String(value ?? "")
+        .split(/\s*(?:\||;|,|\n)\s*/)
+        .filter(Boolean)
+
+  const phones = source
+    .map(cleanPatientPhone)
+    .filter(Boolean)
+    .filter((phone, index, array) => array.indexOf(phone) === index)
+    .slice(0, MAX_PATIENT_PHONES)
+
+  return phones.length ? phones : [""]
+}
+
+function getPatientPhones(form: Pick<NewPatientFormState, "telefone" | "telefones">) {
+  const rawSource =
+    Array.isArray(form.telefones) && form.telefones.length
+      ? form.telefones
+      : String(form.telefone ?? "")
+          .split(/\s*(?:\||;|,|\n)\s*/)
+          .filter(Boolean)
+
+  const phones = rawSource
+    .map(cleanPatientPhone)
+    .slice(0, MAX_PATIENT_PHONES)
+
+  return phones.length ? phones : [""]
+}
+
+function buildPatientPayload(form: NewPatientFormState) {
+  const telefones = getPatientPhones(form).filter(Boolean)
+
+  return {
+    ...form,
+    telefone: telefones[0] ?? "",
+    telefones,
+  }
+}
 
 function onlyDigits(value: string) {
   return value.replace(/\D/g, "")
@@ -121,6 +174,7 @@ function initialNewPatientForm(prefill = ""): NewPatientFormState {
     nome: "",
     dataNascimento: "",
     telefone: "",
+    telefones: [""],
     email: "",
     endereco: "",
     numero: "",
@@ -132,11 +186,8 @@ function initialNewPatientForm(prefill = ""): NewPatientFormState {
 }
 
 function patientToForm(patient: ApiPatientItem | Paciente): NewPatientFormState {
-  const rawTelefone = String(
-    (patient as any).telefone ??
-      (Array.isArray((patient as any).telefones) ? (patient as any).telefones[0] : "") ??
-      "",
-  )
+  const rawTelefones = normalizePatientPhones((patient as any).telefones ?? (patient as any).telefone)
+  const rawTelefone = rawTelefones[0] ?? ""
 
   return {
     cpf: formatCpf(String((patient as any).cpf ?? "")),
@@ -144,6 +195,7 @@ function patientToForm(patient: ApiPatientItem | Paciente): NewPatientFormState 
     nome: String((patient as any).nome ?? ""),
     dataNascimento: String((patient as any).dataNascimento ?? "").slice(0, 10),
     telefone: rawTelefone ? formatPhone(rawTelefone) : "",
+    telefones: rawTelefones.map((value) => formatPhone(value)),
     email: String((patient as any).email ?? ""),
     endereco: String((patient as any).endereco ?? ""),
     numero: "",
@@ -179,6 +231,24 @@ function normalizeApiPatient(item: any): ApiPatientItem {
   }
 }
 
+function normalizeDemandModuleChoiceFromQuery(value: unknown): DemandModuleChoice | null {
+  const normalized = String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "_")
+    .replace(/-/g, "_")
+
+  if (normalized === "judicial") return "judicial"
+  if (normalized === "pre_judicial" || normalized === "prejudicial") return "pre_judicial"
+  if (normalized === "tfd") return "tfd"
+  if (normalized === "cnrac") return "cnrac"
+  if (normalized === "hemodialise" || normalized === "hemodialise") return "hemodialise"
+
+  return null
+}
+
 export default function PacientesPage() {
   const [search, setSearch] = useState("")
   const [page, setPage] = useState(1)
@@ -194,6 +264,7 @@ export default function PacientesPage() {
   const [createPatientForm, setCreatePatientForm] = useState<NewPatientFormState>(initialNewPatientForm())
   const [savingPatient, setSavingPatient] = useState(false)
 
+  const [loadingCep, setLoadingCep] = useState(false)
   const [editPatientOpen, setEditPatientOpen] = useState(false)
   const [editingPatient, setEditingPatient] = useState<ApiPatientItem | null>(null)
   const [editPatientForm, setEditPatientForm] = useState<NewPatientFormState>(initialNewPatientForm())
@@ -218,6 +289,56 @@ export default function PacientesPage() {
 
     void fetchHistory(historyPatient.id)
   }, [historyPatient?.id])
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+
+    const params = new URLSearchParams(window.location.search)
+    const shouldOpenFromOs =
+      params.get("origemOs") === "1" ||
+      params.get("abrirCadastroPaciente") === "1"
+
+    if (!shouldOpenFromOs) return
+
+    setCreatePatientOpen(true)
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+
+    const params = new URLSearchParams(window.location.search)
+
+    if (params.get("abrirModulo") !== "1") return
+
+    const pacienteId = String(params.get("pacienteId") ?? "").trim()
+    const selectedFromQuery = normalizeDemandModuleChoiceFromQuery(params.get("modulo"))
+
+    if (!pacienteId || !selectedFromQuery) return
+
+    const existingPatient = apiPatients.find((item) => String((item as any).id) === pacienteId)
+
+    const patientFromQuery = existingPatient ?? normalizeApiPatient({
+      id: pacienteId,
+      nome: params.get("nome") ?? params.get("pacienteNome") ?? "Paciente",
+      cpf: params.get("cpf") ?? "",
+      cns: params.get("cns") ?? params.get("cartaoSus") ?? "",
+      cartaoSus: params.get("cartaoSus") ?? params.get("cns") ?? "",
+      dataNascimento: params.get("dataNascimento") ?? "",
+      telefone: params.get("telefone") ?? "",
+      telefones: params.get("telefone") ? [params.get("telefone")] : [],
+      email: params.get("email") ?? "",
+      endereco: params.get("endereco") ?? "",
+      cep: params.get("cep") ?? "",
+      bairro: params.get("bairro") ?? "",
+      cidade: params.get("cidade") ?? params.get("municipio") ?? "",
+      municipio: params.get("municipio") ?? params.get("cidade") ?? "",
+    })
+
+    setDemandPatient(patientFromQuery)
+    setSelectedModule(selectedFromQuery)
+
+    window.history.replaceState(null, "", window.location.pathname)
+  }, [apiPatients])
 
   async function fetchPatients(query: string) {
     try {
@@ -276,17 +397,8 @@ export default function PacientesPage() {
   const pacientes = useMemo(() => apiPatients, [apiPatients])
 
   const filteredPatients = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    if (!q) return pacientes
-
-    return pacientes.filter((patient) => {
-      const name = String((patient as any).nome ?? "").toLowerCase()
-      const cpf = String((patient as any).cpf ?? "").toLowerCase()
-      const cns = String((patient as any).cns ?? (patient as any).cartaoSus ?? "").toLowerCase()
-      const city = String((patient as any).municipio ?? "").toLowerCase()
-      return `${name} ${cpf} ${cns} ${city}`.includes(q)
-    })
-  }, [pacientes, search])
+    return pacientes
+  }, [pacientes])
 
   const totalPages = Math.max(1, Math.ceil(filteredPatients.length / PAGE_SIZE))
 
@@ -450,6 +562,146 @@ export default function PacientesPage() {
     return true
   }
 
+
+
+  async function lookupCepForCreatePatient(cepValue: string) {
+    const cepDigits = onlyDigits(cepValue).slice(0, 8)
+
+    if (cepDigits.length !== 8) return
+
+    try {
+      setLoadingCep(true)
+
+      const response = await fetch(`/api/cep/${cepDigits}`, {
+        method: "GET",
+        cache: "no-store",
+      })
+
+      const json = await response.json().catch(() => ({}))
+
+      if (!response.ok || !json?.ok) {
+        toast.error(json?.error || "Não foi possível consultar o CEP.")
+        return
+      }
+
+      const item = json?.item ?? {}
+      const logradouro = String(item?.logradouro ?? "").trim()
+      const bairro = String(item?.bairro ?? "").trim()
+      const complemento = String(item?.complemento ?? "").trim()
+
+      setCreatePatientForm((current) => ({
+        ...current,
+        cep: formatCep(cepDigits),
+        endereco: logradouro || current.endereco,
+        bairro: bairro || current.bairro,
+        complemento: current.complemento || complemento,
+      }))
+
+      if (logradouro || bairro) {
+        toast.success("Endereço localizado pelo CEP.")
+      }
+    } catch (error) {
+      console.error("LOOKUP_CEP_CREATE_PATIENT_ERROR", error)
+      toast.error("Erro ao consultar CEP.")
+    } finally {
+      setLoadingCep(false)
+    }
+  }
+
+  function updateCreatePatientPhone(index: number, value: string) {
+    const cleaned = formatPhone(cleanPatientPhone(value))
+
+    setCreatePatientForm((current) => {
+      const currentPhones = getPatientPhones(current)
+      const nextPhones = currentPhones.map((phone, phoneIndex) => (phoneIndex === index ? cleaned : phone))
+
+      return {
+        ...current,
+        telefone: nextPhones.filter(Boolean)[0] ?? "",
+        telefones: nextPhones.length ? nextPhones : [""],
+      }
+    })
+  }
+
+  function addCreatePatientPhone(event?: { preventDefault?: () => void; stopPropagation?: () => void }) {
+    event?.preventDefault?.()
+    event?.stopPropagation?.()
+
+    setCreatePatientForm((current) => {
+      const currentPhones =
+        Array.isArray(current.telefones) && current.telefones.length
+          ? current.telefones.slice(0, MAX_PATIENT_PHONES)
+          : [current.telefone || ""]
+
+      if (currentPhones.length >= MAX_PATIENT_PHONES) return current
+
+      const nextPhones = [...currentPhones, ""]
+
+      return {
+        ...current,
+        telefone: nextPhones.filter(Boolean)[0] ?? "",
+        telefones: nextPhones,
+      }
+    })
+  }
+
+  function removeCreatePatientPhone(index: number) {
+    setCreatePatientForm((current) => {
+      const currentPhones = getPatientPhones(current)
+      const nextPhones = currentPhones.filter((_, phoneIndex) => phoneIndex !== index)
+
+      return {
+        ...current,
+        telefone: nextPhones.filter(Boolean)[0] ?? "",
+        telefones: nextPhones.length ? nextPhones : [""],
+      }
+    })
+  }
+
+  function updateEditPatientPhone(index: number, value: string) {
+    const cleaned = formatPhone(cleanPatientPhone(value))
+
+    setEditPatientForm((current) => {
+      const currentPhones = getPatientPhones(current)
+      const nextPhones = currentPhones.map((phone, phoneIndex) => (phoneIndex === index ? cleaned : phone))
+
+      return {
+        ...current,
+        telefone: nextPhones.filter(Boolean)[0] ?? "",
+        telefones: nextPhones.length ? nextPhones : [""],
+      }
+    })
+  }
+
+  function addEditPatientPhone() {
+    setEditPatientForm((current) => {
+      const currentPhones = getPatientPhones(current)
+
+      if (currentPhones.length >= MAX_PATIENT_PHONES) return current
+
+      const nextPhones = [...currentPhones, ""]
+
+      return {
+        ...current,
+        telefone: nextPhones.filter(Boolean)[0] ?? "",
+        telefones: nextPhones,
+      }
+    })
+  }
+
+  function removeEditPatientPhone(index: number) {
+    setEditPatientForm((current) => {
+      const currentPhones = getPatientPhones(current)
+      const nextPhones = currentPhones.filter((_, phoneIndex) => phoneIndex !== index)
+
+      return {
+        ...current,
+        telefone: nextPhones.filter(Boolean)[0] ?? "",
+        telefones: nextPhones.length ? nextPhones : [""],
+      }
+    })
+  }
+
   async function handleSaveNewPatient() {
     if (savingPatient) return
     if (!validateNewPatientForm()) return
@@ -460,7 +712,7 @@ export default function PacientesPage() {
       const response = await fetch("/api/pacientes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(createPatientForm),
+        body: JSON.stringify(buildPatientPayload(createPatientForm)),
       })
       const json = await response.json().catch(() => ({}))
 
@@ -498,7 +750,7 @@ export default function PacientesPage() {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...editPatientForm,
+          ...buildPatientPayload(editPatientForm),
           id: (editingPatient as any).id,
         }),
       })
@@ -907,14 +1159,50 @@ export default function PacientesPage() {
                 />
               </div>
 
-              <div>
-                <Label className="mb-1 block text-xs">Telefone</Label>
-                <Input
-                  value={createPatientForm.telefone}
-                  onChange={(e) => updateCreatePatientField("telefone", formatPhone(e.target.value))}
-                  placeholder="(00) 00000-0000"
-                />
+              <div className="space-y-2">
+              <Label className="mb-1 block text-xs">Telefone(s)</Label>
+
+              <div className="space-y-2">
+                {getPatientPhones(createPatientForm).map((telefoneItem, index) => (
+                  <div key={index} className="flex gap-2">
+                    <Input
+                      value={telefoneItem}
+                      onChange={(event) => updateCreatePatientPhone(index, event.target.value)}
+                      placeholder={index === 0 ? "(00) 00000-0000" : "Outro telefone do paciente"}
+                      inputMode="tel"
+                      maxLength={MAX_PATIENT_PHONE_LENGTH}
+                    />
+
+                    {getPatientPhones(createPatientForm).length > 1 ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="bg-transparent"
+                        onClick={() => removeCreatePatientPhone(index)}
+                      >
+                        Remover
+                      </Button>
+                    ) : null}
+                  </div>
+                ))}
               </div>
+
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs text-muted-foreground">
+                  Cadastre até {MAX_PATIENT_PHONES} telefones do paciente.
+                </p>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="bg-transparent"
+                  disabled={getPatientPhones(createPatientForm).length >= MAX_PATIENT_PHONES}
+                  onClick={(event) => addCreatePatientPhone(event)}
+                >
+                  Adicionar telefone
+                </Button>
+              </div>
+            </div>
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
@@ -931,8 +1219,15 @@ export default function PacientesPage() {
                 <Label className="mb-1 block text-xs">CEP</Label>
                 <Input
                   value={createPatientForm.cep}
-                  onChange={(e) => updateCreatePatientField("cep", formatCep(e.target.value))}
-                  placeholder="00000-000"
+                  onChange={(e) => {
+                    const formattedCep = formatCep(e.target.value)
+                    updateCreatePatientField("cep", formattedCep)
+
+                    if (onlyDigits(formattedCep).length === 8) {
+                      void lookupCepForCreatePatient(formattedCep)
+                    }
+                  }}
+                  placeholder={loadingCep ? "Buscando CEP..." : "00000-000"}
                 />
               </div>
             </div>

@@ -222,6 +222,17 @@ SELECT
           MAX(usuario_nome) AS "usuarioNome",
           MAX(usuario_email) AS "usuarioEmail"
         FROM (
+          -- Dashboard: todos os usuários cadastrados devem aparecer no filtro,
+          -- mesmo sem horário ou monitoramento no período.
+          SELECT
+            id::text AS usuario_id,
+            nome::text AS usuario_nome,
+            email::text AS usuario_email
+          FROM public.usuarios
+          WHERE COALESCE(ativo, TRUE) = TRUE
+
+          UNION ALL
+
           SELECT
             id_usuario::text AS usuario_id,
             usuario_nome::text AS usuario_nome,

@@ -42,18 +42,41 @@ export function MunicipalitySelectField({
   async function fetchMunicipalities() {
     try {
       setLoading(true)
-      const response = await fetch("/api/admin/judicial/municipios", { cache: "no-store" })
-      const json = await response.json().catch(() => ({}))
-      const rows = response.ok && json?.ok && Array.isArray(json?.items) ? json.items : []
-      setItems(
-        rows
-          .map((item: any) => ({
-            id: String(item?.id ?? item?.municipalityName ?? ""),
-            municipalityName: normalize(item?.municipalityName ?? ""),
-            emails: Array.isArray(item?.emails) ? item.emails : [],
-          }))
-          .filter((item: MunicipalityItem) => item.municipalityName),
-      )
+
+      const adminResponse = await fetch("/api/municipios", { cache: "no-store" })
+      const adminJson = await adminResponse.json().catch(() => ({}))
+      const adminRows = adminResponse.ok && adminJson?.ok && Array.isArray(adminJson?.items) ? adminJson.items : []
+
+      const adminItems = adminRows
+        .map((item: any) => ({
+          id: String(item?.id ?? item?.municipalityName ?? ""),
+          municipalityName: normalize(String(item?.municipalityName ?? "")),
+          emails: Array.isArray(item?.emails) ? item.emails : [],
+        }))
+        .filter((item: MunicipalityItem) => item.municipalityName)
+
+      if (adminItems.length > 0) {
+        setItems(adminItems)
+        return
+      }
+
+      const publicResponse = await fetch("/api/judicial/cadastro", { cache: "no-store" })
+      const publicJson = await publicResponse.json().catch(() => ({}))
+
+      const publicRows = publicResponse.ok && publicJson?.ok && Array.isArray(publicJson?.municipios)
+        ? publicJson.municipios
+            .map((name: unknown) => ({
+              id: normalize(String(name ?? "")),
+              municipalityName: normalize(String(name ?? "")),
+              emails: [],
+            }))
+            .filter((item: MunicipalityItem) => item.municipalityName)
+        : []
+
+      setItems(publicRows)
+    } catch (error) {
+      console.error("LOAD_MUNICIPALITY_OPTIONS_ERROR", error)
+      setItems([])
     } finally {
       setLoading(false)
     }

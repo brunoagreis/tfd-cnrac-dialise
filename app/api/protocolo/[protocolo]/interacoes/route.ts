@@ -1,10 +1,29 @@
 import { randomUUID } from "node:crypto"
 import { NextRequest, NextResponse } from "next/server"
-import { requireAdminRequest } from "@/lib/security/server-session"
+import { readServerSession } from "@/lib/security/server-session"
 import { prisma } from "@/lib/prisma"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
+
+async function requireProtocolUserRequest(req: NextRequest) {
+  const session = await readServerSession(req)
+
+  if (!session) {
+    return {
+      ok: false as const,
+      response: NextResponse.json(
+        { ok: false, error: "Acesso negado." },
+        { status: 403 },
+      ),
+    }
+  }
+
+  return {
+    ok: true as const,
+    session,
+  }
+}
 
 const PENDENCIA_FINALIZAR_DEMANDA = "finalizar_demanda"
 
@@ -70,8 +89,8 @@ export async function GET(
   context: { params: Promise<{ protocolo: string }> },
 ) {
   try {
-    const adminGuardGet = await requireAdminRequest(req)
-    if (!adminGuardGet.ok) return adminGuardGet.response
+    const protocolGuardGet = await requireProtocolUserRequest(req)
+    if (!protocolGuardGet.ok) return protocolGuardGet.response
 
     const { protocolo } = await context.params
     const decodedProtocol = decodeURIComponent(protocolo)
@@ -180,8 +199,8 @@ export async function POST(
   context: { params: Promise<{ protocolo: string }> },
 ) {
   try {
-    const adminGuardPost = await requireAdminRequest(req)
-    if (!adminGuardPost.ok) return adminGuardPost.response
+    const protocolGuardPost = await requireProtocolUserRequest(req)
+    if (!protocolGuardPost.ok) return protocolGuardPost.response
 
     const { protocolo } = await context.params
     const decodedProtocol = decodeURIComponent(protocolo)
