@@ -130,6 +130,84 @@ function downloadTextFile(filename: string, content: string, type: string) {
 }
 
 export function AgendamentoDemandasBoard() {
+  const [supportMaterialFormOpen, setSupportMaterialFormOpen] = useState(false)
+  const [supportMaterialListOpen, setSupportMaterialListOpen] = useState(false)
+  const [supportMaterialName, setSupportMaterialName] = useState("")
+  const [selectedSupportMaterialFile, setSelectedSupportMaterialFile] = useState<File | null>(null)
+  const [supportMaterials, setSupportMaterials] = useState<any[]>([])
+  const [loadingSupportMaterials, setLoadingSupportMaterials] = useState(false)
+  const [savingSupportMaterial, setSavingSupportMaterial] = useState(false)
+  const [supportMaterialMessage, setSupportMaterialMessage] = useState("")
+
+  async function loadSupportMaterials() {
+    try {
+      setLoadingSupportMaterials(true)
+      const response = await fetch("/api/agendamento/material-apoio", { cache: "no-store" })
+      const data = await response.json()
+
+      if (!response.ok || !data?.ok) {
+        throw new Error(data?.error || "Erro ao carregar materiais de apoio.")
+      }
+
+      setSupportMaterials(Array.isArray(data.materiais) ? data.materiais : [])
+    } catch (error) {
+      console.error("[AgendamentoDemandasBoard] erro ao carregar material de apoio:", error)
+      setSupportMaterialMessage(error instanceof Error ? error.message : "Não foi possível carregar os materiais de apoio.")
+    } finally {
+      setLoadingSupportMaterials(false)
+    }
+  }
+
+  useEffect(() => {
+    void loadSupportMaterials()
+  }, [])
+
+  async function handleSaveSupportMaterial() {
+    const nome = supportMaterialName.trim()
+
+    if (!nome) {
+      setSupportMaterialMessage("Informe o nome do material de apoio.")
+      return
+    }
+
+    if (!selectedSupportMaterialFile) {
+      setSupportMaterialMessage("Selecione o arquivo do material de apoio.")
+      return
+    }
+
+    try {
+      setSavingSupportMaterial(true)
+      setSupportMaterialMessage("")
+
+      const formData = new FormData()
+      formData.append("nome", nome)
+      formData.append("arquivo", selectedSupportMaterialFile)
+
+      const response = await fetch("/api/agendamento/material-apoio", {
+        method: "POST",
+        body: formData,
+      })
+
+      const data = await response.json()
+
+      if (!response.ok || !data?.ok) {
+        throw new Error(data?.error || "Erro ao salvar material de apoio.")
+      }
+
+      setSupportMaterialName("")
+      setSelectedSupportMaterialFile(null)
+      setSupportMaterialFormOpen(false)
+      setSupportMaterialListOpen(true)
+      setSupportMaterialMessage("Material de apoio cadastrado com sucesso.")
+      await loadSupportMaterials()
+    } catch (error) {
+      console.error("[AgendamentoDemandasBoard] erro ao salvar material de apoio:", error)
+      setSupportMaterialMessage(error instanceof Error ? error.message : "Não foi possível salvar o material de apoio.")
+    } finally {
+      setSavingSupportMaterial(false)
+    }
+  }
+
   const { user } = useAuth()
 
   const [items, setItems] = useState<AgendamentoQueueItem[]>([])
@@ -770,6 +848,90 @@ export function AgendamentoDemandasBoard() {
             <div className="rounded-lg border border-border bg-muted/30 p-3">
               Reservar, Agendar e Devolver gravam movimentação no caso de origem
               e atualizam o status no banco.
+            </div>
+
+            <div className="rounded-lg border border-dashed border-primary/30 bg-primary/5 p-3 text-foreground">
+              <p className="text-xs font-semibold uppercase tracking-wide text-primary">
+                MATERIAL DE APOIO
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Arquivos de orientação usados pelo setor de Agendamento da Demanda.
+              </p>
+
+              <div className="mt-3 grid gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  className="w-full"
+                  onClick={() => setSupportMaterialFormOpen((value) => !value)}
+                >
+                  Cadastrar material
+                </Button>
+
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="w-full bg-transparent"
+                  onClick={() => setSupportMaterialListOpen((value) => !value)}
+                >
+                  Visualizar materiais
+                </Button>
+              </div>
+
+              {supportMaterialFormOpen ? (
+                <div className="mt-3 space-y-2 rounded-md border border-border bg-background p-2">
+                  <input
+                    type="text"
+                    className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-xs"
+                    placeholder="Nome do material"
+                    value={supportMaterialName}
+                    onChange={(event) => setSupportMaterialName(event.target.value)}
+                  />
+
+                  <input
+                    type="file"
+                    className="flex w-full rounded-md border border-input bg-background px-2 py-2 text-xs"
+                    onChange={(event) => setSelectedSupportMaterialFile(event.target.files?.[0] || null)}
+                  />
+
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="w-full"
+                    disabled={savingSupportMaterial}
+                    onClick={handleSaveSupportMaterial}
+                  >
+                    {savingSupportMaterial ? "Salvando..." : "Salvar"}
+                  </Button>
+                </div>
+              ) : null}
+
+              {supportMaterialMessage ? (
+                <p className="mt-2 rounded-md border border-border bg-background p-2 text-xs text-muted-foreground">
+                  {supportMaterialMessage}
+                </p>
+              ) : null}
+
+              {supportMaterialListOpen ? (
+                <div className="mt-3 space-y-2">
+                  {loadingSupportMaterials ? (
+                    <p className="rounded-md border border-border bg-background p-2 text-xs text-muted-foreground">Carregando...</p>
+                  ) : supportMaterials.length === 0 ? (
+                    <p className="rounded-md border border-border bg-background p-2 text-xs text-muted-foreground">Nenhum material cadastrado.</p>
+                  ) : (
+                    supportMaterials.map((material: any) => (
+                      <div key={material.id} className="rounded-md border border-border bg-background p-2">
+                        <p className="text-xs font-medium text-foreground">{material.nome || "Material de apoio"}</p>
+                        <p className="text-xs text-muted-foreground">{material.arquivoNome || "Arquivo"}</p>
+                        <Button asChild type="button" size="sm" variant="outline" className="mt-2 w-full bg-transparent">
+                          <a href={String(material.url || "#")} target="_blank" rel="noreferrer">Visualizar arquivo</a>
+                        </Button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              ) : null}
             </div>
 
             <Button

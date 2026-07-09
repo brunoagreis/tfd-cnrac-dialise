@@ -62,6 +62,8 @@ export function ProcedureMultiEntry({
   const [loadingSigtap, setLoadingSigtap] = useState(false)
   const [loadingSpecialties, setLoadingSpecialties] = useState(false)
   const [open, setOpen] = useState(false)
+  const [specialtyOpen, setSpecialtyOpen] = useState(false)
+  const [subSpecialtyOpen, setSubSpecialtyOpen] = useState(false)
 
   useEffect(() => {
     void fetchSpecialties()
@@ -126,25 +128,31 @@ export function ProcedureMultiEntry({
     try {
       setLoadingSpecialties(true)
 
-      const response = await fetch("/api/admin/judicial/especialidades", {
+      const response = await fetch("/api/judicial/cadastro", {
         cache: "no-store",
       })
+
       const data = await response.json().catch(() => ({}))
 
       if (!response.ok || data?.ok === false) {
         throw new Error(data?.error || "Erro ao carregar especialidades.")
       }
 
-      const items = Array.isArray(data?.items) ? data.items : []
+      const items = Array.isArray(data?.especialidades)
+        ? data.especialidades
+        : Array.isArray(data?.items)
+          ? data.items
+          : []
+
       setSpecialtySubItems(
         items
           .map((item: any) => ({
             especialidadeId: clean(item?.especialidadeId),
-            especialidadeNome: upper(item?.especialidadeNome),
+            especialidadeNome: upper(item?.especialidadeNome ?? item?.nome),
             subespecialidadeId: clean(item?.subespecialidadeId),
-            subespecialidadeNome: upper(item?.subespecialidadeNome),
+            subespecialidadeNome: upper(item?.subespecialidadeNome ?? item?.subespecialidade),
           }))
-          .filter((item: SpecialtySubItem) => item.especialidadeNome && item.subespecialidadeNome),
+          .filter((item: SpecialtySubItem) => item.especialidadeNome),
       )
     } catch (error) {
       console.error("[ProcedureMultiEntry] erro ao carregar especialidades:", error)
@@ -205,18 +213,38 @@ export function ProcedureMultiEntry({
       .sort((a, b) => a.localeCompare(b, "pt-BR"))
   }, [sourceCatalog, specialty, specialtySubItems])
 
+  const filteredSpecialtyOptions = useMemo(() => {
+    const q = specialty.trim().toLocaleLowerCase("pt-BR")
+
+    if (!q) return specialtyOptions.slice(0, 50)
+
+    return specialtyOptions
+      .filter((item) => item.toLocaleLowerCase("pt-BR").includes(q))
+      .slice(0, 50)
+  }, [specialtyOptions, specialty])
+
+  const filteredSubSpecialties = useMemo(() => {
+    const q = subSpecialty.trim().toLocaleLowerCase("pt-BR")
+
+    if (!q) return subSpecialties.slice(0, 50)
+
+    return subSpecialties
+      .filter((item) => item.toLocaleLowerCase("pt-BR").includes(q))
+      .slice(0, 50)
+  }, [subSpecialties, subSpecialty])
+
   function selectItem(item: ProcedureCatalogItem) {
     setSelectedItem(item)
     setQuery(`${item.sigtapCode} - ${item.description}`)
     setOpen(false)
     setRemoteCatalog([])
 
-    if (item.specialty) setSpecialty(item.specialty)
-    if (item.subSpecialty) setSubSpecialty(item.subSpecialty)
+    setSpecialty(item.specialty || "")
+    setSubSpecialty(item.subSpecialty || "")
   }
 
   function handleAdd() {
-    if (!selectedItem || !specialty || !subSpecialty) return
+    if (!selectedItem || !specialty) return
 
     onChange([
       ...value,
@@ -224,7 +252,7 @@ export function ProcedureMultiEntry({
         sigtapCode: selectedItem.sigtapCode,
         description: selectedItem.description,
         specialty,
-        subSpecialty,
+        subSpecialty: subSpecialty || "NÃO INDICADA",
         situation,
       },
     ])
@@ -288,41 +316,78 @@ export function ProcedureMultiEntry({
             ) : null}
           </div>
 
-          <div>
+          <div className="relative">
             <Label className="mb-1 block text-xs">Especialidade</Label>
-            <select
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            <Input
               value={specialty}
               onChange={(e) => {
                 setSpecialty(e.target.value)
                 setSubSpecialty("")
+                setSpecialtyOpen(true)
               }}
+              onFocus={() => setSpecialtyOpen(true)}
+              onBlur={() => setTimeout(() => setSpecialtyOpen(false), 150)}
+              placeholder={loadingSpecialties ? "Carregando..." : "Digite para buscar a especialidade"}
               disabled={loadingSpecialties}
-            >
-              <option value="">{loadingSpecialties ? "Carregando..." : "Selecione"}</option>
-              {specialtyOptions.map((item) => (
-                <option key={item} value={item}>
-                  {item}
-                </option>
-              ))}
-            </select>
+            />
+
+            {specialtyOpen && filteredSpecialtyOptions.length > 0 ? (
+              <div className="absolute z-50 mt-1 max-h-60 w-full overflow-y-auto rounded-md border bg-popover p-1 shadow-md">
+                {filteredSpecialtyOptions.map((item) => (
+                  <button
+                    key={item}
+                    type="button"
+                    className="w-full rounded px-2 py-2 text-left text-sm hover:bg-muted"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => {
+                      setSpecialty(item)
+                      setSubSpecialty("")
+                      setSpecialtyOpen(false)
+                    }}
+                  >
+                    {item}
+                  </button>
+                ))}
+              </div>
+            ) : null}
           </div>
 
-          <div>
+          <div className="relative">
             <Label className="mb-1 block text-xs">Sub Especialidade</Label>
-            <select
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            <Input
               value={subSpecialty}
-              onChange={(e) => setSubSpecialty(e.target.value)}
+              onChange={(e) => {
+                setSubSpecialty(e.target.value)
+                setSubSpecialtyOpen(true)
+              }}
+              onFocus={() => setSubSpecialtyOpen(true)}
+              onBlur={() => setTimeout(() => setSubSpecialtyOpen(false), 150)}
+              placeholder={
+                specialty
+                  ? "Digite para buscar a subespecialidade, se houver"
+                  : "Escolha a especialidade primeiro"
+              }
               disabled={!specialty || loadingSpecialties}
-            >
-              <option value="">{specialty ? "Selecione" : "Selecione a especialidade"}</option>
-              {subSpecialties.map((item) => (
-                <option key={item} value={item}>
-                  {item}
-                </option>
-              ))}
-            </select>
+            />
+
+            {specialty && subSpecialtyOpen && filteredSubSpecialties.length > 0 ? (
+              <div className="absolute z-50 mt-1 max-h-60 w-full overflow-y-auto rounded-md border bg-popover p-1 shadow-md">
+                {filteredSubSpecialties.map((item) => (
+                  <button
+                    key={item}
+                    type="button"
+                    className="w-full rounded px-2 py-2 text-left text-sm hover:bg-muted"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => {
+                      setSubSpecialty(item)
+                      setSubSpecialtyOpen(false)
+                    }}
+                  >
+                    {item}
+                  </button>
+                ))}
+              </div>
+            ) : null}
           </div>
 
           <div>
@@ -339,7 +404,7 @@ export function ProcedureMultiEntry({
           </div>
 
           <div className="flex items-end">
-            <Button type="button" onClick={handleAdd} disabled={!selectedItem || !specialty || !subSpecialty}>
+            <Button type="button" onClick={handleAdd} disabled={!selectedItem || !specialty}>
               <Plus className="mr-2 h-4 w-4" />
               Adicionar procedimento
             </Button>

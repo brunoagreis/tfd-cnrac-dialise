@@ -195,6 +195,12 @@ export async function POST(req: NextRequest) {
     const criadoPor = normalizeText(body?.criadoPor)
     const criadoPorNome = normalizeUpper(body?.criadoPorNome)
 
+    const criadoPorEmail = normalizeText(body?.criadoPorEmail).toLowerCase()
+    const monitorarHoje =
+      body?.monitorarHoje === true ||
+      normalizeText(body?.monitorarHoje).toLowerCase() === "true" ||
+      normalizeText(body?.monitorarHoje).toLowerCase() === "sim" ||
+      normalizeText(body?.monitorarHoje) === "1"
     const procedures = Array.isArray(body?.procedures) ? (body.procedures as ProcedureEntry[]) : []
     const cids = Array.isArray(body?.cids) ? (body.cids as CidEntry[]) : []
     const primaryProcedure = procedures[0]
@@ -215,7 +221,7 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    if (!primaryProcedure?.sigtapCode || !primaryProcedure?.description || !primaryProcedure?.specialty || !primaryProcedure?.subSpecialty) {
+    if (!primaryProcedure?.sigtapCode || !primaryProcedure?.description || !primaryProcedure?.specialty) {
       return NextResponse.json(
         { ok: false, error: "Informe ao menos 1 procedimento completo." },
         { status: 400 },
@@ -252,7 +258,7 @@ export async function POST(req: NextRequest) {
       const cid10 = normalizeUpper(primaryCid.code)
       const cidDescricao = normalizeUpper(primaryCid.description)
       const especialidade = normalizeUpper(primaryProcedure.specialty)
-      const subespecialidade = normalizeUpper(primaryProcedure.subSpecialty)
+      const subespecialidade = normalizeUpper(primaryProcedure.subSpecialty) || "NÃO INDICADA"
       const pacienteNome = normalizeUpper(paciente.nome)
       const pacienteCpf = normalizeText(paciente.cpf)
       const pacienteCns = normalizeText(paciente.cartaoSus)
@@ -270,7 +276,7 @@ export async function POST(req: NextRequest) {
         procedures.length > 1
           ? `PROCEDIMENTOS ADICIONAIS: ${procedures
               .slice(1)
-              .map((item) => `${onlyDigits(item.sigtapCode)} - ${normalizeUpper(item.description)} - ${normalizeUpper(item.specialty)} - ${normalizeUpper(item.subSpecialty)}`)
+              .map((item) => `${onlyDigits(item.sigtapCode)} - ${normalizeUpper(item.description)} - ${normalizeUpper(item.specialty)} - ${normalizeUpper(item.subSpecialty) || "NÃO INDICADA"}`)
               .join(" | ")}`
           : "",
         cids.length > 1
@@ -378,6 +384,97 @@ export async function POST(req: NextRequest) {
         cidDescricao,
         demandaId,
       )
+
+      if (monitorarHoje) {
+        const monitoramentoCriadorId = criadoPor || "sistema"
+        const monitoramentoCriadorNome = criadoPorNome || "Sistema"
+
+        await tx.$executeRawUnsafe(
+          `
+            WITH base AS (
+              SELECT id
+              FROM public.judicial_monitoramento_base
+              WHERE UPPER(COALESCE(origem_modulo, '')) = 'JUDICIAL'
+                AND origem_tabela = 'demandas'
+                AND origem_registro_id = $1
+              ORDER BY id DESC
+              LIMIT 1
+            ),
+            posicao AS (
+              SELECT COALESCE(MAX(ordem_no_bloco), 0)::int + 1 AS ordem
+              FROM public.judicial_monitoramento_atribuicoes
+              WHERE data_referencia = CURRENT_DATE
+                AND usuario_id = $2
+            )
+            INSERT INTO public.judicial_monitoramento_atribuicoes (
+              data_referencia,
+              monitoramento_id,
+              usuario_id,
+              usuario_nome,
+              usuario_email,
+              bloco_numero,
+              tamanho_bloco,
+              ordem_no_bloco,
+              motivo_prioridade,
+              prioridade_nivel,
+              status,
+              atribuida_em
+            )
+            SELECT
+              CURRENT_DATE,
+              base.id,
+              $2,
+              $3,
+              NULLIF($4, ''),
+              0,
+              1,
+              posicao.ordem,
+              'CADASTRO_ACAO_JUDICIAL_MONITORAR_HOJE',
+              0,
+              'ATRIBUIDO',
+              NOW()
+            FROM base
+            CROSS JOIN posicao
+            ON CONFLICT (data_referencia, monitoramento_id) DO NOTHING
+          `,
+          demandaId,
+          monitoramentoCriadorId,
+          monitoramentoCriadorNome,
+          criadoPorEmail || "",
+        )
+
+        await tx.$executeRawUnsafe(
+          `
+            UPDATE public.judicial_monitoramento_base b
+            SET
+              status_monitoramento_atual = 'ATRIBUIDO',
+              data_proximo_monitoramento = NULL,
+              motivo_proximo_monitoramento = NULL,
+              prazo_retorno_dias = NULL,
+              updated_at = NOW()
+            WHERE UPPER(COALESCE(b.origem_modulo, '')) = 'JUDICIAL'
+              AND b.origem_tabela = 'demandas'
+              AND b.origem_registro_id = $1
+              AND EXISTS (
+                SELECT 1
+                FROM public.judicial_monitoramento_atribuicoes a
+                WHERE a.monitoramento_id = b.id
+                  AND a.data_referencia = CURRENT_DATE
+                  AND a.usuario_id = $2
+                  AND a.status <> 'CANCELADO'
+              )
+          `,
+          demandaId,
+          monitoramentoCriadorId,
+        )
+
+        // Não atualiza public.judicial_monitoramento_execucao_diaria neste ponto.
+        // Alguns ambientes não concedem permissão nessa tabela ao usuário da aplicação.
+        // O cadastro da demanda e a atribuição em public.judicial_monitoramento_atribuicoes permanecem ativos.
+
+      }
+
+
 
       await tx.$executeRawUnsafe(
         `

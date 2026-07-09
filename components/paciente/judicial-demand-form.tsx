@@ -52,6 +52,7 @@ export function JudicialDemandForm({
   const [loadingCatalogs, setLoadingCatalogs] = useState(true)
   const [saving, setSaving] = useState(false)
 
+  const [monitorarHoje, setMonitorarHoje] = useState(false)
   const [procedureCatalog, setProcedureCatalog] = useState<ProcedureCatalogItem[]>([])
   const [cidCatalog, setCidCatalog] = useState<CidCatalogItem[]>([])
   const [especialidadeSubItems, setEspecialidadeSubItems] = useState<EspecialidadeSubItem[]>([])
@@ -161,12 +162,11 @@ export function JudicialDemandForm({
       (item) =>
         !item.sigtapCode ||
         !item.description ||
-        !item.specialty ||
-        !item.subSpecialty,
+        !item.specialty,
     )
 
     if (invalidProcedure) {
-      toast.error("Todos os procedimentos devem ter SIGTAP, descrição, especialidade e subespecialidade.")
+      toast.error("Todos os procedimentos devem ter SIGTAP, descrição e especialidade.")
       return
     }
 
@@ -200,6 +200,8 @@ export function JudicialDemandForm({
           cids,
           criadoPor: user.id,
           criadoPorNome: user.nome,
+          criadoPorEmail: (user as { email?: string }).email ?? "",
+          monitorarHoje,
         }),
       })
 
@@ -333,7 +335,25 @@ export function JudicialDemandForm({
             onChange={setCids}
           />
         </CardContent>
-      </Card>
+      </Card>      <div className="rounded-lg border border-blue-200 bg-blue-50/70 p-3 text-sm text-blue-950">
+        <label className="flex items-start gap-3">
+          <input
+            type="checkbox"
+            className="mt-1 h-4 w-4 rounded border-border"
+            checked={monitorarHoje}
+            disabled={saving}
+            onChange={(event) => setMonitorarHoje(event.target.checked)}
+          />
+          <span>
+            <span className="font-semibold">Monitorar hoje</span>
+            <span className="block text-xs text-blue-900">
+              Ao marcar, o paciente entra no monitoramento de hoje do usuário que criou a demanda judicial.
+            </span>
+          </span>
+        </label>
+      </div>
+
+
 
       <div className="rounded-lg border border-border bg-muted/30 p-3 text-sm">
         Campos obrigatórios: data do recebimento, autos da ação, número do PGE.net, prazo em dias, município envolvido, ao menos 1 procedimento e ao menos 1 CID. O número do ofício/intimação só é obrigatório quando “É intimação?” for Sim. A data da reiteração não é obrigatória.

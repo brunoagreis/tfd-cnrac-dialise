@@ -182,11 +182,12 @@ export function JudicialMonitoringBoard() {
 
   const adminUser = useMemo(() => isAdminUser(user), [user])
   const monitoringUser = useMemo(() => isMonitoringUser(user), [user])
+  const assignedQueueUser = useMemo(() => Boolean(user?.id) && !adminUser, [adminUser, user?.id])
 
   useEffect(() => {
     if (!user?.id) return
     void fetchCases()
-  }, [adminUser, monitoringUser, user?.email, user?.id])
+  }, [adminUser, assignedQueueUser, monitoringUser, user?.email, user?.id])
 
   async function ensureDailyAssignments() {
     if (!monitoringUser || !user?.id) return
@@ -214,10 +215,10 @@ export function JudicialMonitoringBoard() {
       await ensureDailyAssignments()
 
       const params = new URLSearchParams({
-        somenteAtivos: adminUser || monitoringUser ? "false" : "true",
+        somenteAtivos: adminUser || assignedQueueUser ? "false" : "true",
       })
 
-      if (monitoringUser && user?.id) {
+      if (assignedQueueUser && user?.id) {
         params.set("somenteAtribuidos", "true")
         params.set("incluirMonitoradosHoje", "true")
         params.set("incluirMonitoradosAutomaticamente", "true")

@@ -1,6 +1,7 @@
 import fs from "fs/promises"
 import path from "path"
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
+import { requireAdminRequest } from "@/lib/security/server-session"
 import {
   buildProtocolFolder,
   buildStoredFileName,
@@ -20,8 +21,10 @@ function isAllowedFile(file: File) {
   return ALLOWED_EXTENSIONS.has(ext)
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
+    const adminGuard = await requireAdminRequest(req)
+    if (!adminGuard.ok) return adminGuard.response
     const form = await req.formData()
 
     const cpf = String(form.get("cpf") || "").trim()
@@ -103,8 +106,10 @@ export async function POST(req: Request) {
   }
 }
 
-export async function DELETE(req: Request) {
+export async function DELETE(req: NextRequest) {
   try {
+    const adminGuard = await requireAdminRequest(req)
+    if (!adminGuard.ok) return adminGuard.response
     const body = await req.json()
     const relativePath = String(body?.relativePath || "").trim()
 
