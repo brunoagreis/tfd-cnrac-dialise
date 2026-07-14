@@ -1,4 +1,4 @@
-﻿import { createHmac, timingSafeEqual } from "crypto"
+import { createHmac, timingSafeEqual } from "crypto"
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 
@@ -67,6 +67,20 @@ function shouldUseSecureCookie(req?: Request) {
 
   if (forced === "true") return true
   if (forced === "false") return false
+
+  const host = text(req?.headers.get("host")).toLowerCase().split(":")[0]
+
+  // Em acesso local ou por IP interno, o navegador não envia cookie Secure em HTTP.
+  // Isso fazia a tela parecer logada pelo localStorage, mas as APIs retornarem 401.
+  if (
+    host === "localhost" ||
+    host === "127.0.0.1" ||
+    host.startsWith("192.168.") ||
+    host.startsWith("10.") ||
+    /^172\.(1[6-9]|2\d|3[0-1])\./.test(host)
+  ) {
+    return false
+  }
 
   const forwardedProto = text(req?.headers.get("x-forwarded-proto")).toLowerCase()
   const appUrl =
@@ -160,6 +174,53 @@ export function readServerSession(req: Request) {
   }
 }
 
+export async function requireLoggedRequest(req: Request) {
+  const session = readServerSession(req)
+
+  if (!session) {
+    return {
+      ok: false as const,
+      response: NextResponse.json(
+        { ok: false, error: "Não autenticado." },
+        { status: 401 },
+      ),
+    }
+  }
+
+  const rows = await prisma.$queryRawUnsafe<
+    Array<{
+      id: string
+      ativo: boolean | null
+    }>
+  >(
+    `
+      SELECT
+        id::text AS id,
+        ativo
+      FROM public.usuarios
+      WHERE id::text = $1
+      LIMIT 1
+    `,
+    session.id,
+  )
+
+  const user = rows[0]
+
+  if (!user || user.ativo === false) {
+    return {
+      ok: false as const,
+      response: NextResponse.json(
+        { ok: false, error: "Sessão inválida." },
+        { status: 401 },
+      ),
+    }
+  }
+
+  return {
+    ok: true as const,
+    session,
+  }
+}
 export async function requireAdminRequest(req: Request) {
   const session = readServerSession(req)
 

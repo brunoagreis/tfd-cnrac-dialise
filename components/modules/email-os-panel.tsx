@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import { useEffect, useMemo, useState } from "react"
 import { ArrowRightLeft, FileText, RefreshCcw, X } from "lucide-react"
@@ -41,11 +41,11 @@ function canUserSeeEmailOsItem(item: OsItem, user: any) {
   const responsibleEmail = normalizeEmailOsPanelValue(item?.responsavelEmail)
   const responsibleName = normalizeEmailOsPanelValue(item?.responsavelNome)
 
-  if (responsibleId) return responsibleId === userId
-  if (responsibleEmail) return responsibleEmail === userEmail
-  if (responsibleName) return responsibleName === userName
+  const matchesId = Boolean(responsibleId && responsibleId === userId)
+  const matchesEmail = Boolean(responsibleEmail && responsibleEmail === userEmail)
+  const matchesName = Boolean(responsibleName && responsibleName === userName)
 
-  return false
+  return matchesId || matchesEmail || matchesName
 }
 
 function resolveEmailOsBodyText(item: any) {
@@ -91,14 +91,14 @@ export function EmailOsPanel({ modulo }: { modulo: string }) {
   }, [items, user, canManageEmailOs])
 
   const pendingEmailOsItems = useMemo(() => {
-    if (!canManageEmailOs) return visibleItems
     return visibleItems.filter((item) => !itemHasResponsible(item))
-  }, [visibleItems, canManageEmailOs])
+  }, [visibleItems])
 
   const assignedEmailOsItems = useMemo(() => {
-    if (!canManageEmailOs) return []
     return visibleItems.filter((item) => itemHasResponsible(item))
-  }, [visibleItems, canManageEmailOs])
+  }, [visibleItems])
+
+  const primaryEmailOsItems = canManageEmailOs ? pendingEmailOsItems : assignedEmailOsItems
 
   async function load() {
     try {
@@ -132,7 +132,7 @@ export function EmailOsPanel({ modulo }: { modulo: string }) {
     params.set("emailOsId", String(os.id))
     params.set("osId", String(os.id))
 
-    const moduloDestino = String(os.moduloDestino || modulo || "").trim()
+    const moduloDestino = String(canManageEmailOs ? (os.moduloDestino || modulo || "") : (modulo || os.moduloDestino || "")).trim()
     if (moduloDestino) {
       params.set("modulo", moduloDestino)
       params.set("moduloOrigemOs", moduloDestino)
@@ -284,7 +284,7 @@ export function EmailOsPanel({ modulo }: { modulo: string }) {
     )
   }
 
-  const hasAnyVisibleEmailOs = pendingEmailOsItems.length > 0 || assignedEmailOsItems.length > 0
+  const hasAnyVisibleEmailOs = primaryEmailOsItems.length > 0 || (canManageEmailOs && assignedEmailOsItems.length > 0)
 
   if (!hasAnyVisibleEmailOs && !loading) return null
 
@@ -294,14 +294,14 @@ export function EmailOsPanel({ modulo }: { modulo: string }) {
         <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-3 p-4">
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-base font-semibold">OS não atribuídas</span>
-              <Badge variant="outline">{pendingEmailOsItems.length}</Badge>
+              <span className="text-base font-semibold">{canManageEmailOs ? "OS não atribuídas" : "Minhas OS atribuídas"}</span>
+              <Badge variant="outline">{primaryEmailOsItems.length}</Badge>
             </div>
 
             <p className="mt-1 text-sm text-muted-foreground">
               {canManageEmailOs
                 ? "OS sem responsável definido. Clique para abrir, analisar e atribuir."
-                : "OS direcionadas ao seu usuário. Clique para visualizar."}
+                : "OS atribuídas ao seu usuário. Clique para cadastrar e acompanhar."}
             </p>
           </div>
 
@@ -328,10 +328,10 @@ export function EmailOsPanel({ modulo }: { modulo: string }) {
         <div className="max-h-[520px] space-y-3 overflow-auto border-t border-border p-4">
           {loading ? (
             <p className="text-sm text-muted-foreground">Carregando ordens de serviço...</p>
-          ) : pendingEmailOsItems.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Nenhuma OS sem responsável definido.</p>
+          ) : primaryEmailOsItems.length === 0 ? (
+            <p className="text-sm text-muted-foreground">{canManageEmailOs ? "Nenhuma OS sem responsável definido." : "Nenhuma OS atribuída ao seu usuário."}</p>
           ) : (
-            pendingEmailOsItems.map(renderEmailOsItem)
+            primaryEmailOsItems.map(renderEmailOsItem)
           )}
         </div>
       </details>
@@ -368,7 +368,7 @@ export function EmailOsPanel({ modulo }: { modulo: string }) {
       {registeringOs ? (
         <EmailOsRegisterModal
           os={registeringOs}
-          initialModule={registeringOs.moduloDestino || modulo}
+          initialModule={canManageEmailOs ? (registeringOs.moduloDestino || modulo) : modulo}
           onClose={() => setRegisteringOs(null)}
           onSaved={async () => {
             setRegisteringOs(null)

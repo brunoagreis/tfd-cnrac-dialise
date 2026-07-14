@@ -105,6 +105,41 @@ async function resolveModuleEnumValue(tx: typeof prisma, moduleName: string) {
   return value
 }
 
+
+async function ensureJudicialProcessosVinculadosTable(tx: any) {
+  await tx.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS public.judicial_processos_vinculados (
+      id TEXT PRIMARY KEY,
+      monitoramento_id BIGINT NOT NULL,
+      demanda_id TEXT,
+      tipo TEXT NOT NULL,
+      numero TEXT NOT NULL,
+      ativo BOOLEAN NOT NULL DEFAULT TRUE,
+      created_by TEXT,
+      created_by_name TEXT,
+      created_by_email TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `)
+
+  await tx.$executeRawUnsafe(`
+    CREATE UNIQUE INDEX IF NOT EXISTS judicial_processos_vinculados_uniq_ativo
+    ON public.judicial_processos_vinculados (monitoramento_id, tipo, numero)
+    WHERE ativo = TRUE
+  `)
+
+  await tx.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS ix_judicial_processos_vinculados_monitoramento
+    ON public.judicial_processos_vinculados (monitoramento_id)
+  `)
+
+  await tx.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS ix_judicial_processos_vinculados_tipo
+    ON public.judicial_processos_vinculados (tipo)
+  `)
+}
+
 export async function GET() {
   try {
     const [municipios, sigtap, cid10, especialidades] = await Promise.all([
@@ -180,7 +215,15 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json().catch(() => null)
+    const body = await req.json()
+    // JUDICIAL_CADASTRO_OS_ID_FROM_EMAIL
+    const requestUrl = new URL(req.url)
+    const osId = normalizeText(
+      (body as any)?.osId ||
+      (body as any)?.emailOsId ||
+      requestUrl.searchParams.get("osId") ||
+      requestUrl.searchParams.get("emailOsId")
+    )
 
     const pacienteId = normalizeText(body?.patientId)
     const isIntimation = normalizeText(body?.isIntimation).toLowerCase() === "nao" ? "nao" : "sim"
@@ -258,7 +301,7 @@ export async function POST(req: NextRequest) {
       const cid10 = normalizeUpper(primaryCid.code)
       const cidDescricao = normalizeUpper(primaryCid.description)
       const especialidade = normalizeUpper(primaryProcedure.specialty)
-      const subespecialidade = normalizeUpper(primaryProcedure.subSpecialty) || "NÃO INDICADA"
+      const subespecialidade = normalizeUpper(primaryProcedure.subSpecialty) || "NÃƒO INDICADA"
       const pacienteNome = normalizeUpper(paciente.nome)
       const pacienteCpf = normalizeText(paciente.cpf)
       const pacienteCns = normalizeText(paciente.cartaoSus)
@@ -276,7 +319,7 @@ export async function POST(req: NextRequest) {
         procedures.length > 1
           ? `PROCEDIMENTOS ADICIONAIS: ${procedures
               .slice(1)
-              .map((item) => `${onlyDigits(item.sigtapCode)} - ${normalizeUpper(item.description)} - ${normalizeUpper(item.specialty)} - ${normalizeUpper(item.subSpecialty) || "NÃO INDICADA"}`)
+              .map((item) => `${onlyDigits(item.sigtapCode)} - ${normalizeUpper(item.description)} - ${normalizeUpper(item.specialty)} - ${normalizeUpper(item.subSpecialty) || "NÃƒO INDICADA"}`)
               .join(" | ")}`
           : "",
         cids.length > 1
@@ -385,6 +428,156 @@ export async function POST(req: NextRequest) {
         demandaId,
       )
 
+
+      await ensureJudicialProcessosVinculadosTable(tx)
+
+      await tx.$executeRawUnsafe(
+        `
+          WITH base AS (
+            SELECT id
+            FROM public.judicial_monitoramento_base
+            WHERE UPPER(COALESCE(origem_modulo, '')) = 'JUDICIAL'
+              AND origem_tabela = 'demandas'
+              AND origem_registro_id = $1
+            ORDER BY id DESC
+            LIMIT 1
+          )
+          INSERT INTO public.judicial_processos_vinculados (
+            id,
+            monitoramento_id,
+            demanda_id,
+            tipo,
+            numero,
+            ativo,
+            created_by,
+            created_by_name,
+            created_by_email,
+            created_at,
+            updated_at
+          )
+          SELECT
+            $2::text,
+            base.id,
+            $1::text,
+            'PGE_NET',
+            $3::text,
+            TRUE,
+            $4::text,
+            $5::text,
+            NULLIF($6::text, ''),
+            NOW(),
+            NOW()
+          FROM base
+          WHERE NULLIF(TRIM($3::text), '') IS NOT NULL
+          ON CONFLICT (monitoramento_id, tipo, numero)
+          WHERE ativo = TRUE
+          DO UPDATE SET
+            updated_at = NOW(),
+            created_by = EXCLUDED.created_by,
+            created_by_name = EXCLUDED.created_by_name,
+            created_by_email = EXCLUDED.created_by_email
+        `,
+        demandaId,
+        buildId("jproc_"),
+        pgeNetNumber,
+        criadoPor || "sistema",
+        criadoPorNome || "Sistema",
+        criadoPorEmail || "",
+      )
+
+      await tx.$executeRawUnsafe(
+        `
+          WITH base AS (
+            SELECT id
+            FROM public.judicial_monitoramento_base
+            WHERE UPPER(COALESCE(origem_modulo, '')) = 'JUDICIAL'
+              AND origem_tabela = 'demandas'
+              AND origem_registro_id = $1
+            ORDER BY id DESC
+            LIMIT 1
+          )
+          INSERT INTO public.judicial_processos_vinculados (
+            id,
+            monitoramento_id,
+            demanda_id,
+            tipo,
+            numero,
+            ativo,
+            created_by,
+            created_by_name,
+            created_by_email,
+            created_at,
+            updated_at
+          )
+          SELECT
+            $2::text,
+            base.id,
+            $1::text,
+            'PROCESSO',
+            $3::text,
+            TRUE,
+            $4::text,
+            $5::text,
+            NULLIF($6::text, ''),
+            NOW(),
+            NOW()
+          FROM base
+          WHERE NULLIF(TRIM($3::text), '') IS NOT NULL
+          ON CONFLICT (monitoramento_id, tipo, numero)
+          WHERE ativo = TRUE
+          DO UPDATE SET
+            updated_at = NOW(),
+            created_by = EXCLUDED.created_by,
+            created_by_name = EXCLUDED.created_by_name,
+            created_by_email = EXCLUDED.created_by_email
+        `,
+        demandaId,
+        buildId("jproc_"),
+        actionRecords,
+        criadoPor || "sistema",
+        criadoPorNome || "Sistema",
+        criadoPorEmail || "",
+      )
+
+      await tx.$executeRawUnsafe(
+        `
+          INSERT INTO public.sistema_auditoria (
+            tabela_nome,
+            acao,
+            registro_id,
+            usuario_id,
+            usuario_nome,
+            usuario_email,
+            modulo_codigo,
+            data_hora,
+            dados_anteriores,
+            dados_novos,
+            campos_alterados,
+            observacao
+          )
+          VALUES (
+            'judicial_processos_vinculados',
+            'CADASTRO_JUDICIAL_INICIAL_PGE_NET_PROCESSO',
+            $1::text,
+            $2::text,
+            $3::text,
+            NULLIF($4::text, ''),
+            'JUDICIAL',
+            NOW(),
+            jsonb_build_object(),
+            jsonb_build_object('pge_net', $5::text, 'processo', $6::text),
+            jsonb_build_array('PGE_NET', 'PROCESSO'),
+            'PGE.net e Autos da aÃ§Ã£o registrados automaticamente no cadastro judicial inicial.'
+          )
+        `,
+        demandaId,
+        criadoPor || "sistema",
+        criadoPorNome || "Sistema",
+        criadoPorEmail || "",
+        pgeNetNumber,
+        actionRecords,
+      )
+
       if (monitorarHoje) {
         const monitoramentoCriadorId = criadoPor || "sistema"
         const monitoramentoCriadorNome = criadoPorNome || "Sistema"
@@ -423,9 +616,9 @@ export async function POST(req: NextRequest) {
             SELECT
               CURRENT_DATE,
               base.id,
-              $2,
-              $3,
-              NULLIF($4, ''),
+              $2::text,
+              $3::text,
+              NULLIF($4::text, ''),
               0,
               1,
               posicao.ordem,
@@ -468,9 +661,9 @@ export async function POST(req: NextRequest) {
           monitoramentoCriadorId,
         )
 
-        // Não atualiza public.judicial_monitoramento_execucao_diaria neste ponto.
-        // Alguns ambientes não concedem permissão nessa tabela ao usuário da aplicação.
-        // O cadastro da demanda e a atribuição em public.judicial_monitoramento_atribuicoes permanecem ativos.
+        // NÃ£o atualiza public.judicial_monitoramento_execucao_diaria neste ponto.
+        // Alguns ambientes nÃ£o concedem permissÃ£o nessa tabela ao usuÃ¡rio da aplicaÃ§Ã£o.
+        // O cadastro da demanda e a atribuiÃ§Ã£o em public.judicial_monitoramento_atribuicoes permanecem ativos.
 
       }
 
@@ -497,6 +690,212 @@ export async function POST(req: NextRequest) {
         criadoPor || null,
         criadoPorNome || null,
       )
+
+      // JUDICIAL_CADASTRO_CONVERTER_OS_EMAIL
+      if (osId) {
+        // JUDICIAL_CADASTRO_EMAIL_OS_FULL_HISTORY
+        const emailOsRows = await tx.$queryRawUnsafe<Array<{
+          protocolo: string | null
+          assunto: string | null
+          remetente: string | null
+          corpoResumo: string | null
+          anexos: unknown
+        }>>(
+          `
+            SELECT
+              protocolo,
+              assunto,
+              remetente,
+              corpo_resumo AS "corpoResumo",
+              anexos
+            FROM public.judicial_email_os
+            WHERE id::text = $1
+            LIMIT 1
+          `,
+          osId,
+        )
+
+        const emailOs = emailOsRows[0]
+
+        const emailOsAttachments: Array<Record<string, unknown>> = (() => {
+          const raw = emailOs?.anexos
+
+          if (Array.isArray(raw)) {
+            return raw.filter((item) => item && typeof item === "object") as Array<Record<string, unknown>>
+          }
+
+          if (typeof raw === "string") {
+            try {
+              const parsed = JSON.parse(raw)
+              return Array.isArray(parsed)
+                ? parsed.filter((item) => item && typeof item === "object") as Array<Record<string, unknown>>
+                : []
+            } catch {
+              return []
+            }
+          }
+
+          return []
+        })()
+
+        const emailOsAttachmentNames = emailOsAttachments
+          .map((item) =>
+            normalizeText(
+              (item as any).name ||
+              (item as any).filename ||
+              (item as any).storedName ||
+              (item as any).arquivoNomeOriginal ||
+              "anexo",
+            ),
+          )
+          .filter(Boolean)
+
+        if (emailOs) {
+          const emailOsInteracaoId = buildId("int_")
+          const emailOsHistoricoTexto = [
+            "OS DE E-MAIL VINCULADA AO CADASTRO JUDICIAL",
+            `OS ID: ${osId}`,
+            `OS origem: ${emailOs.protocolo || "NÃ£o informado"}`,
+            `Assunto: ${emailOs.assunto || "NÃ£o informado"}`,
+            `Remetente: ${emailOs.remetente || "NÃ£o informado"}`,
+            "",
+            "Corpo do e-mail:",
+            emailOs.corpoResumo || "NÃ£o informado",
+            "",
+            emailOsAttachmentNames.length
+              ? `Anexos da OS: ${emailOsAttachmentNames.join(" | ")}`
+              : "Anexos da OS: nenhum",
+          ].join("\n")
+
+          await tx.$executeRawUnsafe(
+            `
+              INSERT INTO public.interacoes (
+                id,
+                "demandaId",
+                texto,
+                pendencia,
+                "createdAt",
+                "createdBy",
+                "createdByName",
+                "createdByCpf",
+                "assinaturaUrl"
+              )
+              VALUES ($1, $2, $3, NULL, NOW(), $4, $5, NULL, NULL)
+            `,
+            emailOsInteracaoId,
+            demandaId,
+            emailOsHistoricoTexto,
+            criadoPor || "sistema-email",
+            criadoPorNome || "IntegraÃ§Ã£o de e-mail",
+          )
+
+          for (const attachment of emailOsAttachments) {
+            const attachmentName = normalizeText(
+              (attachment as any).name ||
+              (attachment as any).filename ||
+              (attachment as any).storedName ||
+              (attachment as any).arquivoNomeOriginal ||
+              "anexo",
+            )
+
+            if (!attachmentName) continue
+
+            const attachmentMime = normalizeText(
+              (attachment as any).mimeType ||
+              (attachment as any).contentType ||
+              "application/octet-stream",
+            )
+
+            const attachmentSize = Number((attachment as any).size || (attachment as any).tamanho || 0) || 0
+            const attachmentUrl = normalizeText((attachment as any).url || (attachment as any).arquivoUrl || "")
+
+            await tx.$executeRawUnsafe(
+              `
+                INSERT INTO public.anexos (
+                  id,
+                  "demandaId",
+                  "interacaoId",
+                  nome,
+                  tipo,
+                  tamanho,
+                  categoria,
+                  descricao,
+                  "criadoPor",
+                  "criadoPorNome",
+                  "createdAt",
+                  "arquivoNomeOriginal",
+                  "arquivoPath",
+                  "mimeType"
+                )
+                VALUES (
+                  $1,
+                  $2,
+                  $3,
+                  $4,
+                  $5,
+                  $6,
+                  'outros'::"CategoriaAnexo",
+                  $7,
+                  $8,
+                  $9,
+                  NOW(),
+                  $10,
+                  NULL,
+                  $5
+                )
+              `,
+              buildId("anx_"),
+              demandaId,
+              emailOsInteracaoId,
+              attachmentName,
+              attachmentMime,
+              attachmentSize,
+              attachmentUrl ? `Anexo recebido pela OS de e-mail. Origem: ${attachmentUrl}` : "Anexo recebido pela OS de e-mail.",
+              criadoPor || "sistema-email",
+              criadoPorNome || "IntegraÃ§Ã£o de e-mail",
+              attachmentName,
+            )
+          }
+        }
+
+        await tx.$executeRawUnsafe(
+          `
+            UPDATE public.judicial_email_os
+            SET
+              status = 'CONVERTIDA',
+              modulo_destino = 'judicial',
+              convertido_demanda_id = $2,
+              convertido_protocolo = $3::text,
+              convertido_em = COALESCE(convertido_em, NOW()),
+              corpo_resumo = CASE
+                WHEN COALESCE(corpo_resumo, '') ILIKE '%DEMANDA CADASTRADA NO SIGAJUS%' THEN corpo_resumo
+                ELSE CONCAT(COALESCE(corpo_resumo, ''), E'\\n\\nDEMANDA CADASTRADA NO SIGAJUS: ', $3::text)
+              END,
+              updated_at = NOW()
+            WHERE id::text = $1
+          `,
+          osId,
+          demandaId,
+          protocolo,
+        )
+
+        await tx.$executeRawUnsafe(
+          `
+            UPDATE public.judicial_email_processados
+            SET
+              demanda_id = $2,
+              status = 'DEMANDA_CADASTRADA',
+              updated_at = NOW(),
+              lido_em = COALESCE(lido_em, NOW())
+            WHERE os_id::text = $1
+          `,
+          osId,
+          demandaId,
+        )
+
+      }
+
+
 
       return {
         id: demandaId,
