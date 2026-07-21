@@ -12,7 +12,7 @@ import {
 
 export const runtime = "nodejs"
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024
+const MAX_FILE_SIZE = 50 * 1024 * 1024
 const ALLOWED_EXTENSIONS = new Set([".pdf", ".png", ".jpg", ".jpeg", ".webp", ".csv", ".txt", ".zip", ".doc", ".docx", ".xls", ".xlsx"])
 
 function isAllowedFile(file: File) {
@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
     for (const file of files) {
       if (file.size > MAX_FILE_SIZE) {
         return NextResponse.json(
-          { ok: false, error: `O arquivo ${file.name} excede o limite de 10 MB.` },
+          { ok: false, error: `O arquivo ${file.name} excede o limite de 50 MB.` },
           { status: 400 },
         )
       }

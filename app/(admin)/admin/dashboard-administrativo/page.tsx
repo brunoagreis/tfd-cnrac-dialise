@@ -128,6 +128,14 @@ function formatTooltipMinutes(value: unknown) {
   return formatMinutes(Number(value))
 }
 
+
+function firstNameLabel(value: unknown) {
+  const text = String(value ?? "").trim()
+  if (!text) return "Não informado"
+
+  return text.split(/\s+/)[0] || "Não informado"
+}
+
 export default function DashboardAdministrativoPage() {
   const router = useRouter()
   const { user, isReady } = useAuth()
@@ -167,9 +175,22 @@ export default function DashboardAdministrativoPage() {
   }
 
   useEffect(() => {
-    if (isReady && canAccess) void loadDashboard()
+    if (!isReady || !canAccess) return
+
+    // Carrega imediatamente ao abrir a pagina ou alterar os filtros.
+    void loadDashboard()
+
+    // Atualiza automaticamente os dados a cada 1 minuto.
+    const intervalId = window.setInterval(() => {
+      void loadDashboard()
+    }, 60_000)
+
+    return () => {
+      window.clearInterval(intervalId)
+    }
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isReady, canAccess])
+  }, [isReady, canAccess, inicio, fim, usuarioId])
 
   function openDetails(id: string) {
     if (!id) return
@@ -192,6 +213,19 @@ export default function DashboardAdministrativoPage() {
   const ociosidadePie = data?.graficos?.ociosidadePorUsuario ?? []
   const totalPorDia = data?.graficos?.totalMonitoramentosPorDia ?? []
   const ultimos5 = data?.graficos?.monitoramentosPorUsuarioUltimos5Dias
+  const agendamentoStatusChart = data?.graficos?.agendamentoStatus ?? []
+  const fluxoAgendamentoChart = data?.graficos?.fluxoAgendamento ?? []
+  const osCadastrosChart = data?.graficos?.osCadastrosPorUsuario ?? []
+  const cadastrosMonitoramentosChart = data?.graficos?.cadastrosMonitoramentosPorUsuario ?? []
+  const tipoMonitoramentoChart = data?.graficos?.tipoMonitoramento ?? []
+  const atribuidosMonitoradosChart = (
+    (data?.graficos as any)
+      ?.atribuidosMonitoradosPeriodo ?? []
+  ) as Array<{
+    label: string
+    atribuidos: number
+    monitorados: number
+  }>
 
   if (!isReady) return null
 
@@ -302,6 +336,36 @@ export default function DashboardAdministrativoPage() {
             <CardTitle>{formatMinutes(resumo.maiorIntervaloOcioso)}</CardTitle>
           </CardHeader>
         </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>OS atribuídas</CardDescription>
+            <CardTitle>{resumo.osAtribuidas ?? 0}</CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>OS não atribuídas</CardDescription>
+            <CardTitle>{resumo.osNaoAtribuidas ?? 0}</CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>Para avaliar</CardDescription>
+            <CardTitle>{resumo.paraAvaliar ?? 0}</CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>Para agendar</CardDescription>
+            <CardTitle>{resumo.paraAgendar ?? 0}</CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>Cadastros hoje</CardDescription>
+            <CardTitle>{resumo.cadastrosHoje ?? 0}</CardTitle>
+          </CardHeader>
+        </Card>
       </div>
 
       <div className="grid gap-4 xl:grid-cols-2">
@@ -352,7 +416,8 @@ export default function DashboardAdministrativoPage() {
         type="category"
         width={140}
         interval={0}
-      />
+                      tickFormatter={(value) => firstNameLabel(value)}
+                    />
       <Tooltip />
       <ReferenceLine
         x={metaChart?.meta ?? 0}
@@ -412,31 +477,221 @@ export default function DashboardAdministrativoPage() {
         </Card>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Total de monitoramento</CardTitle>
-          <CardDescription>
-            Quantidade por dia no período. Se houver mais de 30 dias, mostra os últimos 30 dias disponíveis.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {totalPorDia.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Nenhum monitoramento encontrado no período.</p>
-          ) : (
-            <div className="h-[340px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={totalPorDia} margin={{ top: 20, right: 20, left: 0, bottom: 20 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="label" />
-                  <YAxis allowDecimals={false} />
-                  <Tooltip />
-                  <Bar dataKey="quantidade" name="Monitoramentos" fill="#16a34a" radius={[6, 6, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+
+      <div className="grid gap-4 xl:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Para avaliar x Para agendar</CardTitle>
+            <CardDescription>
+              Quantidade de demandas atualmente na fila de agendamento.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {agendamentoStatusChart.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Nenhuma demanda encontrada no período.</p>
+            ) : (
+              <div className="h-[320px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={agendamentoStatusChart}
+                      dataKey="total"
+                      nameKey="label"
+                      cx="50%"
+                      cy="50%"
+                      outerRadius={110}
+                      label={(entry) => String(entry.label) + ": " + String(entry.total)}
+                    >
+                      {agendamentoStatusChart.map((item, index) => (
+                        <Cell key={item.status} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Enviado x Devolvido x Agendado</CardTitle>
+            <CardDescription>
+              Movimentações relacionadas ao agendamento no período.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {fluxoAgendamentoChart.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Nenhuma movimentação encontrada no período.</p>
+            ) : (
+              <div className="h-[320px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={fluxoAgendamentoChart} margin={{ top: 20, right: 20, left: 0, bottom: 20 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="categoria" />
+                    <YAxis allowDecimals={false} />
+                    <Tooltip />
+                    <Bar dataKey="total" name="Quantidade" fill="#2563eb" radius={[6, 6, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>OS atribuídas x Cadastros por usuário</CardTitle>
+            <CardDescription>
+              Comparativo entre OS atribuídas e cadastros realizados.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {osCadastrosChart.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Nenhum dado encontrado no período.</p>
+            ) : (
+              <div className="h-[380px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={osCadastrosChart} margin={{ top: 20, right: 20, left: 0, bottom: 20 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="usuarioNome" />
+                    <YAxis allowDecimals={false} />
+                    <Tooltip />
+                    <Legend />
+                    <Bar dataKey="osAtribuidas" name="OS atribuídas" fill="#2563eb" radius={[6, 6, 0, 0]} />
+                    <Bar dataKey="cadastros" name="Cadastros" fill="#16a34a" radius={[6, 6, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Cadastros x Monitoramentos por usuário</CardTitle>
+            <CardDescription>
+              Comparativo entre cadastros realizados e monitoramentos finalizados.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {cadastrosMonitoramentosChart.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Nenhum dado encontrado no período.</p>
+            ) : (
+              <div className="h-[380px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={cadastrosMonitoramentosChart} margin={{ top: 20, right: 20, left: 0, bottom: 20 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="usuarioNome" />
+                    <YAxis allowDecimals={false} />
+                    <Tooltip />
+                    <Legend />
+                    <Bar dataKey="cadastros" name="Cadastros" fill="#16a34a" radius={[6, 6, 0, 0]} />
+                    <Bar dataKey="monitoramentos" name="Monitoramentos" fill="#f97316" radius={[6, 6, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* DASHBOARD_LADO_A_LADO_ATRIBUIDOS_MONITORAMENTOS */}
+      <div className="grid gap-6 xl:grid-cols-2">
+        {/* DASHBOARD_GRAFICO_ATRIBUIDOS_X_MONITORADOS */}
+        <Card>
+          <CardHeader>
+            <CardTitle>
+              Atribuídos x Monitorado no período
+            </CardTitle>
+            <CardDescription>
+              Protocolos judiciais distintos atribuídos automática ou manualmente e quantos foram monitorados no período selecionado. Ordens de Serviço não entram neste cálculo.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {atribuidosMonitoradosChart.length === 0 ||
+            !atribuidosMonitoradosChart.some(
+              (item) =>
+                item.atribuidos > 0 ||
+                item.monitorados > 0,
+            ) ? (
+              <p className="text-sm text-muted-foreground">
+                Nenhum protocolo atribuído encontrado no período.
+              </p>
+            ) : (
+              <div className="h-[320px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={atribuidosMonitoradosChart}
+                    margin={{
+                      top: 20,
+                      right: 20,
+                      left: 0,
+                      bottom: 20,
+                    }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="label" />
+                    <YAxis allowDecimals={false} />
+                    <Tooltip />
+                    <Legend />
+                    <Bar
+                      dataKey="atribuidos"
+                      name="Protocolos atribuídos"
+                      fill="#2563eb"
+                      radius={[6, 6, 0, 0]}
+                    />
+                    <Bar
+                      dataKey="monitorados"
+                      name="Protocolos monitorados"
+                      fill="#16a34a"
+                      radius={[6, 6, 0, 0]}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Monitoramento humano x automático x monitorados no período</CardTitle>
+            <CardDescription>
+              Comparativo das execuções humanas, automáticas e do total somado no período selecionado.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {tipoMonitoramentoChart.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Nenhum monitoramento encontrado.</p>
+            ) : (
+              <div className="h-[320px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={tipoMonitoramentoChart} margin={{ top: 20, right: 20, left: 0, bottom: 20 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="label" />
+                    <YAxis allowDecimals={false} />
+                    <Tooltip />
+                    {/* DASHBOARD_CORES_TIPO_MONITORAMENTO */}
+                    <Bar dataKey="total" name="Quantidade" radius={[6, 6, 0, 0]}>
+                      {tipoMonitoramentoChart.map((item, index) => (
+                        <Cell
+                          key={`${item.label}-${index}`}
+                          fill={["#2563eb", "#f97316", "#16a34a"][index % 3]}
+                        />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
 
       <Card>
         <CardHeader>

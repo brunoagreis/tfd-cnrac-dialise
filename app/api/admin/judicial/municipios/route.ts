@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { requireAdminRequest } from "@/lib/security/server-session"
+import { readServerSession, requireAdminRequest } from "@/lib/security/server-session"
 import { syncMunicipalityPortalAccess } from "@/lib/municipality-portal-access"
 
 export const runtime = "nodejs"
@@ -58,8 +58,13 @@ function mapRow(row: MunicipioRow) {
 
 export async function GET(req: Request) {
 
-  const adminGuard = await requireAdminRequest(req)
-  if (!adminGuard.ok) return adminGuard.response
+  const session = readServerSession(req)
+  if (!session) {
+    return NextResponse.json(
+      { ok: false, error: "Sessão expirada. Faça login novamente." },
+      { status: 401 },
+    )
+  }
 
   try {
     const rows = await prisma.$queryRawUnsafe<MunicipioRow[]>(`

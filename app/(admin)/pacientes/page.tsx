@@ -10,6 +10,7 @@ import {
   Plus,
   Search,
   UserRound,
+  Upload,
 } from "lucide-react"
 
 import { ModuleChooser, type DemandModuleChoice } from "@/components/paciente/module-chooser"
@@ -44,6 +45,10 @@ type PatientHistoryItem = {
   moduleLabel: string
   createdAt?: string
   status?: string
+  module?: string
+  active?: boolean
+  source?: string
+  canReopen?: boolean
 }
 
 type NewPatientFormState = {
@@ -148,6 +153,27 @@ function formatPhone(value: string) {
   return digits
     .replace(/^(\d{2})(\d)/, "($1) $2")
     .replace(/(\d{5})(\d)/, "$1-$2")
+}
+
+function getEmailOsContextFromUrl() {
+  if (typeof window === "undefined") {
+    return { isEmailOs: false, osId: "", modulo: "", protocolo: "" }
+  }
+
+  const params = new URLSearchParams(window.location.search)
+
+  const origem = String(params.get("origem") || "").toLowerCase()
+  const origemOs = String(params.get("origemOs") || "")
+  const osId = String(params.get("osId") || params.get("emailOsId") || "").trim()
+  const modulo = String(params.get("modulo") || params.get("moduloOrigemOs") || "").trim()
+  const protocolo = String(params.get("osProtocolo") || params.get("osProtocoloEmail") || "").trim()
+
+  return {
+    isEmailOs: origem === "email-os" || origemOs === "1" || Boolean(osId),
+    osId,
+    modulo,
+    protocolo,
+  }
 }
 
 function formatCep(value: string) {
@@ -256,6 +282,7 @@ export default function PacientesPage() {
   const [historyPatient, setHistoryPatient] = useState<Paciente | null>(null)
   const [historyItems, setHistoryItems] = useState<PatientHistoryItem[]>([])
   const [loadingHistory, setLoadingHistory] = useState(false)
+  const [reopeningPreJudicialId, setReopeningPreJudicialId] = useState<string | null>(null)
 
   const [demandPatient, setDemandPatient] = useState<Paciente | null>(null)
   const [selectedModule, setSelectedModule] = useState<DemandModuleChoice | null>(null)
@@ -263,6 +290,7 @@ export default function PacientesPage() {
   const [createPatientOpen, setCreatePatientOpen] = useState(false)
   const [createPatientForm, setCreatePatientForm] = useState<NewPatientFormState>(initialNewPatientForm())
   const [savingPatient, setSavingPatient] = useState(false)
+  const [extractingPatientDocument, setExtractingPatientDocument] = useState(false)
 
   const [loadingCep, setLoadingCep] = useState(false)
   const [editPatientOpen, setEditPatientOpen] = useState(false)
@@ -368,6 +396,53 @@ export default function PacientesPage() {
     }
   }
 
+  async function handleReopenPreJudicialDemand(item: PatientHistoryItem) {
+    if (!item?.id || item.module !== "pre_judicial" || !item.canReopen) return
+
+    const confirmed = window.confirm(
+      `Deseja reabrir a demanda Pré Judicial ${item.label}?\n\nApós reabrir, ela voltará como ativa e poderá ser encaminhada novamente ao Agendamento da Demanda.`,
+    )
+
+    if (!confirmed) return
+
+    try {
+      setReopeningPreJudicialId(item.id)
+
+      const response = await fetch(
+        `/api/pre-judicial/casos/${encodeURIComponent(item.id)}/movimentacoes`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          cache: "no-store",
+          body: JSON.stringify({
+            type: "reabertura",
+            description: "Demanda reaberta pelo Cadastro do Paciente.",
+          }),
+        },
+      )
+
+      const json = await response.json().catch(() => ({}))
+
+      if (!response.ok || !json?.ok) {
+        toast.error(json?.error || "Erro ao reabrir demanda Pré Judicial.")
+        return
+      }
+
+      toast.success("Demanda Pré Judicial reaberta.")
+
+      if (historyPatient?.id) {
+        await fetchHistory(String((historyPatient as any).id))
+      }
+
+      await fetchPatients(search)
+    } catch (error) {
+      console.error("REOPEN_PRE_JUDICIAL_DEMAND_ERROR", error)
+      toast.error("Erro ao reabrir demanda Pré Judicial.")
+    } finally {
+      setReopeningPreJudicialId(null)
+    }
+  }
+
   async function fetchHistory(patientId: string) {
     try {
       setLoadingHistory(true)
@@ -417,6 +492,59 @@ export default function PacientesPage() {
 
   function patientDemandCount(patient: ApiPatientItem) {
     return typeof patient.totalDemandas === "number" ? patient.totalDemandas : 0
+  }
+
+  async function markCurrentEmailOsAsRegistered(protocolo?: string) {
+    const context = getEmailOsContextFromUrl()
+
+    if (!context.isEmailOs || !context.osId) return
+
+    try {
+      const response = await fetch("/api/email-os", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+        body: JSON.stringify({
+          action: "marcar_cadastrada",
+          id: context.osId,
+          osId: context.osId,
+          emailOsId: context.osId,
+          modulo: context.modulo || "",
+          protocolo: protocolo || context.protocolo || "",
+        }),
+      })
+
+      const json = await response.json().catch(() => ({}))
+
+      if (!response.ok || !json?.ok) {
+        console.warn("EMAIL_OS_MARK_REGISTERED_FAILED", json?.error || response.status)
+        return
+      }
+
+      toast.success("OS marcada como cadastrada e removida da lista.")
+    } catch (error) {
+      console.warn("EMAIL_OS_MARK_REGISTERED_ERROR", error)
+    }
+  }
+
+  async function handleDemandSavedFromEmailOs(protocolo?: string) {
+    await markCurrentEmailOsAsRegistered(protocolo)
+    closeDemandDialog()
+
+    if (typeof window !== "undefined") {
+      const context = getEmailOsContextFromUrl()
+      if (context.isEmailOs) {
+        const url = new URL(window.location.href)
+        url.searchParams.delete("origem")
+        url.searchParams.delete("origemOs")
+        url.searchParams.delete("emailOsId")
+        url.searchParams.delete("osId")
+        url.searchParams.delete("moduloOrigemOs")
+        url.searchParams.delete("osProtocolo")
+        url.searchParams.delete("osProtocoloEmail")
+        window.history.replaceState({}, "", url.toString())
+      }
+    }
   }
 
   function openDemand(patient: Paciente) {
@@ -702,6 +830,64 @@ export default function PacientesPage() {
     })
   }
 
+  async function handlePatientDocumentUpload(event: any) {
+    const file = event?.target?.files?.[0] as File | undefined
+    if (!file) return
+
+    try {
+      setExtractingPatientDocument(true)
+
+      const form = new FormData()
+      form.append("file", file)
+
+      const response = await fetch("/api/pacientes/extrair-documento", {
+        method: "POST",
+        body: form,
+      })
+
+      const json = await response.json().catch(() => ({}))
+
+      if (!response.ok || !json?.ok) {
+        toast.error(json?.error || "Não foi possível ler o documento.")
+        return
+      }
+
+      const fields = json.fields || {}
+      const detectedPhones = Array.isArray(fields.telefones)
+        ? fields.telefones.filter(Boolean)
+        : fields.telefone
+          ? [String(fields.telefone)]
+          : []
+
+      setCreatePatientForm((current) => ({
+        ...current,
+        cpf: fields.cpf ? formatCpf(String(fields.cpf)) : current.cpf,
+        cns: fields.cns ? onlyDigits(String(fields.cns)).slice(0, 15) : current.cns,
+        nome: fields.nome ? String(fields.nome).toUpperCase() : current.nome,
+        dataNascimento: fields.dataNascimento || current.dataNascimento,
+        telefone: detectedPhones[0] ? formatPhone(detectedPhones[0]) : current.telefone,
+        telefones: detectedPhones.length
+          ? detectedPhones.map((phone: string) => formatPhone(phone))
+          : current.telefones,
+        endereco: fields.endereco ? String(fields.endereco).toUpperCase() : current.endereco,
+        numero: fields.numero ? String(fields.numero).toUpperCase() : current.numero,
+        complemento: fields.complemento ? String(fields.complemento).toUpperCase() : current.complemento,
+        cep: fields.cep ? formatCep(String(fields.cep)) : current.cep,
+        bairro: fields.bairro ? String(fields.bairro).toUpperCase() : current.bairro,
+        cidade: fields.cidade ? String(fields.cidade).toUpperCase() : current.cidade,
+      }))
+
+      const found = Object.keys(json.found || {}).length
+      toast.success(found > 0 ? `Dados extraídos: ${found} campo(s).` : "Documento lido, mas revise os campos.")
+    } catch (error) {
+      console.error("EXTRACT_PATIENT_DOCUMENT_ERROR", error)
+      toast.error("Erro ao ler documento do paciente.")
+    } finally {
+      setExtractingPatientDocument(false)
+      if (event?.target) event.target.value = ""
+    }
+  }
+
   async function handleSaveNewPatient() {
     if (savingPatient) return
     if (!validateNewPatientForm()) return
@@ -796,7 +982,7 @@ export default function PacientesPage() {
         <JudicialDemandForm
           patient={demandPatient}
           onBack={() => setSelectedModule(null)}
-          onSaved={closeDemandDialog}
+          onSaved={handleDemandSavedFromEmailOs}
         />
       )
     }
@@ -806,7 +992,7 @@ export default function PacientesPage() {
         <PreJudicialDemandForm
           patient={demandPatient}
           onBack={() => setSelectedModule(null)}
-          onSaved={closeDemandDialog}
+          onSaved={handleDemandSavedFromEmailOs}
         />
       )
     }
@@ -816,7 +1002,7 @@ export default function PacientesPage() {
         modulo={selectedModule as Module}
         patient={demandPatient}
         onBack={() => setSelectedModule(null)}
-        onSaved={closeDemandDialog}
+        onSaved={handleDemandSavedFromEmailOs}
       />
     )
   }
@@ -990,22 +1176,42 @@ export default function PacientesPage() {
               </div>
             ) : (
               historyItems.map((item) => (
-                <Link
+                <div
                   key={item.id}
-                  href={item.href}
-                  className="block rounded-xl border border-border p-4 transition-colors hover:bg-muted/50"
+                  className="rounded-xl border border-border p-4 transition-colors hover:bg-muted/50"
                 >
                   <div className="mb-1 flex flex-wrap items-center gap-2">
-                    <span className="font-semibold text-card-foreground">{item.label}</span>
+                    <Link href={item.href} className="font-semibold text-card-foreground hover:underline">
+                      {item.label}
+                    </Link>
                     <Badge variant="outline">{item.moduleLabel}</Badge>
                     {item.status ? <Badge variant="secondary">{item.status}</Badge> : null}
+                    {item.canReopen ? (
+                      <Badge variant="destructive">Encerrada</Badge>
+                    ) : null}
                   </div>
-                  <p className="text-sm text-muted-foreground">
-                    {item.createdAt
-                      ? new Date(item.createdAt).toLocaleString("pt-BR")
-                      : "Data não informada"}
-                  </p>
-                </Link>
+
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-sm text-muted-foreground">
+                      {item.createdAt
+                        ? new Date(item.createdAt).toLocaleString("pt-BR")
+                        : "Data não informada"}
+                    </p>
+
+                    {item.canReopen ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="bg-transparent"
+                        disabled={reopeningPreJudicialId === item.id}
+                        onClick={() => void handleReopenPreJudicialDemand(item)}
+                      >
+                        {reopeningPreJudicialId === item.id ? "Reabrindo..." : "Reabrir demanda"}
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
               ))
             )}
           </div>
@@ -1118,6 +1324,36 @@ export default function PacientesPage() {
               Preencha os dados mínimos para cadastrar o paciente e já abrir a nova demanda.
             </DialogDescription>
           </DialogHeader>
+
+          <div className="rounded-xl border border-dashed border-primary/40 bg-primary/5 p-4">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div>
+                <p className="text-sm font-semibold text-foreground">
+                  Preencher por foto ou PDF
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Envie uma imagem ou PDF do cadastro. O sistema lê os dados e preenche os campos abaixo sem salvar o arquivo.
+                </p>
+              </div>
+
+              <label className="inline-flex h-10 cursor-pointer items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground">
+                <Upload className="mr-2 h-4 w-4" />
+                {extractingPatientDocument ? "Lendo..." : "Selecionar arquivo"}
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/jpg,image/webp,application/pdf"
+                  className="hidden"
+                  disabled={extractingPatientDocument}
+                  onChange={handlePatientDocumentUpload}
+                />
+              </label>
+            </div>
+
+            <p className="mt-2 text-xs text-muted-foreground">
+              Após o preenchimento automático, confira os dados antes de clicar em Salvar paciente.
+            </p>
+          </div>
+
 
           <div className="grid gap-4">
             <div className="grid gap-4 md:grid-cols-2">

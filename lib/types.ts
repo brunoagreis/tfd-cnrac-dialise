@@ -260,7 +260,7 @@ export interface Anexo {
   criadoPorNome: string
 }
 
-// ── Interacao ──────────────────────────────��───────────
+// ── Interacao ───────────────────────────────────────────
 export interface Interacao {
   id: string
   demandaId: string

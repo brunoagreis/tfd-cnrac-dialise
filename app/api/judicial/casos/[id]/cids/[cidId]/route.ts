@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { randomUUID } from "crypto"
 import { prisma } from "@/lib/prisma"
+import { completeJudicialMonitoringAfterMovement } from "@/lib/judicial-monitoring-completion"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -178,6 +179,17 @@ export async function DELETE(
         userName,
         userEmail || null,
       )
+
+
+      // MOVIMENTOU_SAI_FILA_JUDICIAL_CID_INATIVAR
+      await completeJudicialMonitoringAfterMovement(tx, {
+        monitoramentoId: processo.monitoramentoId,
+        userId,
+        userEmail,
+        userName,
+        reason: "RETORNO_MONITORAMENTO_20_DIAS",
+        defaultReturnDays: 20,
+      })
 
       await tx.$executeRawUnsafe(
         `

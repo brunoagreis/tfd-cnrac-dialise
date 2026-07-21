@@ -52,7 +52,8 @@ async function findJudicialMatchForEmailOs(os: EmailOsRow): Promise<JudicialMatc
 
   const rows = await prisma.$queryRawUnsafe<JudicialMatch[]>(
     `
-      SELECT DISTINCT
+      -- EMAIL_OS_RECONCILE_DISTINCT_ORDER_FIX
+      SELECT DISTINCT ON (b.id)
         b.id::text AS "monitoramentoId",
         b.demanda_id::text AS "demandaId",
         COALESCE(d.protocolo::text, b.demanda_id::text) AS protocolo
@@ -115,8 +116,9 @@ export async function reconcileEmailOsWithExistingJudicialCases(limit = 300) {
         anexos
       FROM public.judicial_email_os
       WHERE UPPER(COALESCE(status, '')) IN (
+        'AGUARDANDO_CADASTRO',
         'ATRIBUIDA',
-        'ATRIBUÍDA',
+        'ATRIBUÃDA',
         'PENDENTE',
         'NOVA',
         'OS_CRIADA'
@@ -172,7 +174,7 @@ export async function reconcileEmailOsWithExistingJudicialCases(limit = 300) {
             END || 'DEMANDA CADASTRADA NO SIGAJUS - vinculada automaticamente por PGE.net/processo ao protocolo ' || $3::text,
             updated_at = NOW()
           WHERE id::text = $1::text
-            AND UPPER(COALESCE(status, '')) NOT IN ('CONVERTIDA', 'CADASTRADA', 'CADASTRADO', 'CONCLUIDA', 'CONCLUÍDA', 'INATIVA')
+            AND UPPER(COALESCE(status, '')) NOT IN ('CONVERTIDA', 'CADASTRADA', 'CADASTRADO', 'CONCLUIDA', 'CONCLUÃDA', 'INATIVA')
         `,
         os.id,
         match.demandaId || null,
@@ -214,7 +216,7 @@ export async function reconcileEmailOsWithExistingJudicialCases(limit = 300) {
             $4::text,
             COALESCE($5::jsonb, '[]'::jsonb),
             'sistema-email'::text,
-            'Integração de e-mail'::text,
+            'IntegraÃ§Ã£o de e-mail'::text,
             NOW()
           WHERE NOT EXISTS (
             SELECT 1
@@ -242,7 +244,7 @@ export async function reconcileEmailOsWithExistingJudicialCases(limit = 300) {
             motivo_proximo_monitoramento = 'RETORNO_OS_INCORPORADA_1_DIA',
             prazo_retorno_dias = 1,
             prioridade_monitoramento = GREATEST(COALESCE(prioridade_monitoramento, 0), 3),
-            prioridade_motivo = 'OS incorporada ao processo; monitorar no dia seguinte com prioridade máxima.',
+            prioridade_motivo = 'OS incorporada ao processo; monitorar no dia seguinte com prioridade mÃ¡xima.',
             prioridade_atualizada_em = NOW(),
             prioridade_atualizada_por = 'sistema-email-os',
             updated_at = NOW()

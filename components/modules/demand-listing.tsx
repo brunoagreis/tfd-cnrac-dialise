@@ -46,6 +46,8 @@ import { EmailOsPanel } from "@/components/modules/email-os-panel"
 import { useAuth } from "@/lib/auth-context"
 import { getUserPerfilCodigo } from "@/lib/access-control"
 
+const MODULE_LIST_PAGE_SIZE = 10
+
 const STATUS_CONFIG: Record<
   DemandaStatus,
   { icon: typeof AlertTriangle; variant: "secondary" | "default" | "destructive" }
@@ -143,6 +145,8 @@ export function DemandListing({ modulo, filterByEmail }: DemandListingProps) {
   const [statusFilter, setStatusFilter] = useState<DemandaStatus | "todos">("pendente")
   const [dateFrom, setDateFrom] = useState("")
   const [dateTo, setDateTo] = useState("")
+  const [modulePage, setModulePage] = useState(1)
+  const [closingCnracId, setClosingCnracId] = useState<string | null>(null)
   const [dbDemandas, setDbDemandas] = useState<DemandListItem[]>([])
   const [loadingDbDemandas, setLoadingDbDemandas] = useState(false)
 
@@ -246,6 +250,19 @@ export function DemandListing({ modulo, filterByEmail }: DemandListingProps) {
     })
   }, [allDemandas, statusFilter, dateFrom, dateTo, search, isMedicalUser])
 
+  // MODULE_LIST_PAGINATION_GLOBAL_SEARCH
+  const moduleTotalPages = Math.max(1, Math.ceil(filtered.length / MODULE_LIST_PAGE_SIZE))
+  const moduleCurrentPage = Math.min(modulePage, moduleTotalPages)
+
+  const modulePaginated = useMemo(() => {
+    const start = (moduleCurrentPage - 1) * MODULE_LIST_PAGE_SIZE
+    return filtered.slice(start, start + MODULE_LIST_PAGE_SIZE)
+  }, [filtered, moduleCurrentPage])
+
+  useEffect(() => {
+    setModulePage(1)
+  }, [modulo, statusFilter, dateFrom, dateTo, search])
+
   const statusCounts = useMemo(() => {
     const counts: Record<string, number> = { todos: allDemandas.length }
 
@@ -255,6 +272,60 @@ export function DemandListing({ modulo, filterByEmail }: DemandListingProps) {
 
     return counts
   }, [allDemandas])
+
+  async function handleEncerrarCnrac(demanda: DemandListItem) {
+    if (modulo !== "cnrac") return
+
+    if (!user) {
+      toast.error("Usuário não autenticado.")
+      return
+    }
+
+    const motivo = window.prompt(
+      "Informe o motivo do encerramento da demanda " + demanda.protocolo + ":",
+      "Processo encerrado manualmente no CNRAC.",
+    )
+
+    if (motivo === null) return
+
+    if (!motivo.trim()) {
+      toast.error("Informe o motivo do encerramento.")
+      return
+    }
+
+    try {
+      setClosingCnracId(demanda.id)
+
+      const response = await fetch("/api/cnrac/demandas", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "encerrar",
+          id: demanda.id,
+          protocolo: demanda.protocolo,
+          motivo: motivo.trim(),
+          user: {
+            id: String((user as any)?.id ?? ""),
+            nome: String((user as any)?.nome ?? (user as any)?.name ?? "Sistema"),
+            email: String((user as any)?.email ?? ""),
+          },
+        }),
+      })
+
+      const json = await response.json().catch(() => ({}))
+
+      if (!response.ok || !json?.ok) {
+        throw new Error(json?.error || "Erro ao encerrar processo CNRAC.")
+      }
+
+      toast.success("Processo CNRAC encerrado.")
+      window.location.reload()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Erro ao encerrar processo CNRAC.")
+    } finally {
+      setClosingCnracId(null)
+    }
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -386,18 +457,37 @@ export function DemandListing({ modulo, filterByEmail }: DemandListingProps) {
             </div>
           ) : (
             <div className="flex flex-col gap-2">
-              {filtered.map((d) => (
-                <DemandRow key={d.id} demanda={d} />
+              {modulePaginated.map((d) => (
+                <DemandRow
+                  key={d.id}
+                  demanda={d}
+                  onEncerrarCnrac={modulo === "cnrac" ? handleEncerrarCnrac : undefined}
+                  closingCnracId={closingCnracId}
+                />
               ))}
             </div>
           )}
+        <ModuleListPagination
+          page={moduleCurrentPage}
+          pages={moduleTotalPages}
+          total={filtered.length}
+          onPageChange={setModulePage}
+        />
         </CardContent>
       </Card>
     </div>
   )
 }
 
-function DemandRow({ demanda }: { demanda: DemandListItem }) {
+function DemandRow({
+  demanda,
+  onEncerrarCnrac,
+  closingCnracId,
+}: {
+  demanda: DemandListItem
+  onEncerrarCnrac?: (demanda: DemandListItem) => void | Promise<void>
+  closingCnracId?: string | null
+}) {
   const cfg = STATUS_CONFIG[demanda.status]
 
   return (
@@ -433,6 +523,22 @@ function DemandRow({ demanda }: { demanda: DemandListItem }) {
           </span>
           <span>{demanda.interacoesCount} interacao(es)</span>
           <span>{demanda.anexosCount} anexo(s)</span>
+          {demanda.modulo === "cnrac" && onEncerrarCnrac ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-7 bg-transparent text-xs text-destructive hover:text-destructive"
+              disabled={closingCnracId === demanda.id}
+              onClick={(event) => {
+                event.preventDefault()
+                event.stopPropagation()
+                void onEncerrarCnrac?.(demanda)
+              }}
+            >
+              {closingCnracId === demanda.id ? "Encerrando..." : "Encerrar processo"}
+            </Button>
+          ) : null}
           {medicalAssessmentBadgeConfig(demanda.pendenciaAtual) ? (
             <Badge
               variant="outline"
@@ -453,5 +559,51 @@ function DemandRow({ demanda }: { demanda: DemandListItem }) {
         aria-hidden="true"
       />
     </Link>
+  )
+}
+
+
+function ModuleListPagination({
+  page,
+  pages,
+  total,
+  onPageChange,
+}: {
+  page: number
+  pages: number
+  total: number
+  onPageChange: (page: number) => void
+}) {
+  if (total <= MODULE_LIST_PAGE_SIZE) return null
+
+  const first = Math.min(total, (page - 1) * MODULE_LIST_PAGE_SIZE + 1)
+  const last = Math.min(total, page * MODULE_LIST_PAGE_SIZE)
+
+  return (
+    <div className="mt-4 flex flex-col gap-2 border-t pt-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+      <span className="text-muted-foreground">
+        Exibindo {first} a {last} de {total} resultado(s). Página {page} de {pages}.
+      </span>
+
+      <div className="flex gap-2">
+        <button
+          type="button"
+          className="rounded-md border border-input bg-background px-3 py-1 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={page <= 1}
+          onClick={() => onPageChange(Math.max(1, page - 1))}
+        >
+          Anterior
+        </button>
+
+        <button
+          type="button"
+          className="rounded-md border border-input bg-background px-3 py-1 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={page >= pages}
+          onClick={() => onPageChange(Math.min(pages, page + 1))}
+        >
+          Próxima
+        </button>
+      </div>
+    </div>
   )
 }

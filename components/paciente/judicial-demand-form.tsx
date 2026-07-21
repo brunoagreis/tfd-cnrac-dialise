@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
@@ -180,6 +180,16 @@ export function JudicialDemandForm({
     try {
       setSaving(true)
 
+      // JUDICIAL_FORM_EMAIL_OS_ID_FROM_URL
+      const emailOsIdFromUrl =
+        typeof window !== "undefined"
+          ? String(
+              new URLSearchParams(window.location.search).get("emailOsId") ||
+              new URLSearchParams(window.location.search).get("osId") ||
+              "",
+            ).trim()
+          : ""
+
       const response = await fetch("/api/judicial/cadastro", {
         method: "POST",
         headers: {
@@ -187,6 +197,9 @@ export function JudicialDemandForm({
         },
         body: JSON.stringify({
           patientId: patient.id,
+          ...(emailOsIdFromUrl
+            ? { osId: emailOsIdFromUrl, emailOsId: emailOsIdFromUrl }
+            : {}),
           isIntimation,
           oficioNumber,
           receivedAt,
@@ -212,6 +225,66 @@ export function JudicialDemandForm({
         return
       }
 
+      // JUDICIAL_DEMAND_LINK_PROCEDURES_AND_CIDS
+      const createdJudicialCaseId = String(json?.item?.id ?? "").trim()
+
+      if (!createdJudicialCaseId) {
+        throw new Error("A demanda foi criada, mas o identificador Judicial não foi retornado.")
+      }
+
+      for (const procedure of procedures) {
+        const procedureResponse = await fetch(
+          `/api/judicial/casos/${encodeURIComponent(createdJudicialCaseId)}/procedimentos`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              sigtapCode: procedure.sigtapCode,
+              specialty: procedure.specialty,
+              subSpecialty: procedure.subSpecialty || undefined,
+              user,
+            }),
+          },
+        )
+
+        const procedureJson = await procedureResponse.json().catch(() => ({}))
+
+        if (!procedureResponse.ok || !procedureJson?.ok) {
+          throw new Error(
+            procedureJson?.error ||
+              `Erro ao vincular o procedimento ${procedure.sigtapCode} ao Judicial.`,
+          )
+        }
+      }
+
+      for (const cid of cids) {
+        const cidResponse = await fetch(
+          `/api/judicial/casos/${encodeURIComponent(createdJudicialCaseId)}/cids`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              code: cid.code,
+              description: cid.description,
+              user,
+            }),
+          },
+        )
+
+        const cidJson = await cidResponse.json().catch(() => ({}))
+
+        if (!cidResponse.ok || !cidJson?.ok) {
+          throw new Error(
+            cidJson?.error ||
+              `Erro ao vincular o CID ${cid.code} ao Judicial.`,
+          )
+        }
+      }
+
       toast.success(`Judicial ${json?.item?.protocolo ?? ""} cadastrado com sucesso.`)
       onSaved()
     } catch (error) {
@@ -230,7 +303,7 @@ export function JudicialDemandForm({
         </CardHeader>
         <CardContent className="grid gap-3 md:grid-cols-2">
           <div>
-            <Label className="mb-1 block text-xs">É intimação? *</Label>
+              <Label className="mb-1 block text-xs">É intimação? *</Label>
             <select
               className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               value={isIntimation}
@@ -243,12 +316,12 @@ export function JudicialDemandForm({
 
           <div>
             <Label className="mb-1 block text-xs">
-              Número do ofício ou intimação{oficioRequired ? " *" : ""}
+                Número do ofício ou intimação{oficioRequired ? " *" : ""}
             </Label>
             <Input
               value={oficioNumber}
               onChange={(e) => setOficioNumber(normalizeUpper(e.target.value))}
-              placeholder={oficioRequired ? "Obrigatório quando for intimação" : "Opcional quando não for intimação"}
+                placeholder={oficioRequired ? "Obrigatório quando for intimação" : "Opcional quando não for intimação"}
             />
           </div>
 
@@ -262,7 +335,7 @@ export function JudicialDemandForm({
           </div>
 
           <div>
-            <Label className="mb-1 block text-xs">Data da reiteração</Label>
+              <Label className="mb-1 block text-xs">Data da reiteração</Label>
             <Input
               type="date"
               value={reiterationAt}
@@ -271,7 +344,7 @@ export function JudicialDemandForm({
           </div>
 
           <div>
-            <Label className="mb-1 block text-xs">Autos da ação *</Label>
+              <Label className="mb-1 block text-xs">Autos da ação *</Label>
             <Input
               value={actionRecords}
               onChange={(e) => setActionRecords(normalizeUpper(e.target.value))}
@@ -305,7 +378,7 @@ export function JudicialDemandForm({
             <MunicipalitySelectField
               value={municipalityName}
               onChange={setMunicipalityName}
-              label="Município envolvido *"
+                label="Município envolvido *"
             />
           </div>
         </CardContent>
@@ -356,7 +429,7 @@ export function JudicialDemandForm({
 
 
       <div className="rounded-lg border border-border bg-muted/30 p-3 text-sm">
-        Campos obrigatórios: data do recebimento, autos da ação, número do PGE.net, prazo em dias, município envolvido, ao menos 1 procedimento e ao menos 1 CID. O número do ofício/intimação só é obrigatório quando “É intimação?” for Sim. A data da reiteração não é obrigatória.
+            Campos obrigatórios: data do recebimento, autos da ação, número do PGE.net, prazo em dias, município envolvido, ao menos 1 procedimento e ao menos 1 CID. O número do ofício/intimação só é obrigatório quando “É intimação?” for Sim. A data da reiteração não é obrigatória.
       </div>
 
       <div className="flex justify-between gap-2">

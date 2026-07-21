@@ -6,6 +6,10 @@ import { extractEmailTriageFields, getEmailTriageConfig } from "@/lib/email-tria
 import { ensureEmailOsRoutingColumns, inferEmailOsModule } from "@/lib/email-os-routing"
 import { pickEmailTriageAssignee } from "@/lib/email-triage-assignment"
 
+function isDeliveryStatusFailureSubject(value: unknown) {
+  return String(value ?? "").trim().toLowerCase() === "delivery status notification (failure)"
+}
+
 type Attachment = { filename?: string; contentType?: string; size?: number; content?: Buffer }
 type Mail = { subject?: string; text?: string; html?: string | false; messageId?: string; date?: Date; attachments?: Attachment[]; from?: { text?: string; value?: Array<{ name?: string; address?: string }> } }
 type Match = { monitoramentoId: string; demandaId: string; protocolo: string; pacienteNome: string }
@@ -97,6 +101,47 @@ async function findMatch(number: string): Promise<Match | null> {
   if (linked[0]) return linked[0]
   const rows = await prisma.$queryRawUnsafe<Match[]>(`SELECT b.id::text AS "monitoramentoId", d.id::text AS "demandaId", d.protocolo, COALESCE(p.nome, b.nome_paciente, '') AS "pacienteNome" FROM public.demandas d LEFT JOIN public.judicial_monitoramento_base b ON b.demanda_id = d.id LEFT JOIN public.pacientes p ON p.id = d."pacienteId" WHERE d.protocolo ILIKE $1 OR d."observacoesUnidade" ILIKE $1 OR regexp_replace(COALESCE(d."observacoesUnidade", ''), '\\D', '', 'g') LIKE $2 ORDER BY d."createdAt" DESC LIMIT 1`, `%${n}%`, `%${d}%`).catch(() => [] as Match[])
   return rows[0] || null
+}
+
+
+function patientNameKey(value: unknown) {
+  return normalize(value)
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+}
+
+async function findMatchByPatientText(subject: string, body: string): Promise<Match | null> {
+  // EMAIL_TRIAGE_V2_MATCH_BY_PATIENT_NAME
+  const haystack = patientNameKey([subject, body].join(" "))
+  if (haystack.length < 8) return null
+
+  const rows = await prisma.$queryRawUnsafe<Match[]>(`
+    SELECT
+      b.id::text AS "monitoramentoId",
+      COALESCE(b.demanda_id::text, d.id::text, '') AS "demandaId",
+      COALESCE(d.protocolo, b.ficha_core, b.id::text) AS protocolo,
+      COALESCE(p.nome, b.nome_paciente, '') AS "pacienteNome"
+    FROM public.demandas d
+    LEFT JOIN public.judicial_monitoramento_base b
+      ON b.demanda_id = d.id
+    LEFT JOIN public.pacientes p
+      ON p.id = d."pacienteId"
+    WHERE LOWER(COALESCE(d.modulo::text, '')) = 'judicial'
+      AND LENGTH(TRIM(COALESCE(p.nome, b.nome_paciente, ''))) >= 8
+    ORDER BY d."createdAt" DESC
+    LIMIT 800
+  `).catch(() => [] as Match[])
+
+  const matches = rows.filter((row) => {
+    const nameKey = patientNameKey(row.pacienteNome)
+    return nameKey.length >= 8 && haystack.includes(nameKey)
+  })
+
+  const uniqueDemandIds = new Set(matches.map((row) => text(row.demandaId)).filter(Boolean))
+  if (uniqueDemandIds.size !== 1) return null
+
+  return matches[0] || null
 }
 
 async function matchRule(subject: string, body: string, classifier: string): Promise<Rule> {
@@ -204,6 +249,38 @@ export async function processUnreadEmailTriageV2(limit = 5000) {
           await publish(`Triando: ${subject}`, subject)
 
           const body = text(mail.text) || stripHtml(mail.html)
+
+          // EMAIL_TRIAGE_AUTO_INATIVA_DSN
+          if (isDeliveryStatusFailureSubject(subject)) {
+            const bodyShortDsn = body.slice(0, 10000)
+            const messageIdDsn = text(mail.messageId || `${config.user}:${uid}`)
+            const fromDsn = sender(mail)
+            const dateDsn = mail.date?.toISOString() || msg.envelope?.date?.toISOString?.() || new Date().toISOString()
+
+            await saveProcessed({
+              uid,
+              messageId: messageIdDsn,
+              subject,
+              from: fromDsn,
+              date: dateDsn,
+              fields: { classifier: "Delivery Status Notification", detectedIn: "Assunto" },
+              rule: { id: null, nome: "Delivery Status Notification", users: [] },
+              status: "INATIVA",
+              match: null,
+              metadata: {
+                autoInativada: true,
+                motivo: "Delivery Status Notification (Failure)",
+                bodyText: bodyShortDsn,
+              },
+              read: true,
+            })
+
+            await finalizeMessage(client, uid)
+            triagedCount += 1
+            items.push({ uid, subject, status: "INATIVA", autoInativada: true })
+            await publish(`E-mail de falha de entrega inativado automaticamente: ${triagedCount}/${candidates.length}`, subject)
+            continue
+          }
           const bodyShort = body.slice(0, 10000)
           const messageId = text(mail.messageId || `${config.user}:${uid}`)
           const old = await processed(messageId)
@@ -218,8 +295,10 @@ export async function processUnreadEmailTriageV2(limit = 5000) {
           const fields = extractEmailTriageFields(subject, body)
           const rule = await matchRule(subject, body, fields.classifier)
           const responsible = await pickEmailTriageAssignee(rule.id, rule.users)
-          const match = fields.processo ? await findMatch(fields.processo) : null
-          const from = sender(mail)
+                    const match =
+            (fields.processo ? await findMatch(fields.processo) : null) ||
+            (fields.pgeNet ? await findMatch(fields.pgeNet) : null)
+const from = sender(mail)
           const date = mail.date?.toISOString() || msg.envelope?.date?.toISOString?.() || new Date().toISOString()
           const files = mail.attachments || []
           const emailId = await saveProcessed({ uid, messageId, subject, from, date, fields, rule, status: "EM_PROCESSAMENTO", match, metadata: { bodyText: bodyShort, attachments: files.map((file) => ({ filename: file.filename, contentType: file.contentType, size: file.size })) } })
@@ -227,7 +306,7 @@ export async function processUnreadEmailTriageV2(limit = 5000) {
           if (match?.monitoramentoId) {
             const saved = await saveFiles(files, match.protocolo || fields.processo, match.demandaId, emailId)
             await prisma.$executeRawUnsafe(`INSERT INTO public.judicial_movimentacoes (id, monitoramento_id, demanda_id, type, description, attachments, created_by, created_by_name, created_at) VALUES ($1, $2::bigint, $3, 'monitoramento', $4, $5::jsonb, 'sistema-email', 'Integração de e-mail', NOW())`, `jmov_email_${randomUUID()}`, match.monitoramentoId, match.demandaId || null, [`E-MAIL AUTOMÁTICO IDENTIFICADO`, `Assunto: ${subject}`, `Remetente: ${from}`, `PGE.net/Processo: ${fields.processo || fields.pgeNet || ""}`, `OS criada: não, processo localizado`, `Responsável direcionado: não definido`, `Corpo do e-mail: ${body.slice(0, 4000)}`, `Anexos: ${saved.map((file) => file.name).join(" | ") || "nenhum"}`].join("\n"), JSON.stringify(saved))
-            await prisma.$executeRawUnsafe(`UPDATE public.judicial_monitoramento_base SET status_monitoramento_atual='ATRIBUIDO_EMAIL', motivo_proximo_monitoramento='EMAIL_RECEBIDO', updated_at=NOW() WHERE id=$1::bigint`, match.monitoramentoId)
+            await prisma.$executeRawUnsafe(`UPDATE public.judicial_monitoramento_base SET status_monitoramento_atual='PENDENTE', ativo_monitoramento=TRUE, data_proximo_monitoramento=CURRENT_DATE + INTERVAL '1 day', motivo_proximo_monitoramento='EMAIL_RECEBIDO_REABRIR_MONITORAMENTO_HUMANO', prazo_retorno_dias=1, updated_at=NOW() WHERE id=$1::bigint`, match.monitoramentoId)
             // Atribuição automática por e-mail desativada: responsável deve ser definido manualmente pelo administrador.
             await saveProcessed({ uid, messageId, subject, from, date, fields, rule, status: "VINCULADO", match, metadata: { bodyText: bodyShort, responsible: null, movement: { attachments: saved }, attachments: saved }, read: true })
             linkedCount += 1
@@ -235,10 +314,10 @@ export async function processUnreadEmailTriageV2(limit = 5000) {
           } else {
             const modulo = inferEmailOsModule(subject, fields.classifier)
             const saved = await saveFiles(files, `OS-${uid}`)
-            const osRows = await prisma.$queryRawUnsafe<Array<{ id: string; protocolo: string }>>(`INSERT INTO public.judicial_email_os (protocolo, assunto, remetente, recebido_em, pge_net, processo, detectado_em, classificador, regra_id, regra_nome, corpo_resumo, anexos, status, modulo_destino, responsavel_id, responsavel_nome, responsavel_email, created_at, updated_at) VALUES ($1,$2,$3,$4::timestamptz,$5,$6,$7,$8,$9::bigint,$10,$11,$12::jsonb,$13,$14,$15,$16,$17,NOW(),NOW()) RETURNING id::text AS id, protocolo`, `OS-EMAIL-${new Date().getFullYear()}-${String(Date.now()).slice(-8)}`, subject, from, date, fields.pgeNet || null, fields.processo || null, fields.detectedIn || null, fields.classifier || null, rule.id || null, rule.nome || null, bodyShort, JSON.stringify(saved), "AGUARDANDO_CADASTRO", modulo, null, null, null)
-            await saveProcessed({ uid, messageId, subject, from, date, fields, rule, status: "OS_CRIADA", match: null, osId: osRows[0]?.id, metadata: { bodyText: bodyShort, responsible: null, os: { attachments: saved, protocolo: osRows[0]?.protocolo }, attachments: saved }, read: true })
+            const osRows = await prisma.$queryRawUnsafe<Array<{ id: string; protocolo: string }>>(`INSERT INTO public.judicial_email_os (protocolo, assunto, remetente, recebido_em, pge_net, processo, detectado_em, classificador, regra_id, regra_nome, corpo_resumo, anexos, status, modulo_destino, responsavel_id, responsavel_nome, responsavel_email, created_at, updated_at) VALUES ($1,$2,$3,$4::timestamptz,$5,$6,$7,$8,$9::bigint,$10,$11,$12::jsonb,$13,$14,$15,$16,$17,NOW(),NOW()) RETURNING id::text AS id, protocolo`, `OS-EMAIL-${new Date().getFullYear()}-${String(Date.now()).slice(-8)}`, subject, from, date, fields.pgeNet || null, fields.processo || null, fields.detectedIn || null, fields.classifier || null, rule.id || null, rule.nome || null, bodyShort, JSON.stringify(saved), responsible?.id ? "ATRIBUIDA" : "AGUARDANDO_CADASTRO", modulo, responsible?.id || null, responsible?.nome || null, responsible?.email || null)
+            await saveProcessed({ uid, messageId, subject, from, date, fields, rule, status: "OS_CRIADA", match: null, osId: osRows[0]?.id, metadata: { bodyText: bodyShort, responsible, os: { attachments: saved, protocolo: osRows[0]?.protocolo }, attachments: saved }, read: true })
             osCount += 1
-            items.push({ uid, subject, status: "OS_CRIADA", found: false, os: osRows[0], responsible: null })
+            items.push({ uid, subject, status: "OS_CRIADA", found: false, os: osRows[0], responsible })
           }
 
           await finalizeMessage(client, uid)

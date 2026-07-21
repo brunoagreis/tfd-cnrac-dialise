@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { requireAdminRequest } from "@/lib/security/server-session"
+import { readServerSession, requireAdminRequest } from "@/lib/security/server-session"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -59,8 +59,13 @@ async function ensureEmailDispatchColumns() {
 
 export async function GET(req: Request) {
 
-  const adminGuard = await requireAdminRequest(req)
-  if (!adminGuard.ok) return adminGuard.response
+  const session = readServerSession(req)
+  if (!session) {
+    return NextResponse.json(
+      { ok: false, error: "Sessão expirada. Faça login novamente." },
+      { status: 401 },
+    )
+  }
 
   try {
     await ensureEmailDispatchColumns()
@@ -174,82 +179,47 @@ export async function POST(req: Request) {
 
       saved = updated[0]
     } else {
-      const existing = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+      // Sem id: sempre cria um novo modelo.
+      // Modelos do mesmo tipo podem coexistir.
+      const inserted = await prisma.$queryRawUnsafe<TemplateRow[]>(
         `
-          SELECT id::text AS id
-          FROM public.admin_judicial_modelos_email
-          WHERE LOWER(tipo_template) = LOWER($1)
-          LIMIT 1
+          INSERT INTO public.admin_judicial_modelos_email (
+            tipo_template,
+            titulo,
+            assunto,
+            corpo_html,
+            modulo_disparo,
+            disparo_automatico,
+            updated_at
+          )
+          VALUES (
+            $1,
+            $2,
+            $3,
+            $4,
+            NULLIF($5, ''),
+            $6,
+            NOW()
+          )
+          RETURNING
+            id::text AS id,
+            tipo_template AS type,
+            titulo AS title,
+            assunto AS subject,
+            corpo_html AS body,
+            modulo_disparo AS "dispatchModule",
+            disparo_automatico AS "automaticDispatch",
+            updated_at::text AS "updatedAt"
         `,
         type,
+        title,
+        subject,
+        bodyHtml,
+        dispatchModule,
+        automaticDispatch,
       )
 
-      if (existing[0]?.id) {
-        const updated = await prisma.$queryRawUnsafe<TemplateRow[]>(
-          `
-            UPDATE public.admin_judicial_modelos_email
-            SET
-              tipo_template = $1,
-              titulo = $2,
-              assunto = $3,
-              corpo_html = $4,
-              modulo_disparo = NULLIF($5, ''),
-              disparo_automatico = $6,
-              updated_at = NOW()
-            WHERE id = $7::bigint
-            RETURNING
-              id::text AS id,
-              tipo_template AS type,
-              titulo AS title,
-              assunto AS subject,
-              corpo_html AS body,
-              modulo_disparo AS "dispatchModule",
-              disparo_automatico AS "automaticDispatch",
-              updated_at::text AS "updatedAt"
-          `,
-          type,
-          title,
-          subject,
-          bodyHtml,
-          dispatchModule,
-          automaticDispatch,
-          existing[0].id,
-        )
-
-        saved = updated[0]
-      } else {
-        const inserted = await prisma.$queryRawUnsafe<TemplateRow[]>(
-          `
-            INSERT INTO public.admin_judicial_modelos_email (
-              tipo_template,
-              titulo,
-              assunto,
-              corpo_html,
-              modulo_disparo,
-              disparo_automatico,
-              updated_at
-            )
-            VALUES ($1, $2, $3, $4, NULLIF($5, ''), $6, NOW())
-            RETURNING
-              id::text AS id,
-              tipo_template AS type,
-              titulo AS title,
-              assunto AS subject,
-              corpo_html AS body,
-              modulo_disparo AS "dispatchModule",
-              disparo_automatico AS "automaticDispatch",
-              updated_at::text AS "updatedAt"
-          `,
-          type,
-          title,
-          subject,
-          bodyHtml,
-          dispatchModule,
-          automaticDispatch,
-        )
-
-        saved = inserted[0]
-      }
+      saved = inserted[0]
     }
 
     if (!saved) {

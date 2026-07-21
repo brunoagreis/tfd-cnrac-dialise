@@ -13,6 +13,32 @@ function onlyDigits(value: unknown) {
   return text(value).replace(/\D/g, "")
 }
 
+
+const ACCESS_LOWERCASE_NAME_WORDS = new Set(["da", "de", "do", "das", "dos", "e"])
+
+function capitalizeAccessNameToken(value: string) {
+  const lower = String(value ?? "").toLocaleLowerCase("pt-BR")
+  if (!lower) return ""
+  return lower.charAt(0).toLocaleUpperCase("pt-BR") + lower.slice(1)
+}
+
+function formatAccessPersonName(value: unknown) {
+  return text(value)
+    .replace(/\s+/g, " ")
+    .toLocaleLowerCase("pt-BR")
+    .split(" ")
+    .filter(Boolean)
+    .map((word, index) => {
+      if (index > 0 && ACCESS_LOWERCASE_NAME_WORDS.has(word)) return word
+
+      return word
+        .split("-")
+        .map(capitalizeAccessNameToken)
+        .join("-")
+    })
+    .join(" ")
+}
+
 function isValidEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
 }
@@ -30,9 +56,9 @@ function normalizePerfil(value: unknown) {
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json().catch(() => ({}))
+        const body = await req.json().catch(() => ({}))
 
-    const nome = text(body?.nome)
+    const nome = formatAccessPersonName(body?.nome)
     const email = text(body?.email).toLowerCase()
     const cpf = onlyDigits(body?.cpf)
     const telefone = text(body?.telefone)

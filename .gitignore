@@ -20,3 +20,13 @@ backups/
 pre-judicial-mapeamento.txt
 public/uploads/
 storage/
+# Backups locais de patches
+_BACKUPS_REMOVIDOS_*/
+
+# Artefatos locais de manutenção
+/build-*.log
+*.bak-*
+*.bck
+*.bck-*
+*.backup-*
+/_BACKUPS_REMOVIDOS_*/

@@ -26,6 +26,7 @@ import {
   Info,
   Plus,
   Strikethrough,
+  Trash2,
   AlignJustify,
 } from "lucide-react"
 
@@ -96,6 +97,14 @@ type SubSpecialtyOption = {
 type CidOption = {
   code: string
   description: string
+}
+
+type QuickCopyEmailItem = {
+  id: string
+  nome: string
+  email: string
+  createdByName: string
+  createdAt: string
 }
 
 type HistoryItem = {
@@ -584,6 +593,22 @@ function JudicialCaseDetailContent({
   const [manifestSubject, setManifestSubject] = useState("")
   const [manifestRecipients, setManifestRecipients] = useState("")
   const [additionalManifestRecipients, setAdditionalManifestRecipients] = useState("")
+
+  // JUDICIAL_EMAIL_COPIA_RAPIDA
+  const [quickCopyEmails, setQuickCopyEmails] =
+    useState<QuickCopyEmailItem[]>([])
+  const [quickCopyEmailName, setQuickCopyEmailName] =
+    useState("")
+  const [quickCopyEmailAddress, setQuickCopyEmailAddress] =
+    useState("")
+  const [loadingQuickCopyEmails, setLoadingQuickCopyEmails] =
+    useState(false)
+  const [savingQuickCopyEmail, setSavingQuickCopyEmail] =
+    useState(false)
+
+  // JUDICIAL_EMAIL_COPIA_RAPIDA_EDITAR_EXCLUIR
+  const [editingQuickCopyEmailId, setEditingQuickCopyEmailId] =
+    useState<string | null>(null)
   const [selectedManifestTemplateId, setSelectedManifestTemplateId] = useState("")
   const [adminEmailTemplates, setAdminEmailTemplates] = useState<any[]>([])
   const [adminMunicipalityContacts, setAdminMunicipalityContacts] = useState<any[]>([])
@@ -634,6 +659,10 @@ function JudicialCaseDetailContent({
   const [newPgeNetNumber, setNewPgeNetNumber] = useState("")
   const [finalizeValorEstado, setFinalizeValorEstado] = useState("")
   const [finalizeValorMunicipio, setFinalizeValorMunicipio] = useState("")
+
+  useEffect(() => {
+    void loadQuickCopyEmails()
+  }, [])
 
   useEffect(() => {
     setActiveTab("monitoramento")
@@ -3270,18 +3299,441 @@ function toPdfHex(value: string) {
   }
 
 
+  async function loadQuickCopyEmails() {
+    try {
+      setLoadingQuickCopyEmails(true)
+
+      const response = await fetch(
+        "/api/email/copia-rapida",
+        {
+          cache: "no-store",
+        },
+      )
+
+      const data =
+        await response.json().catch(() => ({}))
+
+      if (!response.ok || !data?.ok) {
+        throw new Error(
+          data?.error ||
+            "Erro ao carregar e-mails de cópia rápida.",
+        )
+      }
+
+      setQuickCopyEmails(
+        Array.isArray(data.items)
+          ? data.items
+          : [],
+      )
+    } catch (error) {
+      console.error(
+        "[JudicialCaseDetail] e-mails de cópia rápida:",
+        error,
+      )
+    } finally {
+      setLoadingQuickCopyEmails(false)
+    }
+  }
+
+  async function handleSaveQuickCopyEmail() {
+    const email =
+      quickCopyEmailAddress
+        .trim()
+        .toLowerCase()
+
+    if (
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+    ) {
+      toast.error("Informe um endereço de e-mail válido.")
+      return
+    }
+
+    const previousItem =
+      editingQuickCopyEmailId
+        ? quickCopyEmails.find(
+            (item) =>
+              item.id === editingQuickCopyEmailId,
+          )
+        : null
+
+    try {
+      setSavingQuickCopyEmail(true)
+
+      const response = await fetch(
+        "/api/email/copia-rapida",
+        {
+          method:
+            editingQuickCopyEmailId
+              ? "PATCH"
+              : "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            id:
+              editingQuickCopyEmailId ||
+              undefined,
+            nome: quickCopyEmailName.trim(),
+            email,
+          }),
+        },
+      )
+
+      const data =
+        await response.json().catch(() => ({}))
+
+      if (!response.ok || !data?.ok) {
+        throw new Error(
+          data?.error ||
+            "Erro ao salvar e-mail.",
+        )
+      }
+
+      const item =
+        data.item as QuickCopyEmailItem
+
+      setQuickCopyEmails((current) => {
+        const next = [
+          ...current.filter(
+            (currentItem) =>
+              currentItem.id !== item.id &&
+              currentItem.email.toLowerCase() !==
+                item.email.toLowerCase(),
+          ),
+          item,
+        ]
+
+        return next.sort((a, b) =>
+          (a.nome || a.email).localeCompare(
+            b.nome || b.email,
+            "pt-BR",
+          ),
+        )
+      })
+
+      setAdditionalManifestRecipients(
+        (current) => {
+          const currentEmails =
+            normalizeEmailList(current)
+
+          const withoutPrevious =
+            previousItem
+              ? currentEmails.filter(
+                  (currentEmail) =>
+                    currentEmail.toLowerCase() !==
+                    previousItem.email.toLowerCase(),
+                )
+              : currentEmails
+
+          return normalizeEmailList([
+            ...withoutPrevious,
+            item.email,
+          ]).join(", ")
+        },
+      )
+
+      setQuickCopyEmailName("")
+      setQuickCopyEmailAddress("")
+      setEditingQuickCopyEmailId(null)
+
+      toast.success(
+        previousItem
+          ? "E-mail atualizado com sucesso."
+          : data.reactivated
+            ? "E-mail reativado e selecionado para cópia."
+            : data.created
+              ? "E-mail cadastrado e selecionado para cópia."
+              : "E-mail já cadastrado e selecionado.",
+      )
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Erro ao salvar e-mail.",
+      )
+    } finally {
+      setSavingQuickCopyEmail(false)
+    }
+  }
+
+  function handleEditQuickCopyEmail(
+    item: QuickCopyEmailItem,
+  ) {
+    setEditingQuickCopyEmailId(item.id)
+    setQuickCopyEmailName(item.nome || "")
+    setQuickCopyEmailAddress(item.email)
+  }
+
+  function handleCancelQuickCopyEmailEdit() {
+    setEditingQuickCopyEmailId(null)
+    setQuickCopyEmailName("")
+    setQuickCopyEmailAddress("")
+  }
+
+  async function handleDeleteQuickCopyEmail(
+    item: QuickCopyEmailItem,
+  ) {
+    const confirmed = window.confirm(
+      `Excluir o e-mail ${item.email} da lista compartilhada?`,
+    )
+
+    if (!confirmed) return
+
+    try {
+      const response = await fetch(
+        "/api/email/copia-rapida",
+        {
+          method: "DELETE",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            id: item.id,
+          }),
+        },
+      )
+
+      const data =
+        await response.json().catch(() => ({}))
+
+      if (!response.ok || !data?.ok) {
+        throw new Error(
+          data?.error ||
+            "Erro ao excluir e-mail.",
+        )
+      }
+
+      setQuickCopyEmails((current) =>
+        current.filter(
+          (currentItem) =>
+            currentItem.id !== item.id,
+        ),
+      )
+
+      setAdditionalManifestRecipients(
+        (current) =>
+          normalizeEmailList(current)
+            .filter(
+              (email) =>
+                email.toLowerCase() !==
+                item.email.toLowerCase(),
+            )
+            .join(", "),
+      )
+
+      if (
+        editingQuickCopyEmailId === item.id
+      ) {
+        handleCancelQuickCopyEmailEdit()
+      }
+
+      toast.success(
+        "E-mail excluído da lista compartilhada.",
+      )
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Erro ao excluir e-mail.",
+      )
+    }
+  }
+  function toggleQuickCopyEmail(
+    email: string,
+    checked: boolean,
+  ) {
+    setAdditionalManifestRecipients((current) => {
+      const emails =
+        normalizeEmailList(current)
+
+      const next = checked
+        ? [...emails, email]
+        : emails.filter(
+            (item) =>
+              item.toLowerCase() !==
+              email.toLowerCase(),
+          )
+
+      return normalizeEmailList(next).join(", ")
+    })
+  }
+
+  function renderQuickCopyEmailPanel() {
+    const selectedEmails = new Set(
+      normalizeEmailList(
+        additionalManifestRecipients,
+      ).map((email) => email.toLowerCase()),
+    )
+
+    return (
+      <div className="space-y-3 rounded-xl border border-dashed border-border p-4">
+        <div>
+          <p className="text-sm font-semibold">
+            E-mails de adição rápida
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Qualquer usuário autenticado pode cadastrar.
+            Os selecionados serão enviados em cópia (CC).
+          </p>
+        </div>
+
+        <div className="grid gap-2 md:grid-cols-[1fr_1.4fr_auto_auto]">
+          <Input
+            value={quickCopyEmailName}
+            onChange={(event) =>
+              setQuickCopyEmailName(
+                event.target.value,
+              )
+            }
+            placeholder="Nome ou setor (opcional)"
+          />
+
+          <Input
+            type="email"
+            value={quickCopyEmailAddress}
+            onChange={(event) =>
+              setQuickCopyEmailAddress(
+                event.target.value,
+              )
+            }
+            placeholder="email@exemplo.gov.br"
+          />
+
+          <Button
+            type="button"
+            variant="outline"
+            className="bg-transparent"
+            disabled={savingQuickCopyEmail}
+            onClick={handleSaveQuickCopyEmail}
+          >
+            {editingQuickCopyEmailId ? (
+              <Edit3 className="mr-2 h-4 w-4" />
+            ) : (
+              <Plus className="mr-2 h-4 w-4" />
+            )}
+
+            {savingQuickCopyEmail
+              ? "Salvando..."
+              : editingQuickCopyEmailId
+                ? "Atualizar"
+                : "Cadastrar"}
+          </Button>
+
+          {editingQuickCopyEmailId ? (
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={savingQuickCopyEmail}
+              onClick={handleCancelQuickCopyEmailEdit}
+            >
+              Cancelar
+            </Button>
+          ) : null}
+        </div>
+
+        {loadingQuickCopyEmails ? (
+          <p className="text-xs text-muted-foreground">
+            Carregando e-mails cadastrados...
+          </p>
+        ) : quickCopyEmails.length === 0 ? (
+          <p className="text-xs text-muted-foreground">
+            Nenhum e-mail de adição rápida cadastrado.
+          </p>
+        ) : (
+          <div className="max-h-44 space-y-2 overflow-y-auto rounded-lg border border-border p-2">
+            {quickCopyEmails.map((item) => (
+              <div
+                key={item.id}
+                className="flex items-start gap-3 rounded-md p-2 hover:bg-muted/50"
+              >
+                <input
+                  type="checkbox"
+                  className="mt-2"
+                  checked={selectedEmails.has(
+                    item.email.toLowerCase(),
+                  )}
+                  onChange={(event) =>
+                    toggleQuickCopyEmail(
+                      item.email,
+                      event.target.checked,
+                    )
+                  }
+                />
+
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium">
+                    {item.nome || item.email}
+                  </p>
+
+                  {item.nome ? (
+                    <p className="break-all text-xs text-muted-foreground">
+                      {item.email}
+                    </p>
+                  ) : null}
+                </div>
+
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  title="Editar e-mail"
+                  onClick={() =>
+                    handleEditQuickCopyEmail(item)
+                  }
+                >
+                  <Edit3 className="h-4 w-4" />
+                </Button>
+
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  title="Excluir e-mail"
+                  onClick={() =>
+                    handleDeleteQuickCopyEmail(item)
+                  }
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    )
+  }
+
   async function handleSendMunicipalityNotification(options?: {
     movementType?: MovementType
     closeForwardModal?: boolean
   }) {
     if (!user) return
 
-    const requiredRecipients = requiredMunicipalityEmails
-    const extraRecipients = normalizeEmailList(additionalManifestRecipients)
-    const recipients = normalizeEmailList([...requiredRecipients, ...extraRecipients].join(", "))
+    const requiredRecipients =
+      requiredMunicipalityEmails
 
-    setManifestRecipients(requiredRecipients.join(", "))
-    setAdditionalManifestRecipients(extraRecipients.join(", "))
+    const requiredRecipientSet = new Set(
+      requiredRecipients.map(
+        (email) => email.toLowerCase(),
+      ),
+    )
+
+    const ccRecipients = normalizeEmailList(
+      additionalManifestRecipients,
+    ).filter(
+      (email) =>
+        !requiredRecipientSet.has(
+          email.toLowerCase(),
+        ),
+    )
+
+    setManifestRecipients(
+      requiredRecipients.join(", "),
+    )
+
+    setAdditionalManifestRecipients(
+      ccRecipients.join(", "),
+    )
 
     if (requiredRecipients.length === 0) {
       toast.error("Município sem e-mail cadastrado no Admin Judicial.")
@@ -3301,8 +3753,18 @@ function toPdfHex(value: string) {
       return
     }
 
+    const copyRecipientsHtml =
+      ccRecipients.length > 0
+        ? `<p><strong>C&oacute;pia:</strong> ${ccRecipients
+            .map((email) => escapeHtml(email))
+            .join(", ")}</p>`
+        : ""
+
     const composedHtml = `
-      <p><strong>Destinat&aacute;rios:</strong> ${recipients.map((email) => escapeHtml(email)).join(", ")}</p>
+      <p><strong>Destinat&aacute;rios:</strong> ${requiredRecipients
+        .map((email) => escapeHtml(email))
+        .join(", ")}</p>
+      ${copyRecipientsHtml}
       <p><strong>Assunto:</strong> ${escapeHtml(manifestSubject.trim())}</p>
       <hr />
       ${html}
@@ -3315,7 +3777,11 @@ function toPdfHex(value: string) {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          to: recipients,
+          to: requiredRecipients,
+          cc:
+            ccRecipients.length > 0
+              ? ccRecipients
+              : undefined,
           subject: manifestSubject.trim(),
           html,
           text: htmlToText(html),
@@ -5255,14 +5721,14 @@ function toPdfHex(value: string) {
                       readOnly
                       className="bg-muted/50"
                     />
-                    <Label className="mb-1 block text-xs">E-mails adicionais</Label>
+                    <Label className="mb-1 block text-xs">E-mails em c&oacute;pia (CC)</Label>
                     <Input
                       value={additionalManifestRecipients}
                       onChange={(e) => setAdditionalManifestRecipients(e.target.value)}
                       placeholder="email.extra@municipio.gov.br, outro@email.gov.br"
                     />
                     <p className="text-xs text-muted-foreground">
-                      O e-mail cadastrado do munic&iacute;pio n&atilde;o pode ser removido. Use este campo apenas para acrescentar outros destinat&aacute;rios.
+                      O e-mail fixo do munic&iacute;pio permanece como destinat&aacute;rio principal. Os endere&ccedil;os deste campo receber&atilde;o uma c&oacute;pia.
                     </p>
                   </div>
                   <div>
@@ -5275,6 +5741,7 @@ function toPdfHex(value: string) {
                   </div>
                 </div>
 
+                {renderQuickCopyEmailPanel()}
 
                 <div className="space-y-2 rounded-xl border border-border bg-muted/10 p-3">
                   <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-background p-2">

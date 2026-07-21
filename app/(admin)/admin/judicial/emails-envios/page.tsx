@@ -44,6 +44,9 @@ const emptyFilters: Filters = {
   dataFim: "",
 }
 
+// EMAILS_ENVIOS_PAGINACAO_PROTOCOLos_10
+const PROTOCOLS_PER_PAGE = 10
+
 function formatDate(value: string | null) {
   if (!value) return "-"
   const parsed = new Date(value)
@@ -69,10 +72,37 @@ export default function JudicialEmailsEnviosPage() {
   const [loading, setLoading] = useState(false)
   const [sending, setSending] = useState(false)
   const [selected, setSelected] = useState<Record<string, boolean>>({})
+  const [page, setPage] = useState(1)
 
   const selectedProtocols = useMemo(
     () => Object.entries(selected).filter(([, checked]) => checked).map(([protocolo]) => protocolo),
     [selected],
+  )
+
+  const totalPages = Math.max(
+    1,
+    Math.ceil(items.length / PROTOCOLS_PER_PAGE),
+  )
+
+  const paginatedItems = useMemo(() => {
+    const start = (page - 1) * PROTOCOLS_PER_PAGE
+    return items.slice(start, start + PROTOCOLS_PER_PAGE)
+  }, [items, page])
+
+  const currentPageAllSelected =
+    paginatedItems.length > 0 &&
+    paginatedItems.every((item) =>
+      Boolean(selected[item.protocolo]),
+    )
+
+  const currentPageStart =
+    items.length === 0
+      ? 0
+      : (page - 1) * PROTOCOLS_PER_PAGE + 1
+
+  const currentPageEnd = Math.min(
+    page * PROTOCOLS_PER_PAGE,
+    items.length,
   )
 
   useEffect(() => {
@@ -110,20 +140,26 @@ export default function JudicialEmailsEnviosPage() {
       const nextItems = Array.isArray(json.items) ? json.items : []
       setItems(nextItems)
       setSelected({})
+      setPage(1)
     } finally {
       setLoading(false)
     }
   }
 
   function toggleAll(checked: boolean) {
-    if (!checked) {
-      setSelected({})
-      return
-    }
+    setSelected((current) => {
+      const next = { ...current }
 
-    const next: Record<string, boolean> = {}
-    for (const item of items) next[item.protocolo] = true
-    setSelected(next)
+      for (const item of paginatedItems) {
+        if (checked) {
+          next[item.protocolo] = true
+        } else {
+          delete next[item.protocolo]
+        }
+      }
+
+      return next
+    })
   }
 
   async function resend(protocolos: string[], allFiltered = false) {
@@ -237,7 +273,7 @@ export default function JudicialEmailsEnviosPage() {
               <thead className="bg-muted/50 text-left">
                 <tr>
                   <th className="w-10 px-3 py-3">
-                    <input type="checkbox" checked={items.length > 0 && selectedProtocols.length === items.length} onChange={(event) => toggleAll(event.target.checked)} />
+                    <input type="checkbox" checked={currentPageAllSelected} onChange={(event) => toggleAll(event.target.checked)} />
                   </th>
                   <th className="px-3 py-3">Nome do paciente</th>
                   <th className="px-3 py-3">Processo</th>
@@ -254,7 +290,7 @@ export default function JudicialEmailsEnviosPage() {
                 ) : items.length === 0 ? (
                   <tr><td colSpan={8} className="px-3 py-8 text-center text-muted-foreground">Nenhum protocolo encontrado.</td></tr>
                 ) : (
-                  items.map((item) => (
+                  paginatedItems.map((item) => (
                     <tr key={item.protocolo} className="border-t border-border">
                       <td className="px-3 py-3">
                         <input type="checkbox" checked={Boolean(selected[item.protocolo])} onChange={(event) => setSelected((current) => ({ ...current, [item.protocolo]: event.target.checked }))} />
@@ -279,6 +315,50 @@ export default function JudicialEmailsEnviosPage() {
               </tbody>
             </table>
           </div>
+
+          {items.length > 0 ? (
+            <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-muted-foreground">
+                Exibindo {currentPageStart} a {currentPageEnd} de {items.length} protocolo(s).
+              </p>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="bg-transparent"
+                  onClick={() =>
+                    setPage((current) =>
+                      Math.max(1, current - 1),
+                    )
+                  }
+                  disabled={loading || page <= 1}
+                >
+                  Anterior
+                </Button>
+
+                <span className="min-w-[110px] text-center text-sm text-muted-foreground">
+                  Página {page} de {totalPages}
+                </span>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="bg-transparent"
+                  onClick={() =>
+                    setPage((current) =>
+                      Math.min(totalPages, current + 1),
+                    )
+                  }
+                  disabled={loading || page >= totalPages}
+                >
+                  Próxima
+                </Button>
+              </div>
+            </div>
+          ) : null}
         </CardContent>
       </Card>
     </div>

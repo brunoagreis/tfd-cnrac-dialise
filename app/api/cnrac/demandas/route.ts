@@ -361,3 +361,163 @@ export async function POST(req: NextRequest) {
     )
   }
 }
+
+export async function PATCH(req: NextRequest) {
+  try {
+    const body = await req.json().catch(() => ({}))
+    const action = normalizeText(body?.action).toLowerCase()
+    const id = normalizeText(body?.id || body?.monitoramentoId || body?.demandaId || body?.protocolo)
+    const motivo = normalizeText(body?.motivo || body?.reason || body?.description)
+    const userId = normalizeText(body?.user?.id || body?.userId)
+    const userName = normalizeText(body?.user?.nome || body?.user?.name || body?.userName) || "Sistema"
+    const userEmail = normalizeText(body?.user?.email || body?.userEmail)
+
+    if (action && action !== "encerrar" && action !== "encerrar_processo") {
+      return NextResponse.json(
+        { ok: false, error: "Ação inválida." },
+        { status: 400 },
+      )
+    }
+
+    if (!id) {
+      return NextResponse.json(
+        { ok: false, error: "Identificador do processo não informado." },
+        { status: 400 },
+      )
+    }
+
+    if (!motivo) {
+      return NextResponse.json(
+        { ok: false, error: "Informe o motivo do encerramento." },
+        { status: 400 },
+      )
+    }
+
+    const rows = await prisma.$queryRawUnsafe<Array<{
+      monitoramentoId: string
+      demandaId: string | null
+      protocolo: string | null
+      pacienteNome: string | null
+      statusAnterior: string | null
+      ativoAnterior: boolean | null
+    }>>(
+      `
+        SELECT
+          b.id::text AS "monitoramentoId",
+          COALESCE(b.demanda_id::text, d.id::text) AS "demandaId",
+          COALESCE(NULLIF(b.ficha_core, ''), d.protocolo::text, b.demanda_id::text, b.id::text) AS protocolo,
+          COALESCE(NULLIF(b.nome_paciente, ''), p.nome, 'SEM NOME') AS "pacienteNome",
+          NULLIF(b.status_monitoramento_atual, '') AS "statusAnterior",
+          b.ativo_monitoramento AS "ativoAnterior"
+        FROM public.judicial_monitoramento_base b
+        LEFT JOIN public.demandas d
+          ON d.id::text = COALESCE(NULLIF(b.origem_registro_id, ''), b.demanda_id::text)
+        LEFT JOIN public.pacientes p
+          ON p.id::text = COALESCE(b.paciente_id::text, d."pacienteId"::text)
+        WHERE UPPER(COALESCE(b.origem_modulo, '')) = 'CNRAC'
+          AND (
+            b.id::text = $1
+            OR b.demanda_id::text = $1
+            OR b.origem_registro_id::text = $1
+            OR d.id::text = $1
+            OR d.protocolo::text = $1
+            OR b.ficha_core::text = $1
+          )
+        ORDER BY b.id DESC
+        LIMIT 1
+      `,
+      id,
+    )
+
+    const item = rows[0]
+
+    if (!item) {
+      return NextResponse.json(
+        { ok: false, error: "Processo CNRAC não encontrado." },
+        { status: 404 },
+      )
+    }
+
+    await prisma.$executeRawUnsafe(
+      `
+        UPDATE public.judicial_monitoramento_base
+        SET
+          ativo_monitoramento = FALSE,
+          status_monitoramento_atual = 'RESOLVIDO',
+          data_ultimo_monitoramento = NOW(),
+          updated_at = NOW()
+        WHERE id::text = $1
+      `,
+      item.monitoramentoId,
+    )
+
+    await prisma.$executeRawUnsafe(
+      `
+        INSERT INTO public.sistema_auditoria (
+          tabela_nome,
+          acao,
+          registro_id,
+          usuario_id,
+          usuario_nome,
+          usuario_email,
+          modulo_codigo,
+          data_hora,
+          dados_anteriores,
+          dados_novos,
+          campos_alterados,
+          observacao
+        )
+        VALUES (
+          'judicial_monitoramento_base',
+          'encerrar_processo_cnrac',
+          $1,
+          $2,
+          $3,
+          $4,
+          'CNRAC',
+          NOW(),
+          jsonb_build_object(
+            'ativo_monitoramento', $5::boolean,
+            'status_monitoramento_atual', $6::text
+          ),
+          jsonb_build_object(
+            'ativo_monitoramento', false,
+            'status_monitoramento_atual', 'RESOLVIDO',
+            'motivo', $7::text
+          ),
+          jsonb_build_array('ativo_monitoramento', 'status_monitoramento_atual'),
+          $8
+        )
+      `,
+      item.monitoramentoId,
+      userId || null,
+      userName,
+      userEmail || null,
+      item.ativoAnterior ?? true,
+      item.statusAnterior || null,
+      motivo,
+      `Processo CNRAC encerrado manualmente. ${motivo}`,
+    ).catch((auditError) => {
+      console.error("[PATCH /api/cnrac/demandas] auditoria:", auditError)
+    })
+
+    return NextResponse.json({
+      ok: true,
+      item: {
+        id: item.monitoramentoId,
+        demandaId: item.demandaId,
+        protocolo: item.protocolo,
+        pacienteNome: item.pacienteNome,
+        status: "resolvido",
+        ativoMonitoramento: false,
+      },
+    })
+  } catch (error) {
+    console.error("[PATCH /api/cnrac/demandas] erro:", error)
+
+    return NextResponse.json(
+      { ok: false, error: error instanceof Error ? error.message : "Erro ao encerrar processo CNRAC." },
+      { status: 500 },
+    )
+  }
+}

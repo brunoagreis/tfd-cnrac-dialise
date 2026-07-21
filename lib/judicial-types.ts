@@ -353,7 +353,7 @@ export const MOVEMENT_TYPE_LABELS: Record<MovementType, string> = {
   comunicado_agendamento: "Comunicado Agendamento",
   agendamento: "Agendamento",
   manifestacao_municipio: "Manifestação do município",
-  encaminhar_demanda_municipio: "Encaminhamento de Demanda ao Munic\u00edpio",
+  encaminhar_demanda_municipio: "Encaminhamento de Demanda ou E-mail ao Munic\u00edpio",
   resposta_procuradoria: "Resposta a Procuradoria",
   solicitacao_inclusao: "Solicitação de inclusão",
   reiteracao: "Reiteração",

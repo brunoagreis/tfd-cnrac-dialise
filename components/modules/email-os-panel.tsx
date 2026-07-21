@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
+import { createPortal } from "react-dom"
 import { ArrowRightLeft, FileText, RefreshCcw, X } from "lucide-react"
 import { toast } from "sonner"
 
@@ -13,6 +14,23 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { MunicipalitySelectField } from "@/components/paciente/municipality-select-field"
 type OsItem = { id: string; protocolo: string; assunto: string; remetente: string; recebidoEm: string; pgeNet: string; processo: string; status: string; moduloDestino: string; responsavelId?: string; responsavelNome: string; responsavelEmail: string; corpoResumo?: string; anexos: Array<{ name: string; url: string; mimeType: string; size: number }> }
+
+type EmailOsLinkResult = {
+  id: string
+  protocolo: string
+  modulo: string
+  pacienteNome: string
+  pacienteCpf: string
+  pacienteCns: string
+  processo: string
+  pgeNet: string
+  cid: string
+  codigoSigtap: string
+  descricaoSigtap: string
+  especialidade: string
+  subespecialidade: string
+  status: string
+}
 type UserItem = { id: string; nome: string; email: string }
 const MODULES = [{ value: "judicial", label: "Judicial" }, { value: "tfd", label: "TFD" }, { value: "cnrac", label: "CNRAC" }, { value: "hemodialise", label: "Hemodiálise" }]
 function formatDate(value: string) { const date = new Date(value); return Number.isNaN(date.getTime()) ? "-" : date.toLocaleString("pt-BR") }
@@ -65,11 +83,34 @@ export function EmailOsPanel({ modulo }: { modulo: string }) {
   const { user } = useAuth()
   const canManageEmailOs = isAdmin(user)
   const [items, setItems] = useState<OsItem[]>([])
+  // EMAIL_OS_ESTADOS_VINCULO_MANUAL
+  const [linkingOs, setLinkingOs] = useState<OsItem | null>(null)
+  const [linkSearch, setLinkSearch] = useState("")
+  const [linkResults, setLinkResults] = useState<EmailOsLinkResult[]>([])
+  const [selectedLink, setSelectedLink] = useState<EmailOsLinkResult | null>(null)
+  const [linkSearching, setLinkSearching] = useState(false)
+  const [linkSaving, setLinkSaving] = useState(false)
   const [users, setUsers] = useState<UserItem[]>([])
   const [loading, setLoading] = useState(false)
+  // EMAIL_OS_BADGE_TOTAL_ATIVAS_CADASTRO
+  const [totalAssignedActive, setTotalAssignedActive] = useState(0)
   const [selectedModule, setSelectedModule] = useState<Record<string, string>>({})
   const [selectedUser, setSelectedUser] = useState<Record<string, string>>({})
   const [registeringOs, setRegisteringOs] = useState<OsItem | null>(null)
+
+  // EMAIL_OS_DIALOG_TOP_LAYER
+  const linkDialogRef = useRef<HTMLDialogElement | null>(null)
+
+  useEffect(() => {
+    const dialog = linkDialogRef.current
+
+    if (!dialog || !linkingOs) return
+
+    if (!dialog.open) {
+      dialog.showModal()
+    }
+  }, [linkingOs])
+
 
   function itemHasResponsible(item: OsItem) {
     const responsibleId = normalizeEmailOsPanelValue(item?.responsavelId)
@@ -107,7 +148,31 @@ export function EmailOsPanel({ modulo }: { modulo: string }) {
       const osRes = await fetch(`/api/email-os?modulo=${encodeURIComponent(modulo)}`, { cache: "no-store" })
       const osJson = await osRes.json().catch(() => ({}))
 
-      setItems(osRes.ok && osJson?.ok && Array.isArray(osJson.items) ? osJson.items : [])
+      const loadedItems =
+        osRes.ok &&
+        osJson?.ok &&
+        Array.isArray(osJson.items)
+          ? osJson.items
+          : []
+
+      setItems(loadedItems)
+
+      const rawAssignedActive =
+        osJson?.totals?.assignedActive
+
+      const parsedAssignedActive =
+        Number(rawAssignedActive)
+
+      setTotalAssignedActive(
+        rawAssignedActive !== undefined &&
+        rawAssignedActive !== null &&
+        Number.isFinite(parsedAssignedActive)
+          ? Math.max(
+              0,
+              Math.trunc(parsedAssignedActive),
+            )
+          : loadedItems.filter(itemHasResponsible).length,
+      )
 
       if (canManageEmailOs) {
         const rulesRes = await fetch("/api/admin/judicial/email-integracao/regras", { cache: "no-store" })
@@ -188,6 +253,101 @@ export function EmailOsPanel({ modulo }: { modulo: string }) {
     await load()
   }
 
+  // EMAIL_OS_FUNCOES_VINCULO_MANUAL
+  function openLinkModal(os: OsItem) {
+    setLinkingOs(os)
+    setLinkSearch(os.processo || os.pgeNet || "")
+    setLinkResults([])
+    setSelectedLink(null)
+  }
+
+  function closeLinkModal() {
+    if (linkSaving) return
+    setLinkingOs(null)
+    setLinkSearch("")
+    setLinkResults([])
+    setSelectedLink(null)
+  }
+
+  async function searchExistingDemand() {
+    const termo = linkSearch.trim()
+
+    if (termo.length < 3) {
+      return toast.error("Informe ao menos 3 caracteres para pesquisar.")
+    }
+
+    setLinkSearching(true)
+    setSelectedLink(null)
+
+    try {
+      const params = new URLSearchParams({
+        action: "pesquisar_vinculo",
+        termo,
+      })
+
+      const response = await fetch(`/api/email-os?${params.toString()}`, {
+        cache: "no-store",
+      })
+
+      const json = await response.json().catch(() => ({}))
+
+      if (!response.ok || !json?.ok) {
+        setLinkResults([])
+        return toast.error(json?.error || "Erro ao pesquisar demandas.")
+      }
+
+      const results = Array.isArray(json?.items) ? json.items : []
+      setLinkResults(results)
+
+      if (results.length === 0) {
+        toast.error("Nenhuma demanda foi encontrada.")
+      }
+    } finally {
+      setLinkSearching(false)
+    }
+  }
+
+  async function confirmExistingDemandLink() {
+    if (!linkingOs || !selectedLink) {
+      return toast.error("Selecione uma demanda para realizar o vínculo.")
+    }
+
+    setLinkSaving(true)
+
+    try {
+      const response = await fetch("/api/email-os", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "vincular_demanda_existente",
+          osId: linkingOs.id,
+          demandaId: selectedLink.id,
+          user,
+        }),
+      })
+
+      const json = await response.json().catch(() => ({}))
+
+      if (!response.ok || !json?.ok) {
+        return toast.error(json?.error || "Erro ao vincular a OS.")
+      }
+
+      toast.success(
+        json?.movimentacaoCriada === false
+          ? "A OS já estava vinculada a esta demanda."
+          : "OS vinculada e movimentação criada com sucesso.",
+      )
+
+      setLinkingOs(null)
+      setLinkSearch("")
+      setLinkResults([])
+      setSelectedLink(null)
+
+      await load()
+    } finally {
+      setLinkSaving(false)
+    }
+  }
   function renderEmailOsItem(os: OsItem) {
     return (
       <div key={os.id} className="rounded-xl border border-border bg-background p-4 text-sm">
@@ -276,6 +436,14 @@ export function EmailOsPanel({ modulo }: { modulo: string }) {
             </div>
           ) : null}
 
+          <Button
+            type="button"
+            variant="outline"
+            className="bg-transparent"
+            onClick={() => openLinkModal(os)}
+          >
+            Vincular a protocolo/processo
+          </Button>
           <Button type="button" onClick={() => openOsInOfficialPatientFlow(os)}>
             Cadastrar no módulo
           </Button>
@@ -290,6 +458,267 @@ export function EmailOsPanel({ modulo }: { modulo: string }) {
 
   return (
     <>
+      {/* EMAIL_OS_MODAL_VINCULO_MANUAL */}
+      {linkingOs && typeof document !== "undefined" ? createPortal(
+        <dialog
+          ref={linkDialogRef}
+          className="m-auto max-h-[92dvh] w-[calc(100vw-2rem)] max-w-3xl overflow-visible border-0 bg-transparent p-0 backdrop:bg-slate-950/60 backdrop:backdrop-blur-[2px]"
+          aria-labelledby="email-os-link-modal-title"
+          onCancel={(event) => {
+            event.preventDefault()
+            closeLinkModal()
+          }}
+          onClick={(event) => {
+            if (event.target === event.currentTarget) {
+              closeLinkModal()
+            }
+          }}
+        >
+          <div className="max-h-[92dvh] w-full overflow-y-auto rounded-2xl border bg-background shadow-2xl">
+            <div className="flex items-start justify-between gap-4 border-b px-6 py-5">
+              <div className="min-w-0">
+                <h2
+                  id="email-os-link-modal-title"
+                  className="text-xl font-semibold tracking-tight"
+                >
+                  Vincular OS a uma demanda
+                </h2>
+
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Pesquise por protocolo, número do processo ou PGE.net.
+                </p>
+              </div>
+
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="shrink-0 rounded-full"
+                onClick={closeLinkModal}
+                disabled={linkSaving}
+                aria-label="Fechar modal de vínculo"
+                title="Fechar"
+              >
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+
+            <div className="space-y-5 px-6 py-5">
+              <div className="rounded-xl border bg-muted/30 p-4">
+                <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Ordem de Serviço selecionada
+                </p>
+
+                <div className="grid gap-x-6 gap-y-3 text-sm md:grid-cols-2">
+                  <div>
+                    <span className="font-medium">OS:</span>{" "}
+                    {linkingOs.protocolo || linkingOs.id}
+                  </div>
+
+                  <div>
+                    <span className="font-medium">PGE.net:</span>{" "}
+                    {linkingOs.pgeNet || "-"}
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <span className="font-medium">Assunto:</span>{" "}
+                    {linkingOs.assunto || "Sem assunto"}
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <span className="font-medium">Processo informado:</span>{" "}
+                    {linkingOs.processo || "-"}
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <Label htmlFor="email-os-link-search">
+                  Localizar demanda existente
+                </Label>
+
+                <div className="mt-2 flex flex-col gap-3 sm:flex-row">
+                  <Input
+                    id="email-os-link-search"
+                    value={linkSearch}
+                    onChange={(event) => setLinkSearch(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault()
+                        void searchExistingDemand()
+                      }
+                    }}
+                    placeholder="Digite protocolo, processo ou PGE.net"
+                    disabled={linkSearching || linkSaving}
+                    className="h-11 flex-1"
+                    autoFocus
+                  />
+
+                  <Button
+                    type="button"
+                    className="h-11 px-6"
+                    onClick={() => void searchExistingDemand()}
+                    disabled={linkSearching || linkSaving}
+                  >
+                    {linkSearching ? "Pesquisando..." : "Pesquisar"}
+                  </Button>
+                </div>
+
+                <p className="mt-2 text-xs text-muted-foreground">
+                  A pesquisa contempla demandas dos módulos Judicial e
+                  Pré-Judicial.
+                </p>
+              </div>
+
+              {linkResults.length > 0 ? (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm font-semibold">
+                      Demandas encontradas
+                    </p>
+
+                    <Badge variant="secondary">
+                      {linkResults.length} resultado
+                      {linkResults.length === 1 ? "" : "s"}
+                    </Badge>
+                  </div>
+
+                  <div className="space-y-3">
+                    {linkResults.map((result) => {
+                      const selected = selectedLink?.id === result.id
+
+                      return (
+                        <button
+                          key={result.id}
+                          type="button"
+                          className={`w-full rounded-xl border p-4 text-left transition ${
+                            selected
+                              ? "border-primary bg-primary/5 ring-1 ring-primary"
+                              : "bg-background hover:border-primary/40 hover:bg-muted/30"
+                          }`}
+                          onClick={() => setSelectedLink(result)}
+                          disabled={linkSaving}
+                        >
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Badge variant="secondary">
+                              {result.protocolo || result.id}
+                            </Badge>
+
+                            <Badge variant="outline">
+                              {result.modulo === "pre_judicial"
+                                ? "Pré-Judicial"
+                                : "Judicial"}
+                            </Badge>
+
+                            {result.status ? (
+                              <Badge variant="outline">
+                                {result.status}
+                              </Badge>
+                            ) : null}
+                          </div>
+
+                          <div className="mt-4 grid gap-x-6 gap-y-2 text-sm md:grid-cols-2">
+                            <div className="md:col-span-2">
+                              <span className="font-medium">Paciente:</span>{" "}
+                              {result.pacienteNome || "-"}
+                            </div>
+
+                            <div>
+                              <span className="font-medium">CPF:</span>{" "}
+                              {result.pacienteCpf || "-"}
+                            </div>
+
+                            <div>
+                              <span className="font-medium">CNS:</span>{" "}
+                              {result.pacienteCns || "-"}
+                            </div>
+
+                            <div>
+                              <span className="font-medium">Processo:</span>{" "}
+                              {result.processo || "-"}
+                            </div>
+
+                            <div>
+                              <span className="font-medium">PGE.net:</span>{" "}
+                              {result.pgeNet || "-"}
+                            </div>
+
+                            <div>
+                              <span className="font-medium">CID:</span>{" "}
+                              {result.cid || "-"}
+                            </div>
+
+                            <div>
+                              <span className="font-medium">SIGTAP:</span>{" "}
+                              {[result.codigoSigtap, result.descricaoSigtap]
+                                .filter(Boolean)
+                                .join(" - ") || "-"}
+                            </div>
+
+                            <div className="md:col-span-2">
+                              <span className="font-medium">
+                                Especialidade:
+                              </span>{" "}
+                              {[result.especialidade, result.subespecialidade]
+                                .filter(Boolean)
+                                .join(" / ") || "-"}
+                            </div>
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              ) : null}
+
+              {selectedLink ? (
+                <div className="rounded-xl border border-primary/30 bg-primary/5 p-4">
+                  <p className="font-semibold">Confirmar vínculo</p>
+
+                  <p className="mt-2 text-sm">
+                    A OS{" "}
+                    <strong>
+                      {linkingOs.protocolo || linkingOs.id}
+                    </strong>{" "}
+                    será vinculada ao protocolo{" "}
+                    <strong>{selectedLink.protocolo}</strong>, referente ao
+                    paciente{" "}
+                    <strong>{selectedLink.pacienteNome}</strong>.
+                  </p>
+
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    O assunto, o texto e os anexos da OS serão inseridos em uma
+                    movimentação da demanda.
+                  </p>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="flex flex-col-reverse gap-3 border-t bg-muted/20 px-6 py-4 sm:flex-row sm:justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                className="bg-background"
+                onClick={closeLinkModal}
+                disabled={linkSaving}
+              >
+                Cancelar
+              </Button>
+
+              <Button
+                type="button"
+                onClick={() => void confirmExistingDemandLink()}
+                disabled={!selectedLink || linkSaving}
+              >
+                {linkSaving
+                  ? "Vinculando..."
+                  : "Confirmar vínculo e criar movimentação"}
+              </Button>
+            </div>
+          </div>
+        </dialog>
+      , document.body) : null}
+
       <details className="rounded-xl border border-amber-200 bg-amber-50/40 shadow-sm">
         <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-3 p-4">
           <div>
@@ -342,11 +771,11 @@ export function EmailOsPanel({ modulo }: { modulo: string }) {
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-base font-semibold">OS já atribuídas</span>
-                <Badge variant="outline">{assignedEmailOsItems.length}</Badge>
+                <Badge variant="outline">{totalAssignedActive}</Badge>
               </div>
 
               <p className="mt-1 text-sm text-muted-foreground">
-                Bloco recolhido para não alongar a página. Clique para visualizar as OS que já possuem responsável.
+                Total de OS ativas, já atribuídas e que ainda aguardam cadastro. A lista exibe até 200 registros.
               </p>
             </div>
 
@@ -927,5 +1356,3 @@ function Field({
     </div>
   )
 }
-
-

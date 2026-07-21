@@ -1,6 +1,7 @@
-﻿import { NextRequest, NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { randomUUID } from "crypto"
 import { prisma } from "@/lib/prisma"
+import { sendMunicipalitySchedulingNotification } from "@/lib/municipality-notifications"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -10,6 +11,14 @@ type JudicialBaseRow = {
   demandaId: string | null
   pacienteNome: string | null
   protocolo: string | null
+  municipio: string | null
+  numeroProcesso: string | null
+  fichaCore: string | null
+}
+
+type SchedulingFichaRow = {
+  id: string
+  fichaNumero: string | null
 }
 
 type ReturnRule = {
@@ -269,7 +278,7 @@ function movementTypeLabel(type: string) {
     resolvido: "Resolvido",
     arquivado: "Arquivado",
     manifestacao_municipio: "Manifestação do município",
-    encaminhar_demanda_municipio: "Encaminhamento de Demanda ao Município",
+    encaminhar_demanda_municipio: "Encaminhamento de Demanda ou E-mail ao Município",
   resposta_procuradoria: "Resposta a Procuradoria",
   }
 
@@ -283,7 +292,45 @@ async function findJudicialCase(decodedId: string) {
         b.id::text AS "monitoramentoId",
         b.demanda_id::text AS "demandaId",
         b.nome_paciente AS "pacienteNome",
-        COALESCE(d.protocolo::text, b.demanda_id::text) AS protocolo
+        COALESCE(
+          d.protocolo::text,
+          b.demanda_id::text
+        ) AS protocolo,
+        COALESCE(
+          NULLIF(to_jsonb(b)->>'municipio', ''),
+          NULLIF(to_jsonb(b)->>'municipio_nome', ''),
+          NULLIF(to_jsonb(b)->>'municipality_name', ''),
+          NULLIF(to_jsonb(b)->>'nome_municipio', ''),
+          NULLIF(to_jsonb(b)->>'municipio_residencia', ''),
+          NULLIF(to_jsonb(d)->>'municipio', ''),
+          NULLIF(to_jsonb(d)->>'municipio_nome', ''),
+          NULLIF(to_jsonb(d)->>'municipality_name', ''),
+          NULLIF(to_jsonb(d)->>'nome_municipio', '')
+        ) AS municipio,
+        COALESCE(
+          (
+            SELECT pv.numero::text
+            FROM public.judicial_processos_vinculados pv
+            WHERE pv.monitoramento_id = b.id
+              AND COALESCE(pv.ativo, TRUE) = TRUE
+            ORDER BY
+              CASE
+                WHEN LOWER(COALESCE(pv.tipo, ''))
+                  LIKE '%process%'
+                THEN 0
+                ELSE 1
+              END,
+              pv.id DESC
+            LIMIT 1
+          ),
+          NULLIF(to_jsonb(b)->>'numero_processo', ''),
+          NULLIF(to_jsonb(b)->>'processo', ''),
+          NULLIF(to_jsonb(d)->>'numero_processo', ''),
+          NULLIF(to_jsonb(d)->>'processo', ''),
+          d.protocolo::text,
+          b.demanda_id::text
+        ) AS "numeroProcesso",
+        NULLIF(b.ficha_core, '') AS "fichaCore"
       FROM public.judicial_monitoramento_base b
       LEFT JOIN public.demandas d
         ON d.id = b.demanda_id
@@ -304,6 +351,96 @@ async function findJudicialCase(decodedId: string) {
   return rows[0] ?? null
 }
 
+
+// JUDICIAL_SCHEDULING_EMAIL_NOTIFICATION
+async function loadJudicialSchedulingFichas(
+  monitoramentoId: string,
+  fichaIds: string[],
+) {
+  const ids = Array.from(
+    new Set(
+      fichaIds
+        .map((item) => text(item))
+        .filter(Boolean),
+    ),
+  )
+
+  if (ids.length === 0) {
+    return prisma.$queryRawUnsafe<
+      SchedulingFichaRow[]
+    >(
+      `
+        SELECT
+          f.id::text AS id,
+          COALESCE(
+            NULLIF(to_jsonb(f)->>'number', ''),
+            NULLIF(to_jsonb(f)->>'numero', ''),
+            NULLIF(to_jsonb(f)->>'ficha_core', ''),
+            NULLIF(to_jsonb(f)->>'ficha', ''),
+            f.id::text
+          ) AS "fichaNumero"
+        FROM public.judicial_fichas f
+        WHERE f.monitoramento_id = $1::bigint
+          AND COALESCE(f.active, TRUE) = TRUE
+        ORDER BY
+          f.updated_at DESC NULLS LAST,
+          f.created_at DESC NULLS LAST
+        LIMIT 1
+      `,
+      monitoramentoId,
+    )
+  }
+
+  return prisma.$queryRawUnsafe<
+    SchedulingFichaRow[]
+  >(
+    `
+      SELECT
+        f.id::text AS id,
+        COALESCE(
+          NULLIF(to_jsonb(f)->>'number', ''),
+          NULLIF(to_jsonb(f)->>'numero', ''),
+          NULLIF(to_jsonb(f)->>'ficha_core', ''),
+          NULLIF(to_jsonb(f)->>'ficha', ''),
+          f.id::text
+        ) AS "fichaNumero"
+      FROM public.judicial_fichas f
+      WHERE f.monitoramento_id = $1::bigint
+        AND f.id::text IN (
+          SELECT value
+          FROM jsonb_array_elements_text($2::jsonb)
+        )
+    `,
+    monitoramentoId,
+    JSON.stringify(ids),
+  )
+}
+
+function formatSchedulingEmailDate(
+  value: string,
+) {
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+
+  return new Intl.DateTimeFormat("pt-BR", {
+    dateStyle: "short",
+    timeStyle: "short",
+    timeZone: "America/Campo_Grande",
+  }).format(date)
+}
+
+function schedulingEmailKeyPart(
+  value: unknown,
+) {
+  return text(value)
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+}
 export async function POST(
   req: NextRequest,
   context: { params: Promise<{ id: string }> },
@@ -691,6 +828,153 @@ export async function POST(
       }
     })
 
+
+    const emailMunicipioAgendamento:
+      Array<Record<string, unknown>> = []
+
+    if (
+      type === "agendamento" &&
+      appointmentDate
+    ) {
+      try {
+        const sourceFichas =
+          appointmentFichas.length > 0
+            ? appointmentFichas
+            : [
+                {
+                  id: "",
+                  appointmentDate,
+                  notes: "",
+                },
+              ]
+
+        const fichaRows =
+          await loadJudicialSchedulingFichas(
+            processo.monitoramentoId,
+            sourceFichas
+              .map((item) => item.id)
+              .filter(Boolean),
+          )
+
+        const fichaMap = new Map(
+          fichaRows.map((item) => [
+            item.id,
+            text(item.fichaNumero),
+          ]),
+        )
+
+        const fallbackFicha =
+          text(fichaRows[0]?.fichaNumero) ||
+          text(processo.fichaCore) ||
+          "Não informada"
+
+        const groupedByDate =
+          new Map<string, string[]>()
+
+        for (const item of sourceFichas) {
+          const schedulingDate =
+            item.appointmentDate ||
+            appointmentDate
+
+          if (!schedulingDate) continue
+
+          const fichaNumero =
+            text(fichaMap.get(item.id)) ||
+            text(item.id) ||
+            fallbackFicha
+
+          const current =
+            groupedByDate.get(
+              schedulingDate,
+            ) || []
+
+          current.push(fichaNumero)
+
+          groupedByDate.set(
+            schedulingDate,
+            current,
+          )
+        }
+
+        for (
+          const [
+            schedulingDate,
+            fichaNumbers,
+          ] of groupedByDate.entries()
+        ) {
+          const fichas = Array.from(
+            new Set(
+              fichaNumbers
+                .map((item) => text(item))
+                .filter(Boolean),
+            ),
+          )
+            .sort()
+            .join(", ") || fallbackFicha
+
+          const protocolo =
+            text(processo.protocolo) ||
+            text(processo.demandaId) ||
+            text(processo.monitoramentoId)
+
+          const numeroProcesso =
+            text(processo.numeroProcesso) ||
+            protocolo
+
+          const duplicateKey = [
+            "judicial",
+            numeroProcesso,
+            fichas,
+            schedulingDate,
+          ]
+            .map(schedulingEmailKeyPart)
+            .join("|")
+
+          const emailResult =
+            await sendMunicipalitySchedulingNotification(
+              {
+                module: "judicial",
+                protocolo,
+                pacienteNome:
+                  text(processo.pacienteNome) ||
+                  "Paciente não informado",
+                municipio:
+                  text(processo.municipio),
+                numeroProcesso,
+                fichaNumero: fichas,
+                dataAgendamento:
+                  formatSchedulingEmailDate(
+                    schedulingDate,
+                  ),
+                userSistema:
+                  userName || "SIGAJUS",
+                duplicateKey,
+              },
+            )
+
+          emailMunicipioAgendamento.push({
+            dataAgendamento:
+              schedulingDate,
+            fichas,
+            ...emailResult,
+          })
+        }
+      } catch (emailError) {
+        console.error(
+          "JUDICIAL_SCHEDULING_EMAIL_WARNING",
+          emailError,
+        )
+
+        emailMunicipioAgendamento.push({
+          ok: false,
+          skipped: true,
+          reason:
+            emailError instanceof Error
+              ? emailError.message
+              : "Erro ao enviar e-mail de agendamento.",
+        })
+      }
+    }
     return NextResponse.json({
       ok: true,
       item: {
@@ -712,6 +996,7 @@ export async function POST(
         createdAt: new Date().toISOString(),
         createdById: userId,
         createdByName: userName,
+        emailMunicipioAgendamento,
       },
     })
   } catch (error) {

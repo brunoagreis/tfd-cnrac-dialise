@@ -198,6 +198,49 @@ async function findDemandByProcess(processNumber: string): Promise<DemandMatch |
   return rows[0] ?? null
 }
 
+
+function normalizePatientNameKey(value: unknown) {
+  return normalizeSearch(value)
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+}
+
+async function findDemandByPatientText(subject: string, body: string): Promise<DemandMatch | null> {
+  // EMAIL_TRIAGE_MATCH_BY_PATIENT_NAME
+  const haystack = normalizePatientNameKey([subject, body].join(" "))
+  if (haystack.length < 8) return null
+
+  const rows = await prisma.$queryRawUnsafe<DemandMatch[]>(`
+    SELECT
+      d.id::text AS id,
+      d.protocolo,
+      p.nome AS "pacienteNome",
+      b.id::text AS "monitoramentoId",
+      d.id::text AS "demandaId",
+      'Nome do paciente no e-mail' AS "matchSource"
+    FROM public.demandas d
+    INNER JOIN public.pacientes p
+      ON p.id = d."pacienteId"
+    LEFT JOIN public.judicial_monitoramento_base b
+      ON b.demanda_id = d.id
+    WHERE LOWER(COALESCE(d.modulo::text, '')) = 'judicial'
+      AND LENGTH(TRIM(COALESCE(p.nome, ''))) >= 8
+    ORDER BY d."createdAt" DESC
+    LIMIT 800
+  `).catch(() => [] as DemandMatch[])
+
+  const matches = rows.filter((row) => {
+    const nameKey = normalizePatientNameKey(row.pacienteNome)
+    return nameKey.length >= 8 && haystack.includes(nameKey)
+  })
+
+  const uniqueDemandIds = new Set(matches.map((row) => text(row.demandaId || row.id)).filter(Boolean))
+  if (uniqueDemandIds.size !== 1) return null
+
+  return matches[0] || null
+}
+
 async function matchRule(subject: string, body: string, classifier: string): Promise<RuleMatch> {
   const rows = await prisma.$queryRawUnsafe<Array<{ id: string; nome: string; palavras: unknown }>>(`
     SELECT id::text AS id, nome, palavras_chave AS palavras
@@ -404,7 +447,7 @@ export async function processUnreadEmailTriage(limit = 10) {
 
         const extracted = extractEmailTriageFields(subject, body)
         const rule = await matchRule(subject, body, extracted.classifier)
-        const demand = extracted.processo ? await findDemandByProcess(extracted.processo) : null
+        const demand = (extracted.processo ? await findDemandByProcess(extracted.processo) : null) ?? await findDemandByPatientText(subject, body)
         const attachments = parsed.attachments || []
         let emailProcessadoId = ""
         let status = "PROCESSADO"

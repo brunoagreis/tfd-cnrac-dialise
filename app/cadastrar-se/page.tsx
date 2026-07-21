@@ -19,6 +19,50 @@ import { Textarea } from "@/components/ui/textarea"
 
 const TERMS_VERSION = "2026-07-08-cadastro-termos"
 
+
+const ACCESS_LOWERCASE_NAME_WORDS = new Set(["da", "de", "do", "das", "dos", "e"])
+
+function onlyAccessDigits(value: string) {
+  return String(value ?? "").replace(/\D/g, "")
+}
+
+function capitalizeAccessNameToken(value: string) {
+  const lower = String(value ?? "").toLocaleLowerCase("pt-BR")
+  if (!lower) return ""
+  return lower.charAt(0).toLocaleUpperCase("pt-BR") + lower.slice(1)
+}
+
+function formatAccessPersonName(value: string) {
+  const source = String(value ?? "").replace(/\s+/g, " ")
+  const hasTrailingSpace = /\s$/.test(source)
+  const clean = source.trimStart()
+
+  if (!clean.trim()) return ""
+
+  const words = clean.trimEnd().split(" ")
+
+  const formatted = words
+    .map((word, index) => {
+      const lower = word.toLocaleLowerCase("pt-BR")
+
+      if (index > 0 && ACCESS_LOWERCASE_NAME_WORDS.has(lower)) {
+        return lower
+      }
+
+      return lower
+        .split("-")
+        .map(capitalizeAccessNameToken)
+        .join("-")
+    })
+    .join(" ")
+
+  return hasTrailingSpace ? formatted + " " : formatted
+}
+
+function normalizeAccessEmail(value: string) {
+  return String(value ?? "").trim().toLocaleLowerCase("pt-BR")
+}
+
 export default function CadastrarSePage() {
   const [nome, setNome] = useState("")
   const [email, setEmail] = useState("")
@@ -56,9 +100,9 @@ export default function CadastrarSePage() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          nome,
-          email,
-          cpf,
+          nome: formatAccessPersonName(nome).trim(),
+          email: normalizeAccessEmail(email),
+          cpf: onlyAccessDigits(cpf),
           telefone,
           vinculo,
           perfilSolicitado,
@@ -148,30 +192,33 @@ if (!response.ok || !data?.ok) {
             <div className="md:col-span-2">
               <Label className="mb-1 block text-xs">Nome completo</Label>
               <Input
-                value={nome}
-                onChange={(event) => setNome(event.target.value)}
-                placeholder="Seu nome completo"
-              />
+                  value={nome}
+                  onChange={(event) => setNome(formatAccessPersonName(event.target.value))}
+                  onBlur={() => setNome((current) => formatAccessPersonName(current).trim())}
+                  placeholder="Seu nome completo"
+                />
             </div>
 
             <div>
               <Label className="mb-1 block text-xs">E-mail</Label>
               <Input
-                type="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                placeholder="seu.email@instituicao.gov.br"
-              />
+                  type="email"
+                  value={email}
+                  onChange={(event) => setEmail(normalizeAccessEmail(event.target.value))}
+                  placeholder="seu.email@instituicao.gov.br"
+                />
             </div>
 
             <div>
               <Label className="mb-1 block text-xs">CPF</Label>
               <Input
-                value={cpf}
-                onChange={(event) => setCpf(event.target.value)}
-                placeholder="Somente números"
-                maxLength={14}
-              />
+                  value={cpf}
+                  onChange={(event) => setCpf(onlyAccessDigits(event.target.value).slice(0, 11))}
+                  placeholder="Somente números"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={11}
+                />
             </div>
 
             <div>

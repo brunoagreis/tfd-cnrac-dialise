@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server"
+﻿import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { requireAdminRequest } from "@/lib/security/server-session"
 
@@ -31,6 +31,14 @@ type UserRow = {
   role: string | null
   perfilCodigo: string | null
   ativo: boolean | null
+}
+
+type ScheduleInput = {
+  diaSemana: number
+  horaEntrada: string
+  horaEntradaAlmoco: string
+  horaRetornoAlmoco: string
+  horaSaida: string
 }
 
 function text(value: unknown) {
@@ -102,8 +110,49 @@ function normalizeUser(row: UserRow) {
   }
 }
 
-export async function GET(req: Request) {
+function parseScheduleInputs(body: any): ScheduleInput[] {
+  const rawItems = Array.isArray(body?.items) && body.items.length > 0 ? body.items : [body]
+  const items: ScheduleInput[] = []
+  const seenDays = new Set<number>()
 
+  for (const item of rawItems) {
+    const diaSemana = toInt(item?.diaSemana || item?.dia_semana)
+    const horaEntrada = normalizeTime(item?.horaEntrada || item?.hora_entrada)
+    const horaEntradaAlmoco = normalizeTime(item?.horaEntradaAlmoco || item?.hora_entrada_almoco)
+    const horaRetornoAlmoco = normalizeTime(item?.horaRetornoAlmoco || item?.hora_retorno_almoco)
+    const horaSaida = normalizeTime(item?.horaSaida || item?.hora_saida)
+
+    if (diaSemana < 1 || diaSemana > 5) {
+      throw new Error("Dia da semana inválido.")
+    }
+
+    if (![horaEntrada, horaEntradaAlmoco, horaRetornoAlmoco, horaSaida].every(isTime)) {
+      throw new Error("Horários inválidos.")
+    }
+
+    if (seenDays.has(diaSemana)) {
+      throw new Error("Há dias repetidos no cadastro.")
+    }
+
+    seenDays.add(diaSemana)
+
+    items.push({
+      diaSemana,
+      horaEntrada,
+      horaEntradaAlmoco,
+      horaRetornoAlmoco,
+      horaSaida,
+    })
+  }
+
+  if (!items.length) {
+    throw new Error("Informe ao menos um dia de horário.")
+  }
+
+  return items
+}
+
+export async function GET(req: Request) {
   const adminGuard = await requireAdminRequest(req)
   if (!adminGuard.ok) return adminGuard.response
 
@@ -187,86 +236,130 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-
   const adminGuard = await requireAdminRequest(req)
   if (!adminGuard.ok) return adminGuard.response
 
   try {
     const body = await req.json().catch(() => ({}))
     const idUsuario = text(body?.idUsuario || body?.id_usuario)
-    const usuarioNome = text(body?.usuarioNome || body?.usuario_nome)
-    const usuarioEmail = text(body?.usuarioEmail || body?.usuario_email)
-    const diaSemana = toInt(body?.diaSemana || body?.dia_semana)
-    const horaEntrada = normalizeTime(body?.horaEntrada || body?.hora_entrada)
-    const horaEntradaAlmoco = normalizeTime(body?.horaEntradaAlmoco || body?.hora_entrada_almoco)
-    const horaRetornoAlmoco = normalizeTime(body?.horaRetornoAlmoco || body?.hora_retorno_almoco)
-    const horaSaida = normalizeTime(body?.horaSaida || body?.hora_saida)
 
     if (!idUsuario) {
       return NextResponse.json({ ok: false, error: "Usuário é obrigatório." }, { status: 400 })
     }
 
-    if (diaSemana < 1 || diaSemana > 5) {
-      return NextResponse.json({ ok: false, error: "Dia da semana inválido." }, { status: 400 })
+    let items: ScheduleInput[]
+
+    try {
+      items = parseScheduleInputs(body)
+    } catch (error) {
+      return NextResponse.json(
+        { ok: false, error: error instanceof Error ? error.message : "Dados inválidos." },
+        { status: 400 },
+      )
     }
 
-    if (![horaEntrada, horaEntradaAlmoco, horaRetornoAlmoco, horaSaida].every(isTime)) {
-      return NextResponse.json({ ok: false, error: "Horários inválidos." }, { status: 400 })
+    const userRows = await prisma.$queryRawUnsafe<UserRow[]>(
+      `
+        SELECT
+          id::text AS id,
+          nome::text AS nome,
+          email::text AS email,
+          role::text AS role,
+          "perfilCodigo"::text AS "perfilCodigo",
+          ativo
+        FROM public.usuarios
+        WHERE id::text = $1
+          AND COALESCE(ativo, true) = true
+        LIMIT 1
+      `,
+      idUsuario,
+    )
+
+    const usuario = userRows[0]
+
+    if (!usuario) {
+      return NextResponse.json(
+        { ok: false, error: "Usuário ativo não encontrado." },
+        { status: 404 },
+      )
     }
+
+    const inserted: ScheduleRow[] = []
 
     await prisma.$transaction(async (tx) => {
-      await tx.$executeRawUnsafe(
-        `
-          UPDATE public.cadastro_horario_trabalho
-          SET ativo = false, updated_at = NOW()
-          WHERE id_usuario::text = $1
-            AND dia_semana = $2::smallint
-            AND ativo = true
-        `,
-        idUsuario,
-        diaSemana,
-      )
+      for (const item of items) {
+        await tx.$executeRawUnsafe(
+          `
+            UPDATE public.cadastro_horario_trabalho
+            SET ativo = false, updated_at = NOW()
+            WHERE id_usuario::text = $1
+              AND dia_semana = $2::smallint
+              AND ativo = true
+          `,
+          usuario.id,
+          item.diaSemana,
+        )
 
-      await tx.$executeRawUnsafe(
-        `
-          INSERT INTO public.cadastro_horario_trabalho (
-            id_usuario,
-            usuario_nome,
-            usuario_email,
-            dia_semana,
-            hora_entrada,
-            hora_entrada_almoco,
-            hora_retorno_almoco,
-            hora_saida,
-            ativo,
-            created_at,
-            updated_at
-          ) VALUES (
-            $1,
-            $2,
-            $3,
-            $4::smallint,
-            $5::time,
-            $6::time,
-            $7::time,
-            $8::time,
-            true,
-            NOW(),
-            NOW()
-          )
-        `,
-        idUsuario,
-        usuarioNome,
-        usuarioEmail,
-        diaSemana,
-        horaEntrada,
-        horaEntradaAlmoco,
-        horaRetornoAlmoco,
-        horaSaida,
-      )
+        const insertedRows = await tx.$queryRawUnsafe<ScheduleRow[]>(
+          `
+            INSERT INTO public.cadastro_horario_trabalho (
+              id_usuario,
+              usuario_nome,
+              usuario_email,
+              dia_semana,
+              hora_entrada,
+              hora_entrada_almoco,
+              hora_retorno_almoco,
+              hora_saida,
+              ativo,
+              created_at,
+              updated_at
+            ) VALUES (
+              $1,
+              $2,
+              $3,
+              $4::smallint,
+              $5::time,
+              $6::time,
+              $7::time,
+              $8::time,
+              true,
+              NOW(),
+              NOW()
+            )
+            RETURNING
+              id::text AS id,
+              id_usuario::text AS "idUsuario",
+              usuario_nome AS "usuarioNome",
+              usuario_email AS "usuarioEmail",
+              dia_semana::int AS "diaSemana",
+              hora_entrada::text AS "horaEntrada",
+              hora_entrada_almoco::text AS "horaEntradaAlmoco",
+              hora_retorno_almoco::text AS "horaRetornoAlmoco",
+              hora_saida::text AS "horaSaida",
+              ativo,
+              created_at AS "createdAt",
+              updated_at AS "updatedAt"
+          `,
+          usuario.id,
+          usuario.nome || "",
+          usuario.email || "",
+          item.diaSemana,
+          item.horaEntrada,
+          item.horaEntradaAlmoco,
+          item.horaRetornoAlmoco,
+          item.horaSaida,
+        )
+
+        if (insertedRows[0]) inserted.push(insertedRows[0])
+      }
     })
 
-    return NextResponse.json({ ok: true })
+    return NextResponse.json({
+      ok: true,
+      item: inserted[0] ? normalizeSchedule(inserted[0]) : null,
+      items: inserted.map(normalizeSchedule),
+    })
   } catch (error) {
     console.error("POST_ADMIN_WORK_SCHEDULES_ERROR", error)
     return NextResponse.json(
@@ -277,7 +370,6 @@ export async function POST(req: Request) {
 }
 
 export async function PATCH(req: Request) {
-
   const adminGuard = await requireAdminRequest(req)
   if (!adminGuard.ok) return adminGuard.response
 
@@ -290,15 +382,56 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ ok: false, error: "Horário não informado." }, { status: 400 })
     }
 
-    await prisma.$executeRawUnsafe(
-      `
-        UPDATE public.cadastro_horario_trabalho
-        SET ativo = $2::boolean, updated_at = NOW()
-        WHERE id::text = $1
-      `,
-      id,
-      ativo,
-    )
+    if (ativo) {
+      const rows = await prisma.$queryRawUnsafe<Array<{ idUsuario: string; diaSemana: number }>>(
+        `
+          SELECT
+            id_usuario::text AS "idUsuario",
+            dia_semana::int AS "diaSemana"
+          FROM public.cadastro_horario_trabalho
+          WHERE id::text = $1
+          LIMIT 1
+        `,
+        id,
+      )
+
+      const horario = rows[0]
+
+      if (!horario) {
+        return NextResponse.json({ ok: false, error: "Horário não encontrado." }, { status: 404 })
+      }
+
+      await prisma.$transaction(async (tx) => {
+        await tx.$executeRawUnsafe(
+          `
+            UPDATE public.cadastro_horario_trabalho
+            SET ativo = false, updated_at = NOW()
+            WHERE id_usuario::text = $1
+              AND dia_semana = $2::smallint
+          `,
+          horario.idUsuario,
+          horario.diaSemana,
+        )
+
+        await tx.$executeRawUnsafe(
+          `
+            UPDATE public.cadastro_horario_trabalho
+            SET ativo = true, updated_at = NOW()
+            WHERE id::text = $1
+          `,
+          id,
+        )
+      })
+    } else {
+      await prisma.$executeRawUnsafe(
+        `
+          UPDATE public.cadastro_horario_trabalho
+          SET ativo = false, updated_at = NOW()
+          WHERE id::text = $1
+        `,
+        id,
+      )
+    }
 
     return NextResponse.json({ ok: true })
   } catch (error) {

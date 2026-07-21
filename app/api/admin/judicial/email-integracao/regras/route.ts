@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { requireAdminRequest } from "@/lib/security/server-session"
 import { prisma } from "@/lib/prisma"
 import { ensureEmailTriageTables } from "@/lib/email-triage-processing"
+import { pickEmailTriageAssignee } from "@/lib/email-triage-assignment"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -27,6 +28,108 @@ async function ensureAuditColumns() {
 async function getUsersByIds(ids: string[]) {
   if (ids.length === 0) return []
   return prisma.$queryRawUnsafe<UserRow[]>(`SELECT id::text AS id, nome, email FROM public.usuarios WHERE id::text = ANY($1::text[]) ORDER BY nome ASC`, ids)
+}
+function normalizeRuleSearch(value: unknown) {
+  return text(value)
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+}
+
+async function applyRuleToPendingEmailOs(ruleId: string) {
+  const ruleRows = await prisma.$queryRawUnsafe<Array<{ id: string; nome: string; palavras: unknown }>>(
+    `SELECT id::text AS id, nome, palavras_chave AS palavras
+     FROM public.judicial_email_regras
+     WHERE id::text = $1 AND ativo = TRUE
+     LIMIT 1`,
+    ruleId,
+  )
+
+  const rule = ruleRows[0]
+  if (!rule) return 0
+
+  const words = parseWords(rule.palavras)
+    .map((word) => normalizeRuleSearch(word))
+    .filter(Boolean)
+
+  if (words.length === 0) return 0
+
+  const users = await prisma.$queryRawUnsafe<Array<{ id: string; nome: string | null; email: string | null }>>(
+    `SELECT usuario_id AS id, usuario_nome AS nome, COALESCE(usuario_email, '') AS email
+     FROM public.judicial_email_regra_usuarios
+     WHERE regra_id = $1::bigint AND ativo = TRUE
+     ORDER BY usuario_nome ASC`,
+    ruleId,
+  )
+
+  const activeUsers = users
+    .map((user) => ({
+      id: text(user.id),
+      nome: text(user.nome) || "Usuário",
+      email: text(user.email),
+    }))
+    .filter((user) => user.id)
+
+  if (activeUsers.length === 0) return 0
+
+  const osRows = await prisma.$queryRawUnsafe<Array<{
+    id: string
+    assunto: string | null
+    corpoResumo: string | null
+    classificador: string | null
+    regraId: string | null
+  }>>(
+    `SELECT
+       id::text AS id,
+       assunto,
+       corpo_resumo AS "corpoResumo",
+       classificador,
+       regra_id::text AS "regraId"
+     FROM public.judicial_email_os
+     WHERE COALESCE(status, 'AGUARDANDO_CADASTRO') NOT IN ('CONVERTIDA', 'CADASTRADA', 'CADASTRADO', 'CONCLUIDA', 'CONCLUÍDA', 'INATIVA')
+       AND NULLIF(TRIM(COALESCE(responsavel_id, '')), '') IS NULL
+     ORDER BY created_at ASC
+     LIMIT 1000`,
+  )
+
+  let updated = 0
+
+  for (const row of osRows) {
+    const haystack = normalizeRuleSearch([row.assunto, row.corpoResumo, row.classificador].join(" "))
+    const matchesRule =
+      text(row.regraId) === ruleId ||
+      words.some((word) => haystack.includes(word))
+
+    if (!matchesRule) continue
+
+    const responsible = await pickEmailTriageAssignee(ruleId, activeUsers)
+    if (!responsible?.id) continue
+
+    await prisma.$executeRawUnsafe(
+      `UPDATE public.judicial_email_os
+       SET
+         regra_id = $2::bigint,
+         regra_nome = $3,
+         responsavel_id = $4,
+         responsavel_nome = $5,
+         responsavel_email = $6,
+         status = 'ATRIBUIDA',
+         updated_at = NOW()
+       WHERE id::text = $1
+         AND NULLIF(TRIM(COALESCE(responsavel_id, '')), '') IS NULL`,
+      row.id,
+      ruleId,
+      rule.nome,
+      responsible.id,
+      responsible.nome || "Usuário",
+      responsible.email || null,
+    )
+
+    updated += 1
+  }
+
+  return updated
 }
 
 export async function GET(req: Request) {
@@ -76,7 +179,8 @@ export async function POST(req: NextRequest) {
       for (const user of users) await tx.$executeRawUnsafe(`INSERT INTO public.judicial_email_regra_usuarios (regra_id, usuario_id, usuario_nome, usuario_email, ativo, created_at, updated_at) VALUES ($1::bigint, $2, $3, $4, TRUE, NOW(), NOW()) ON CONFLICT (regra_id, usuario_id) DO UPDATE SET usuario_nome=EXCLUDED.usuario_nome, usuario_email=EXCLUDED.usuario_email, ativo=TRUE, updated_at=NOW()`, ruleId, user.id, user.nome || "Usuário", user.email || null)
       return { id: ruleId }
     })
-    return NextResponse.json({ ok: true, item: result })
+    const retroactiveAssigned = await applyRuleToPendingEmailOs(result.id)
+    return NextResponse.json({ ok: true, item: { ...result, retroactiveAssigned } })
   } catch (error) {
     console.error("[email-integracao/regras POST] erro:", error)
     return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : "Erro ao salvar regra." }, { status: 500 })

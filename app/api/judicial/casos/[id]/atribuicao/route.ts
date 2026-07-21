@@ -36,6 +36,191 @@ async function findJudicialCase(decodedId: string) {
   return rows[0] ?? null
 }
 
+type MonitoringAccessRow = {
+  usuarioNome: string | null
+  momento: Date | null
+}
+
+type MonitoringAccessWarning = {
+  tipo: "ATUAL" | "HISTORICO"
+  usuarioNome: string
+  momento: Date | null
+}
+
+// JUDICIAL_MONITORING_ACCESS_WARNING
+export async function GET(
+  req: NextRequest,
+  context: { params: Promise<{ id: string }> },
+) {
+  try {
+    const { id } = await context.params
+    const decodedId = decodeURIComponent(id)
+
+    const userId = text(req.nextUrl.searchParams.get("userId"))
+    const userEmail = text(
+      req.nextUrl.searchParams.get("userEmail"),
+    ).toLowerCase()
+
+    if (!userId && !userEmail) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "Usuário não informado.",
+        },
+        { status: 400 },
+      )
+    }
+
+    const processo = await findJudicialCase(decodedId)
+
+    if (!processo) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "Processo judicial não encontrado.",
+        },
+        { status: 404 },
+      )
+    }
+
+    const activeRows =
+      await prisma.$queryRawUnsafe<MonitoringAccessRow[]>(
+        `
+          SELECT
+            COALESCE(
+              NULLIF(TRIM(a.usuario_nome), ''),
+              NULLIF(TRIM(a.usuario_email), ''),
+              'Outro usuário'
+            ) AS "usuarioNome",
+            COALESCE(
+              a.iniciado_em,
+              a.updated_at,
+              a.data_referencia::timestamp
+            ) AS "momento"
+          FROM public.judicial_monitoramento_atribuicoes a
+          WHERE a.monitoramento_id = $1::bigint
+            AND a.data_referencia = CURRENT_DATE
+            AND a.status = 'EM_MONITORAMENTO'
+            AND a.finalizado_em IS NULL
+            AND NOT (
+              (
+                NULLIF($2, '') IS NOT NULL
+                AND a.usuario_id = $2
+              )
+              OR (
+                NULLIF($3, '') IS NOT NULL
+                AND LOWER(COALESCE(a.usuario_email, '')) = $3
+              )
+            )
+          ORDER BY
+            COALESCE(
+              a.iniciado_em,
+              a.updated_at,
+              a.data_referencia::timestamp
+            ) DESC
+          LIMIT 1
+        `,
+        processo.monitoramentoId,
+        userId,
+        userEmail,
+      )
+
+    const active = activeRows[0]
+
+    if (active) {
+      const warning: MonitoringAccessWarning = {
+        tipo: "ATUAL",
+        usuarioNome:
+          active.usuarioNome || "Outro usuário",
+        momento: active.momento,
+      }
+
+      return NextResponse.json({
+        ok: true,
+        warning,
+      })
+    }
+
+    const historyRows =
+      await prisma.$queryRawUnsafe<MonitoringAccessRow[]>(
+        `
+          SELECT
+            COALESCE(
+              NULLIF(TRIM(a.usuario_nome), ''),
+              NULLIF(TRIM(a.usuario_email), ''),
+              'Outro usuário'
+            ) AS "usuarioNome",
+            COALESCE(
+              a.iniciado_em,
+              a.finalizado_em,
+              a.updated_at,
+              a.data_referencia::timestamp
+            ) AS "momento"
+          FROM public.judicial_monitoramento_atribuicoes a
+          WHERE a.monitoramento_id = $1::bigint
+            AND a.iniciado_em IS NOT NULL
+            AND COALESCE(a.status, '') <> 'CANCELADO'
+            AND NOT (
+              (
+                NULLIF($2, '') IS NOT NULL
+                AND a.usuario_id = $2
+              )
+              OR (
+                NULLIF($3, '') IS NOT NULL
+                AND LOWER(COALESCE(a.usuario_email, '')) = $3
+              )
+            )
+          ORDER BY
+            a.data_referencia DESC,
+            COALESCE(
+              a.iniciado_em,
+              a.finalizado_em,
+              a.updated_at,
+              a.data_referencia::timestamp
+            ) DESC
+          LIMIT 1
+        `,
+        processo.monitoramentoId,
+        userId,
+        userEmail,
+      )
+
+    const history = historyRows[0]
+
+    if (history) {
+      const warning: MonitoringAccessWarning = {
+        tipo: "HISTORICO",
+        usuarioNome:
+          history.usuarioNome || "Outro usuário",
+        momento: history.momento,
+      }
+
+      return NextResponse.json({
+        ok: true,
+        warning,
+      })
+    }
+
+    return NextResponse.json({
+      ok: true,
+      warning: null,
+    })
+  } catch (error) {
+    console.error(
+      "[GET /api/judicial/casos/[id]/atribuicao] erro:",
+      error,
+    )
+
+    return NextResponse.json(
+      {
+        ok: false,
+        error:
+          "Erro ao verificar o monitoramento judicial.",
+      },
+      { status: 500 },
+    )
+  }
+}
 export async function PATCH(
   req: NextRequest,
   context: { params: Promise<{ id: string }> },

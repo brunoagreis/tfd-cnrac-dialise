@@ -186,6 +186,14 @@ function addToSummary(map: Map<string, SummaryRow>, user: { id: string; nome: st
   return row
 }
 
+
+function firstNameLabel(value: unknown) {
+  const text = String(value ?? "").trim()
+  if (!text) return "Não informado"
+
+  return text.split(/\s+/)[0] || "Não informado"
+}
+
 function formatChartDate(value: string) {
   const [year, month, day] = value.split("-")
   if (!year || !month || !day) return value
@@ -278,32 +286,119 @@ ORDER BY MAX(usuario_nome) NULLS LAST, MAX(usuario_email) NULLS LAST, usuario_id
       userId,
     )
 
+
     const monitors = await prisma.$queryRawUnsafe<MonitorRow[]>(
       `
-        SELECT
-          a.id::text AS "id",
-          a.data_referencia::text AS "dataReferencia",
-          a.monitoramento_id::text AS "monitoramentoId",
-          a.usuario_id::text AS "usuarioId",
-          a.usuario_nome AS "usuarioNome",
-          a.usuario_email AS "usuarioEmail",
-          a.iniciado_em AS "iniciadoEm",
-          a.finalizado_em AS "finalizadoEm",
-          b.nome_paciente AS "pacienteNome",
-          b.procedimento_codigo AS "procedimentoCodigo",
-          b.procedimento_descricao AS "procedimentoDescricao",
-          b.cid_codigo AS "cidCodigo",
-          b.cid_descricao AS "cidDescricao"
-        FROM public.judicial_monitoramento_atribuicoes a
-        LEFT JOIN public.judicial_monitoramento_base b
-          ON b.id = a.monitoramento_id
-        WHERE a.data_referencia BETWEEN $1::date AND $2::date
-          AND a.iniciado_em IS NOT NULL
-          AND a.finalizado_em IS NOT NULL
-          AND a.finalizado_em >= a.iniciado_em
-          AND COALESCE(a.status, '') <> 'CANCELADO'
-          AND (NULLIF($3::text, '') IS NULL OR a.usuario_id::text = $3::text)
-        ORDER BY a.usuario_id, a.data_referencia, a.iniciado_em
+        WITH monitoramentos_atribuicoes AS (
+          SELECT
+            a.id::text AS "id",
+            a.data_referencia::text AS "dataReferencia",
+            a.monitoramento_id::text AS "monitoramentoId",
+            a.usuario_id::text AS "usuarioId",
+            a.usuario_nome AS "usuarioNome",
+            a.usuario_email AS "usuarioEmail",
+            -- OCIOSIDADE_FUSO_CAMPO_GRANDE_ATRIBUICOES
+            (
+              a.iniciado_em AT TIME ZONE 'UTC'
+            ) AT TIME ZONE 'America/Campo_Grande' AS "iniciadoEm",
+            (
+              a.finalizado_em AT TIME ZONE 'UTC'
+            ) AT TIME ZONE 'America/Campo_Grande' AS "finalizadoEm",
+            b.nome_paciente AS "pacienteNome",
+            b.procedimento_codigo AS "procedimentoCodigo",
+            b.procedimento_descricao AS "procedimentoDescricao",
+            b.cid_codigo AS "cidCodigo",
+            b.cid_descricao AS "cidDescricao"
+          FROM public.judicial_monitoramento_atribuicoes a
+          LEFT JOIN public.judicial_monitoramento_base b
+            ON b.id = a.monitoramento_id
+          WHERE a.data_referencia BETWEEN $1::date AND $2::date
+            AND a.iniciado_em IS NOT NULL
+            AND a.finalizado_em IS NOT NULL
+            AND a.finalizado_em >= a.iniciado_em
+            AND COALESCE(a.status, '') <> 'CANCELADO'
+            AND (NULLIF($3::text, '') IS NULL OR a.usuario_id::text = $3::text)
+        ),
+
+        movimentacoes_manuais AS (
+          SELECT
+            (
+              'manual_' ||
+              COALESCE(m.monitoramento_id::text, m.demanda_id::text, 'sem_monitoramento') ||
+              '_' ||
+              m.created_by::text ||
+              '_' ||
+              m.created_at::date::text
+            ) AS "id",
+            m.created_at::date::text AS "dataReferencia",
+            COALESCE(m.monitoramento_id::text, m.demanda_id::text) AS "monitoramentoId",
+            m.created_by::text AS "usuarioId",
+            COALESCE(NULLIF(TRIM(MAX(m.created_by_name)), ''), m.created_by::text, 'Usuário não informado') AS "usuarioNome",
+            NULL::text AS "usuarioEmail",
+            MIN(m.created_at) AS "iniciadoEm",
+            CASE
+              WHEN MAX(m.created_at) > MIN(m.created_at)
+                THEN MAX(m.created_at)
+              ELSE MIN(m.created_at) + INTERVAL '1 minute'
+            END AS "finalizadoEm",
+            MAX(b.nome_paciente) AS "pacienteNome",
+            MAX(b.procedimento_codigo) AS "procedimentoCodigo",
+            MAX(b.procedimento_descricao) AS "procedimentoDescricao",
+            MAX(b.cid_codigo) AS "cidCodigo",
+            MAX(b.cid_descricao) AS "cidDescricao"
+          FROM public.judicial_movimentacoes m
+          LEFT JOIN public.judicial_monitoramento_base b
+            ON b.id = m.monitoramento_id
+          WHERE m.created_at::date BETWEEN $1::date AND $2::date
+            AND NULLIF(TRIM(COALESCE(m.created_by, '')), '') IS NOT NULL
+            AND (NULLIF($3::text, '') IS NULL OR m.created_by::text = $3::text)
+            AND LOWER(COALESCE(m.type, '')) IN (
+              'monitoramento',
+              'resposta_procuradoria',
+              'modelo_enviado',
+              'modelo_gerado',
+              'envio_modelo',
+              'resposta',
+              'falta_paciente',
+              'cumprimento',
+              'procedimento_nao_sus',
+              'competencia_municipio',
+              'resolvido',
+              'encerramento',
+              'encerramento_processo',
+              'obito',
+              'bloqueio',
+              'sequestro'
+            )
+            AND NOT EXISTS (
+              SELECT 1
+              FROM public.judicial_monitoramento_atribuicoes a
+              WHERE a.data_referencia = m.created_at::date
+                AND a.monitoramento_id::text = m.monitoramento_id::text
+                AND a.finalizado_em IS NOT NULL
+                AND COALESCE(a.status, '') <> 'CANCELADO'
+                AND (
+                  a.usuario_id::text = m.created_by::text
+                  OR LOWER(COALESCE(a.usuario_nome, '')) = LOWER(COALESCE(m.created_by_name, ''))
+                )
+            )
+          GROUP BY
+            m.created_at::date,
+            COALESCE(m.monitoramento_id::text, m.demanda_id::text),
+            m.monitoramento_id,
+            m.demanda_id,
+            m.created_by
+        )
+
+        SELECT *
+        FROM monitoramentos_atribuicoes
+
+        UNION ALL
+
+        SELECT *
+        FROM movimentacoes_manuais
+
+        ORDER BY "usuarioId", "dataReferencia", "iniciadoEm"
       `,
       startParam,
       endParam,
@@ -400,6 +495,10 @@ ORDER BY MAX(usuario_nome) NULLS LAST, MAX(usuario_email) NULLS LAST, usuario_id
 
         const dayMonitors = [...(monitorsByUserDate.get(userDateKey) ?? [])]
           .sort((a, b) => new Date(a.iniciadoEm).getTime() - new Date(b.iniciadoEm).getTime())
+
+        // Não considera ociosidade quando o usuário não teve nenhuma
+        // atividade registrada no sistema durante o dia.
+        if (dayMonitors.length === 0) continue
 
         for (const segment of segments) {
           const activeIntervals = dayMonitors
@@ -543,6 +642,7 @@ ORDER BY MAX(usuario_nome) NULLS LAST, MAX(usuario_email) NULLS LAST, usuario_id
       }))
       .sort((a, b) => b.minutosOciosidade - a.minutosOciosidade)
 
+
     const diasDisponiveis = Array.from(new Set(monitors.map((monitor) => monitor.dataReferencia))).sort()
     const metaMonitoramentos = diasDisponiveis.length * 20
 
@@ -577,6 +677,764 @@ ORDER BY MAX(usuario_nome) NULLS LAST, MAX(usuario_email) NULLS LAST, usuario_id
     const minutosMonitorandoTotal = summaryRows.reduce((sum, item) => sum + item.minutosMonitorando, 0)
     const monitoramentosTotal = summaryRows.reduce((sum, item) => sum + item.quantidadeMonitoramentos, 0)
 
+    const cardsPrincipaisDashboard = await (async () => {
+      const usuarioFiltro = userId || null
+      const toNumber = (value: unknown) => Number(value ?? 0) || 0
+
+      const tempoOciosoHojeRows = await prisma.$queryRawUnsafe<Array<{
+        minutosOciosidade: unknown
+        maiorIntervaloOcioso: unknown
+      }>>(
+        `
+          SELECT
+            COALESCE(SUM(minutos_ociosidade), 0)::int AS "minutosOciosidade",
+            COALESCE(MAX(minutos_ociosidade), 0)::int AS "maiorIntervaloOcioso"
+          FROM public.tempo_ociosidade_usuario
+          WHERE data_referencia BETWEEN $1::date AND $2::date
+            AND ($3::text IS NULL OR id_usuario = $3::text)
+        `,
+      startParam,
+      endParam,
+      usuarioFiltro,
+    )
+
+      const osRows = await prisma.$queryRawUnsafe<Array<{
+        osAtribuidas: unknown
+        osNaoAtribuidas: unknown
+      }>>(
+        `
+          SELECT
+            COUNT(*) FILTER (
+              WHERE UPPER(COALESCE(status, '')) = 'ATRIBUIDA'
+                AND convertido_em IS NULL
+                AND NULLIF(TRIM(COALESCE(convertido_demanda_id, '')), '') IS NULL
+                AND NULLIF(TRIM(COALESCE(convertido_protocolo, '')), '') IS NULL
+            )::int AS "osAtribuidas",
+
+            COUNT(*) FILTER (
+              WHERE NULLIF(TRIM(COALESCE(responsavel_id, '')), '') IS NULL
+                AND convertido_em IS NULL
+                AND NULLIF(TRIM(COALESCE(convertido_demanda_id, '')), '') IS NULL
+                AND NULLIF(TRIM(COALESCE(convertido_protocolo, '')), '') IS NULL
+                AND UPPER(COALESCE(status, '')) NOT IN (
+                  'CONVERTIDA',
+                  'INATIVA',
+                  'CANCELADA',
+                  'CANCELADO',
+                  'CONCLUIDA',
+                  'CONCLUÍDA'
+                )
+            )::int AS "osNaoAtribuidas"
+          FROM public.judicial_email_os
+          WHERE ($1::text IS NULL OR responsavel_id = $1::text)
+        `,
+        usuarioFiltro,
+      )
+
+      const filaAgendamentoRows = await prisma.$queryRawUnsafe<Array<{
+        status: string
+        total: unknown
+      }>>(
+        `
+          WITH pre AS (
+            SELECT
+              CASE
+                WHEN c.scheduling_status = 'para_avaliar' THEN 'para_avaliar'
+                WHEN c.scheduling_status IN ('para_agendar', 'apto_agendamento') THEN 'para_agendar'
+                ELSE NULL
+              END AS status
+            FROM public.pre_judicial_casos c
+            WHERE COALESCE(c.active, TRUE) = TRUE
+              AND c.scheduling_status IN ('para_avaliar', 'para_agendar', 'apto_agendamento')
+              AND ($1::text IS NULL OR c.created_by = $1::text)
+          ),
+
+          judicial_latest AS (
+            SELECT DISTINCT ON (m.monitoramento_id)
+              m.monitoramento_id,
+              LOWER(COALESCE(m.type, '')) AS type,
+              m.created_by,
+              m.created_at
+            FROM public.judicial_movimentacoes m
+            WHERE LOWER(COALESCE(m.type, '')) IN (
+              'envio_agendamento_demanda',
+              'encaminhar_direto_agendamento',
+              'analise_viabilidade_apta_agendamento',
+              'apta_agendamento',
+              'apto_agendamento',
+              'agendamento',
+              'retorno_fila',
+              'analise_viabilidade_nao_rede',
+              'analise_viabilidade_complementacao'
+            )
+            ORDER BY m.monitoramento_id, m.created_at DESC
+          ),
+
+          judicial AS (
+            SELECT
+              CASE
+                WHEN jl.type = 'envio_agendamento_demanda' THEN 'para_avaliar'
+                WHEN jl.type IN (
+                  'encaminhar_direto_agendamento',
+                  'analise_viabilidade_apta_agendamento',
+                  'apta_agendamento',
+                  'apto_agendamento'
+                ) THEN 'para_agendar'
+                ELSE NULL
+              END AS status
+            FROM judicial_latest jl
+            INNER JOIN public.judicial_monitoramento_base b
+              ON b.id = jl.monitoramento_id
+            WHERE COALESCE(b.ativo_monitoramento, TRUE) = TRUE
+              AND UPPER(COALESCE(b.origem_modulo, 'JUDICIAL')) = 'JUDICIAL'
+              AND ($1::text IS NULL OR jl.created_by = $1::text)
+          )
+
+          SELECT
+            status,
+            COUNT(*)::int AS total
+          FROM (
+            SELECT status FROM pre
+            UNION ALL
+            SELECT status FROM judicial
+          ) fila
+          WHERE status IS NOT NULL
+          GROUP BY status
+        `,
+        usuarioFiltro,
+      )
+
+      const cadastrosHojeRows = await prisma.$queryRawUnsafe<Array<{
+        total: unknown
+      }>>(
+        `
+          WITH cadastros AS (
+            SELECT
+              COALESCE(NULLIF(TRIM("criadoPor"), ''), 'nao_informado') AS usuario_id,
+              "createdAt"::date AS data_cadastro
+            FROM public.demandas
+
+            UNION ALL
+
+            SELECT
+              COALESCE(NULLIF(TRIM(created_by), ''), 'nao_informado') AS usuario_id,
+              created_at::date AS data_cadastro
+            FROM public.pre_judicial_casos
+          )
+
+          SELECT COUNT(*)::int AS total
+          FROM cadastros
+          WHERE data_cadastro = CURRENT_DATE
+            AND ($1::text IS NULL OR usuario_id = $1::text)
+        `,
+        usuarioFiltro,
+      )
+
+      const tempo = tempoOciosoHojeRows[0] ?? {
+        minutosOciosidade: 0,
+        maiorIntervaloOcioso: 0,
+      }
+
+      const os = osRows[0] ?? {
+        osAtribuidas: 0,
+        osNaoAtribuidas: 0,
+      }
+
+      const paraAvaliar = filaAgendamentoRows
+        .filter((item) => item.status === "para_avaliar")
+        .reduce((sum, item) => sum + toNumber(item.total), 0)
+
+      const paraAgendar = filaAgendamentoRows
+        .filter((item) => item.status === "para_agendar")
+        .reduce((sum, item) => sum + toNumber(item.total), 0)
+
+      return {
+        minutosOciosidade: toNumber(tempo.minutosOciosidade),
+        maiorIntervaloOcioso: toNumber(tempo.maiorIntervaloOcioso),
+        osAtribuidas: toNumber(os.osAtribuidas),
+        osNaoAtribuidas: toNumber(os.osNaoAtribuidas),
+        paraAvaliar,
+        paraAgendar,
+        cadastrosHoje: toNumber(cadastrosHojeRows[0]?.total),
+      }
+    })()
+
+    const graficosExtrasDashboard = await (async () => {
+      const usuarioFiltro = userId || null
+      const toNumber = (value: unknown) => Number(value ?? 0) || 0
+
+      /**
+       * 1. Para avaliar x Para agendar
+       * Usa os mesmos valores dos cards principais.
+       */
+      const agendamentoStatus = [
+        {
+          status: "para_avaliar",
+          label: "Para avaliar",
+          total: cardsPrincipaisDashboard.paraAvaliar,
+        },
+        {
+          status: "para_agendar",
+          label: "Para agendar",
+          total: cardsPrincipaisDashboard.paraAgendar,
+        },
+      ].filter((item) => item.total > 0)
+
+      /**
+       * 2. Enviado x Devolvido x Agendado
+       */
+      const fluxoAgendamentoRows = await prisma.$queryRawUnsafe<Array<{
+        categoria: string
+        total: unknown
+      }>>(
+        `
+          WITH categorias AS (
+            SELECT 'Enviado para agendar'::text AS categoria
+            UNION ALL SELECT 'Devolvido'::text
+            UNION ALL SELECT 'Agendado'::text
+          ),
+
+          eventos AS (
+            SELECT
+              CASE
+                WHEN LOWER(COALESCE(type, '')) IN (
+                  'envio_agendamento_demanda',
+                  'encaminhar_direto_agendamento',
+                  'analise_viabilidade_apta_agendamento',
+                  'apta_agendamento',
+                  'apto_agendamento'
+                ) THEN 'Enviado para agendar'
+
+                WHEN LOWER(COALESCE(type, '')) IN (
+                  'retorno_fila',
+                  'analise_viabilidade_nao_rede',
+                  'analise_viabilidade_complementacao'
+                ) THEN 'Devolvido'
+
+                WHEN LOWER(COALESCE(type, '')) = 'agendado'
+                  THEN 'Agendado'
+
+                ELSE NULL
+              END AS categoria
+            FROM public.pre_judicial_movimentacoes
+            WHERE created_at::date BETWEEN $1::date AND $2::date
+              AND ($3::text IS NULL OR created_by = $3::text)
+
+            UNION ALL
+
+            SELECT
+              CASE
+                WHEN LOWER(COALESCE(type, '')) IN (
+                  'envio_agendamento_demanda',
+                  'encaminhar_direto_agendamento',
+                  'analise_viabilidade_apta_agendamento',
+                  'apta_agendamento',
+                  'apto_agendamento'
+                ) THEN 'Enviado para agendar'
+
+                WHEN LOWER(COALESCE(type, '')) IN (
+                  'retorno_fila',
+                  'analise_viabilidade_nao_rede',
+                  'analise_viabilidade_complementacao'
+                ) THEN 'Devolvido'
+
+                WHEN LOWER(COALESCE(type, '')) = 'agendamento'
+                  THEN 'Agendado'
+
+                ELSE NULL
+              END AS categoria
+            FROM public.judicial_movimentacoes
+            WHERE created_at::date BETWEEN $1::date AND $2::date
+              AND ($3::text IS NULL OR created_by = $3::text)
+          )
+
+          SELECT
+            c.categoria,
+            COALESCE(COUNT(e.categoria), 0)::int AS total
+          FROM categorias c
+          LEFT JOIN eventos e
+            ON e.categoria = c.categoria
+          GROUP BY c.categoria
+          ORDER BY
+            CASE c.categoria
+              WHEN 'Enviado para agendar' THEN 1
+              WHEN 'Devolvido' THEN 2
+              WHEN 'Agendado' THEN 3
+              ELSE 9
+            END
+        `,
+        startParam,
+        endParam,
+        usuarioFiltro,
+      )
+
+      /**
+       * 3. OS atribuídas por usuário.
+       */
+      const osPorUsuarioRows = await prisma.$queryRawUnsafe<Array<{
+        usuarioId: string
+        usuarioNome: string
+        total: unknown
+      }>>(
+        `
+          -- DASHBOARD_OS_ATRIBUIDAS_MESMA_FILA_EMAIL_OS_200
+          WITH fila_email_os AS (
+            SELECT
+              os.*
+            FROM public.judicial_email_os os
+            WHERE COALESCE(
+              os.status,
+              'AGUARDANDO_CADASTRO'
+            ) NOT IN (
+              'CONVERTIDA',
+              'CADASTRADA',
+              'CADASTRADO',
+              'CONCLUIDA',
+              'CONCLUÍDA',
+              'INATIVA'
+            )
+            ORDER BY
+              os.created_at DESC,
+              os.id DESC
+            LIMIT 200
+          )
+
+          SELECT
+            COALESCE(
+              NULLIF(TRIM(os.responsavel_id), ''),
+              'nao_informado'
+            ) AS "usuarioId",
+
+            COALESCE(
+              NULLIF(TRIM(MAX(os.responsavel_nome)), ''),
+              NULLIF(TRIM(MAX(os.responsavel_email)), ''),
+              'Não informado'
+            ) AS "usuarioNome",
+
+            COUNT(*)::int AS total
+
+          FROM fila_email_os os
+
+          WHERE NULLIF(
+            TRIM(COALESCE(os.responsavel_id, '')),
+            ''
+          ) IS NOT NULL
+
+            AND UPPER(
+              TRIM(COALESCE(os.status, ''))
+            ) = 'ATRIBUIDA'
+
+            AND os.convertido_em IS NULL
+
+            AND NULLIF(
+              TRIM(COALESCE(
+                os.convertido_demanda_id::text,
+                ''
+              )),
+              ''
+            ) IS NULL
+
+            AND NULLIF(
+              TRIM(COALESCE(
+                os.convertido_protocolo,
+                ''
+              )),
+              ''
+            ) IS NULL
+
+            AND LOWER(
+              TRIM(COALESCE(os.assunto, ''))
+            ) <> 'delivery status notification (failure)'
+
+            AND NOT EXISTS (
+              SELECT 1
+
+              FROM public.judicial_email_processados ep
+
+              WHERE ep.os_id::text = os.id::text
+                AND (
+                  NULLIF(
+                    TRIM(COALESCE(
+                      ep.demanda_id::text,
+                      ''
+                    )),
+                    ''
+                  ) IS NOT NULL
+
+                  OR UPPER(
+                    TRIM(COALESCE(ep.status, ''))
+                  ) IN (
+                    'DEMANDA_CADASTRADA',
+                    'CONVERTIDA',
+                    'CADASTRADA',
+                    'CADASTRADO',
+                    'CONCLUIDA',
+                    'CONCLUÍDA',
+                    'INATIVA'
+                  )
+                )
+            )
+
+            AND (
+              $1::text IS NULL
+              OR os.responsavel_id = $1::text
+            )
+
+          GROUP BY
+            COALESCE(
+              NULLIF(TRIM(os.responsavel_id), ''),
+              'nao_informado'
+            )
+
+          ORDER BY total DESC
+        `,
+        usuarioFiltro,
+      )
+
+      /**
+       * 4. Cadastros por usuário no período.
+       */
+      const cadastrosPorUsuarioRows = await prisma.$queryRawUnsafe<Array<{
+        usuarioId: string
+        usuarioNome: string
+        total: unknown
+      }>>(
+        `
+          WITH cadastros AS (
+            SELECT
+              COALESCE(NULLIF(TRIM("criadoPor"), ''), 'nao_informado') AS usuario_id,
+              COALESCE(NULLIF(TRIM("criadoPorNome"), ''), NULLIF(TRIM("criadoPor"), ''), 'Não informado') AS usuario_nome,
+              "createdAt"::date AS data_cadastro
+            FROM public.demandas
+
+            UNION ALL
+
+            SELECT
+              COALESCE(NULLIF(TRIM(created_by), ''), 'nao_informado') AS usuario_id,
+              COALESCE(NULLIF(TRIM(created_by_name), ''), NULLIF(TRIM(created_by), ''), 'Não informado') AS usuario_nome,
+              created_at::date AS data_cadastro
+            FROM public.pre_judicial_casos
+          )
+
+          SELECT
+            usuario_id AS "usuarioId",
+            MAX(usuario_nome) AS "usuarioNome",
+            COUNT(*)::int AS total
+          FROM cadastros
+          WHERE data_cadastro BETWEEN $1::date AND $2::date
+            AND ($3::text IS NULL OR usuario_id = $3::text)
+          GROUP BY usuario_id
+          ORDER BY total DESC
+        `,
+        startParam,
+        endParam,
+        usuarioFiltro,
+      )
+
+      /**
+       * 5. Monitoramento automático e total no período.
+       */
+      const automaticosRows = await prisma.$queryRawUnsafe<Array<{
+        total: unknown
+      }>>(
+        `
+          SELECT COUNT(*)::int AS total
+          FROM public.judicial_movimentacoes
+          WHERE created_at::date BETWEEN $1::date AND $2::date
+            AND (
+              LOWER(COALESCE(type, '')) IN (
+                'core_automatico',
+                'monitoramento_automatico',
+                'monitoramento_automatico_core',
+                'monitoramento_core',
+                'retorno_core',
+                'atualizacao_core'
+              )
+              OR LOWER(COALESCE(created_by, '')) IN ('sistema', 'automatico', 'core_automatico')
+              OR LOWER(COALESCE(created_by_name, '')) IN ('sistema', 'automatico', 'automático')
+            )
+            AND ($3::text IS NULL OR created_by = $3::text)
+        `,
+        startParam,
+        endParam,
+        usuarioFiltro,
+      )
+
+      // DASHBOARD_TOTAL_MONITORAMENTOS_HUMANO_AUTOMATICO
+      const monitoramentosAutomaticosTotal = toNumber(automaticosRows[0]?.total)
+      const monitoramentosPeriodoTotal =
+        monitoramentosTotal + monitoramentosAutomaticosTotal
+      // DASHBOARD_ATRIBUIDOS_X_MONITORADOS_PROTOCOLos
+      const atribuidosMonitoradosRows =
+        await prisma.$queryRawUnsafe<Array<{
+          atribuidos: unknown
+          monitorados: unknown
+        }>>(
+          `
+          WITH atribuicoes AS (
+            SELECT DISTINCT
+              a.monitoramento_id,
+              a.usuario_id
+            FROM public.judicial_monitoramento_atribuicoes a
+            INNER JOIN public.judicial_monitoramento_base b
+              ON b.id = a.monitoramento_id
+            WHERE a.data_referencia BETWEEN $1::date AND $2::date
+              AND UPPER(
+                COALESCE(b.origem_modulo, 'JUDICIAL')
+              ) = 'JUDICIAL'
+              AND (
+                $3::text IS NULL
+                OR a.usuario_id = $3::text
+              )
+
+            UNION
+
+            SELECT DISTINCT
+              m.monitoramento_id,
+              m.usuario_id
+            FROM public.judicial_monitoramento_atribuicoes_manuais m
+            INNER JOIN public.judicial_monitoramento_base b
+              ON b.id = m.monitoramento_id
+            WHERE (
+              m.atribuida_em
+              AT TIME ZONE 'America/Campo_Grande'
+            )::date BETWEEN $1::date AND $2::date
+              AND UPPER(
+                COALESCE(b.origem_modulo, 'JUDICIAL')
+              ) = 'JUDICIAL'
+              AND (
+                $3::text IS NULL
+                OR m.usuario_id = $3::text
+              )
+          ),
+
+          monitorados AS (
+            SELECT DISTINCT
+              a.monitoramento_id
+            FROM public.judicial_monitoramento_atribuicoes a
+            INNER JOIN atribuicoes atribuicao
+              ON atribuicao.monitoramento_id = a.monitoramento_id
+              AND atribuicao.usuario_id = a.usuario_id
+            WHERE a.finalizado_em IS NOT NULL
+              AND (
+                a.finalizado_em
+                AT TIME ZONE 'America/Campo_Grande'
+              )::date BETWEEN $1::date AND $2::date
+              AND UPPER(
+                COALESCE(a.status, '')
+              ) <> 'CANCELADO'
+              AND (
+                $3::text IS NULL
+                OR a.usuario_id = $3::text
+              )
+
+            UNION
+
+            SELECT DISTINCT
+              movimento.monitoramento_id
+            FROM public.judicial_movimentacoes movimento
+            INNER JOIN atribuicoes atribuicao
+              ON atribuicao.monitoramento_id =
+                movimento.monitoramento_id
+              AND atribuicao.usuario_id =
+                movimento.created_by
+            WHERE movimento.monitoramento_id IS NOT NULL
+              AND (
+                movimento.created_at
+                AT TIME ZONE 'America/Campo_Grande'
+              )::date BETWEEN $1::date AND $2::date
+              AND (
+                $3::text IS NULL
+                OR movimento.created_by = $3::text
+              )
+              AND LOWER(
+                COALESCE(movimento.type, '')
+              ) IN (
+                'monitoramento',
+                'resposta_procuradoria',
+                'modelo_enviado',
+                'modelo_gerado',
+                'envio_modelo',
+                'resposta',
+                'falta_paciente',
+                'cumprimento',
+                'procedimento_nao_sus',
+                'competencia_municipio',
+                'resolvido',
+                'encerramento',
+                'encerramento_processo',
+                'obito',
+                'bloqueio',
+                'sequestro'
+              )
+          )
+
+          SELECT
+            COUNT(
+              DISTINCT atribuicao.monitoramento_id
+            )::int AS "atribuidos",
+
+            COUNT(
+              DISTINCT monitorado.monitoramento_id
+            )::int AS "monitorados"
+
+          FROM atribuicoes atribuicao
+
+          LEFT JOIN monitorados monitorado
+            ON monitorado.monitoramento_id =
+              atribuicao.monitoramento_id
+          `,
+          startParam,
+          endParam,
+          usuarioFiltro,
+        )
+      const atividadePorUsuario = new Map<string, {
+        usuarioId: string
+        usuarioNome: string
+        osAtribuidas: number
+        cadastros: number
+        monitoramentos: number
+      }>()
+
+      function firstName(value: unknown) {
+        const text = String(value ?? "").trim()
+        if (!text) return "Não informado"
+        return text.split(/\s+/)[0] || "Não informado"
+      }
+
+      function ensureUsuario(usuarioIdValue: string, usuarioNomeValue: string) {
+        const key = usuarioIdValue || usuarioNomeValue || "nao_informado"
+        const existing = atividadePorUsuario.get(key)
+        if (existing) return existing
+
+        const created = {
+          usuarioId: key,
+          usuarioNome: firstName(usuarioNomeValue || key),
+          osAtribuidas: 0,
+          cadastros: 0,
+          monitoramentos: 0,
+        }
+
+        atividadePorUsuario.set(key, created)
+
+        return created
+      }
+
+      for (const item of osPorUsuarioRows) {
+        const row = ensureUsuario(item.usuarioId, item.usuarioNome)
+        row.osAtribuidas += toNumber(item.total)
+      }
+
+      for (const item of cadastrosPorUsuarioRows) {
+        const row = ensureUsuario(item.usuarioId, item.usuarioNome)
+        row.cadastros += toNumber(item.total)
+      }
+
+      for (const item of summaryRows) {
+        const row = ensureUsuario(item.usuarioId, item.usuarioNome)
+        row.monitoramentos += item.quantidadeMonitoramentos
+      }
+
+      const produtividadeUsuarios = Array.from(atividadePorUsuario.values())
+        .filter(
+          (item) =>
+            item.osAtribuidas > 0 ||
+            item.cadastros > 0 ||
+            item.monitoramentos > 0,
+        )
+        .sort(
+          (a, b) =>
+            b.osAtribuidas +
+            b.cadastros +
+            b.monitoramentos -
+            (a.osAtribuidas + a.cadastros + a.monitoramentos),
+        )
+
+      const fluxoAgendamento = fluxoAgendamentoRows
+        .map((item) => ({
+          categoria: item.categoria,
+          total: toNumber(item.total),
+        }))
+        .filter((item) => item.total > 0)
+
+      return {
+        agendamentoStatus,
+        fluxoAgendamento,
+        osCadastrosPorUsuario: produtividadeUsuarios
+          .filter((item) => item.osAtribuidas > 0 || item.cadastros > 0)
+          .map((item) => ({
+            usuarioId: item.usuarioId,
+            usuarioNome: item.usuarioNome,
+            osAtribuidas: item.osAtribuidas,
+            cadastros: item.cadastros,
+          })),
+        cadastrosMonitoramentosPorUsuario: produtividadeUsuarios
+          .filter((item) => item.cadastros > 0 || item.monitoramentos > 0)
+          .map((item) => ({
+            usuarioId: item.usuarioId,
+            usuarioNome: item.usuarioNome,
+            cadastros: item.cadastros,
+            monitoramentos: item.monitoramentos,
+          })),
+        atribuidosMonitoradosPeriodo: [
+          {
+            label: "Período selecionado",
+            atribuidos: toNumber(
+              atribuidosMonitoradosRows[0]?.atribuidos,
+            ),
+            monitorados: toNumber(
+              atribuidosMonitoradosRows[0]?.monitorados,
+            ),
+          },
+        ],
+        tipoMonitoramento: [
+          {
+            label: "Monitoramento humano",
+            total: monitoramentosTotal,
+          },
+          {
+            label: "Monitoramento automático",
+            total: monitoramentosAutomaticosTotal,
+          },
+          {
+            label: "Monitorados no período",
+            total: monitoramentosPeriodoTotal,
+          },
+        ].filter((item) => item.total > 0),
+      }
+    })()
+
+
+
+
+
+
+
+
+    const ociosidadeGraficoRows = await prisma.$queryRawUnsafe<Array<{
+      usuarioId: string
+      usuarioNome: string
+      minutosOciosidade: unknown
+      maiorIntervaloOcioso: unknown
+    }>>(
+      `
+        SELECT
+          id_usuario::text AS "usuarioId",
+          COALESCE(NULLIF(TRIM(MAX(usuario_nome)), ''), id_usuario::text, 'Não informado') AS "usuarioNome",
+          COALESCE(SUM(minutos_ociosidade), 0)::int AS "minutosOciosidade",
+          COALESCE(MAX(minutos_ociosidade), 0)::int AS "maiorIntervaloOcioso"
+        FROM public.tempo_ociosidade_usuario
+        WHERE data_referencia BETWEEN $1::date AND $2::date
+          AND ($3::text IS NULL OR id_usuario::text = $3::text)
+        GROUP BY id_usuario
+        HAVING COALESCE(SUM(minutos_ociosidade), 0) > 0
+        ORDER BY COALESCE(SUM(minutos_ociosidade), 0) DESC
+      `,
+      startParam,
+      endParam,
+      userId || null,
+    )
+
     return NextResponse.json({
       ok: true,
       periodo: { inicio: startParam, fim: endParam },
@@ -592,34 +1450,50 @@ ORDER BY MAX(usuario_nome) NULLS LAST, MAX(usuario_email) NULLS LAST, usuario_id
         monitoramentos: monitoramentosTotal,
         minutosMonitorando: minutosMonitorandoTotal,
         mediaTempoMonitoramento: monitoramentosTotal > 0 ? Math.round(minutosMonitorandoTotal / monitoramentosTotal) : 0,
-        minutosOciosidade: summaryRows.reduce((sum, item) => sum + item.minutosOciosidade, 0),
-        maiorIntervaloOcioso: summaryRows.reduce((max, item) => Math.max(max, item.maiorIntervaloOcioso), 0),
+        minutosOciosidade: cardsPrincipaisDashboard.minutosOciosidade,
+        maiorIntervaloOcioso: cardsPrincipaisDashboard.maiorIntervaloOcioso,
+        osAtribuidas: cardsPrincipaisDashboard.osAtribuidas,
+        osNaoAtribuidas: cardsPrincipaisDashboard.osNaoAtribuidas,
+        paraAvaliar: cardsPrincipaisDashboard.paraAvaliar,
+        paraAgendar: cardsPrincipaisDashboard.paraAgendar,
+        cadastrosHoje: cardsPrincipaisDashboard.cadastrosHoje,
       },
       graficos: {
         metaMonitoramentosPorUsuario: {
           diasConsiderados: diasDisponiveis.length,
           metaDiaria: 20,
           meta: metaMonitoramentos,
-          usuarios: summaryRows.map((item) => ({
-            usuarioId: item.usuarioId,
-            usuarioNome: item.usuarioNome,
-            quantidade: item.quantidadeMonitoramentos,
-            meta: metaMonitoramentos,
-          })),
+          usuarios: summaryRows
+            .filter((item) => item.quantidadeMonitoramentos > 0)
+            .map((item) => ({
+              usuarioId: item.usuarioId,
+              usuarioNome: firstNameLabel(item.usuarioNome),
+              quantidadeMonitoramentos: item.quantidadeMonitoramentos,
+              quantidade: item.quantidadeMonitoramentos,
+              monitoramentos: item.quantidadeMonitoramentos,
+              total: item.quantidadeMonitoramentos,
+              meta: metaMonitoramentos,
+            })),
         },
-        ociosidadePorUsuario: summaryRows
-          .filter((item) => item.minutosOciosidade > 0)
-          .map((item) => ({
-            usuarioId: item.usuarioId,
-            usuarioNome: item.usuarioNome,
-            minutosOciosidade: item.minutosOciosidade,
-          })),
+        ociosidadePorUsuario: ociosidadeGraficoRows.map((item) => ({
+          usuarioId: item.usuarioId,
+          usuarioNome: firstNameLabel(item.usuarioNome),
+          minutosOciosidade: Number(item.minutosOciosidade ?? 0) || 0,
+          maiorIntervaloOcioso: Number(item.maiorIntervaloOcioso ?? 0) || 0,
+        })),
         totalMonitoramentosPorDia,
         monitoramentosPorUsuarioUltimos5Dias: {
           usuarios: usuariosComMonitoramento,
           dias: ultimos5Dias,
           dados: monitoramentosPorUsuarioUltimos5Dias,
         },
+        agendamentoStatus: graficosExtrasDashboard.agendamentoStatus,
+        fluxoAgendamento: graficosExtrasDashboard.fluxoAgendamento,
+        osCadastrosPorUsuario: graficosExtrasDashboard.osCadastrosPorUsuario,
+        cadastrosMonitoramentosPorUsuario: graficosExtrasDashboard.cadastrosMonitoramentosPorUsuario,
+        atribuidosMonitoradosPeriodo:
+          graficosExtrasDashboard.atribuidosMonitoradosPeriodo,
+        tipoMonitoramento: graficosExtrasDashboard.tipoMonitoramento,
       },
       usuarios: summaryRows,
       intervalos: idleIntervals.map((item) => ({

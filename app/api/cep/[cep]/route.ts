@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server"
+﻿import { NextRequest, NextResponse } from "next/server"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -11,52 +11,38 @@ function text(value: unknown) {
   return String(value ?? "").trim()
 }
 
-function firstText(source: any, keys: string[]) {
-  for (const key of keys) {
-    const value = text(source?.[key])
-    if (value) return value
-  }
+async function fetchBrasilApiCep(cep: string) {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 10000)
 
-  return ""
-}
-
-async function fetchCorreiosCep(cep: string, token: string) {
-  const urls = [
-    `https://api.correios.com.br/cep/v2/endere%C3%A7os/${cep}`,
-    `https://api.correios.com.br/cep/v2/enderecos/${cep}`,
-  ]
-
-  let lastStatus = 0
-  let lastError = ""
-
-  for (const url of urls) {
-    const response = await fetch(url, {
+  try {
+    const response = await fetch(`https://brasilapi.com.br/api/cep/v1/${cep}`, {
       method: "GET",
       headers: {
         accept: "application/json",
-        Authorization: `Bearer ${token}`,
       },
       cache: "no-store",
+      signal: controller.signal,
     })
-
-    lastStatus = response.status
 
     const json = await response.json().catch(() => ({}))
 
-    if (response.ok) {
-      return json
+    if (!response.ok) {
+      const message =
+        text(json?.message) ||
+        text(json?.error) ||
+        text(json?.errors?.[0]?.message) ||
+        "CEP não localizado na BrasilAPI."
+
+      const error = new Error(message)
+      ;(error as any).status = response.status
+      throw error
     }
 
-    lastError = text(json?.msgs?.[0]) || text(json?.message) || text(json?.error) || response.statusText
-
-    if (![404, 405].includes(response.status)) {
-      break
-    }
+    return json
+  } finally {
+    clearTimeout(timeout)
   }
-
-  const error = new Error(lastError || "CEP não localizado nos Correios.")
-  ;(error as any).status = lastStatus
-  throw error
 }
 
 export async function GET(
@@ -74,55 +60,35 @@ export async function GET(
       )
     }
 
-    const token =
-      process.env.CORREIOS_BUSCA_CEP_TOKEN ||
-      process.env.CORREIOS_API_TOKEN ||
-      process.env.CORREIOS_TOKEN ||
-      ""
-
-    if (!token) {
-      return NextResponse.json(
-        {
-          ok: false,
-          error: "Token da API Busca CEP dos Correios não configurado no servidor.",
-        },
-        { status: 503 },
-      )
-    }
-
-    const correios = await fetchCorreiosCep(cep, token)
-    const item = Array.isArray(correios?.itens) ? correios.itens[0] : correios
-
-    if (!item) {
-      return NextResponse.json(
-        { ok: false, error: "CEP não localizado nos Correios." },
-        { status: 404 },
-      )
-    }
+    const brasilApi = await fetchBrasilApiCep(cep)
 
     return NextResponse.json({
       ok: true,
       item: {
-        cep,
-        logradouro: firstText(item, ["logradouro", "endereco", "abreviatura"]),
-        bairro: firstText(item, ["bairro", "nomeBairro"]),
-        complemento: firstText(item, ["complemento"]),
-        uf: firstText(item, ["uf"]),
-        localidade: firstText(item, ["localidade", "municipio", "cidade"]),
+        cep: onlyDigits(brasilApi?.cep) || cep,
+        logradouro: text(brasilApi?.street),
+        bairro: text(brasilApi?.neighborhood),
+        complemento: text(brasilApi?.complement),
+        uf: text(brasilApi?.state),
+        localidade: text(brasilApi?.city),
+        fonte: text(brasilApi?.service) || "brasilapi",
       },
     })
   } catch (error) {
     console.error("[GET /api/cep/[cep]] erro:", error)
 
-    const status = Number((error as any)?.status ?? 500)
-    const safeStatus = status >= 400 && status < 600 ? status : 500
+    const rawStatus = Number((error as any)?.status ?? 500)
+    const status = rawStatus >= 400 && rawStatus < 600 ? rawStatus : 500
 
     return NextResponse.json(
       {
         ok: false,
-        error: error instanceof Error ? error.message : "Erro ao consultar CEP.",
+        error:
+          error instanceof Error
+            ? error.message
+            : "Erro ao consultar CEP na BrasilAPI.",
       },
-      { status: safeStatus },
+      { status },
     )
   }
 }

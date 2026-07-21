@@ -795,6 +795,11 @@ export default function ProtocoloPage({
                   <option value="Solicitação de informação">Solicitação de informação</option>
                   <option value="Devolução">Devolução</option>
                   <option value="Complementação de dados">Complementação de dados</option>
+                  <option value="Solicitação de TRS">Solicitação de TRS</option>
+                  <option value="Vaga Aprovada">Vaga Aprovada</option>
+                  <option value="Negativa de Vaga">Negativa de Vaga</option>
+                  <option value="Encerrar processo">Encerrar processo</option>
+                  <option value="Arquivar processo">Arquivar processo</option>
                   <option value="Outros">Outros</option>
                 </select>
               </div>

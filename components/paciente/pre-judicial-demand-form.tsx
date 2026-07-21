@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useMemo, useState } from "react"
 import { toast } from "sonner"
@@ -26,6 +26,15 @@ import {
   type CidEntry,
 } from "@/components/paciente/cid-multi-entry"
 
+function normalizeMunicipalitySearch(value: unknown) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toUpperCase()
+}
+
 export function PreJudicialDemandForm({
   patient,
   onBack,
@@ -42,6 +51,9 @@ export function PreJudicialDemandForm({
   const [pgeNetNumber, setPgeNetNumber] = useState("")
   const [deadlineDays, setDeadlineDays] = useState("")
   const [municipalityId, setMunicipalityId] = useState("")
+
+  const [municipalitySearch, setMunicipalitySearch] = useState("")
+  const [municipalitySearchOpen, setMunicipalitySearchOpen] = useState(false)
   const [procedures, setProcedures] = useState<ProcedureEntry[]>([])
   const [cids, setCids] = useState<CidEntry[]>([])
   const [saving, setSaving] = useState(false)
@@ -54,6 +66,22 @@ export function PreJudicialDemandForm({
   const municipality = MUNICIPALITY_OPTIONS.find(
     (item) => item.id === municipalityId,
   )
+
+  const filteredMunicipalities = useMemo(() => {
+    const q = normalizeMunicipalitySearch(municipalitySearch)
+
+    return MUNICIPALITY_OPTIONS
+      .filter((item) => {
+        const label = normalizeMunicipalitySearch(municipalityLabel(item).replace("/undefined", ""))
+        const name = normalizeMunicipalitySearch(item.name)
+        const ibge = String(item.ibge ?? "")
+
+        return !q || label.includes(q) || name.includes(q) || ibge.includes(q)
+      })
+      .slice(0, 79)
+  }, [municipalitySearch])
+
+
 
   async function handleSubmit() {
     if (!user) {
@@ -189,18 +217,44 @@ export function PreJudicialDemandForm({
 
           <div className="md:col-span-2">
             <Label className="mb-1 block text-xs">Município envolvido</Label>
-            <select
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              value={municipalityId}
-              onChange={(event) => setMunicipalityId(event.target.value)}
-            >
-              <option value="">Selecione</option>
-              {MUNICIPALITY_OPTIONS.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {municipalityLabel(item)}
-                </option>
-              ))}
-            </select>
+
+            <div className="relative">
+              <Input
+                value={municipalitySearch}
+                onChange={(event) => {
+                  setMunicipalitySearch(event.target.value)
+                  setMunicipalityId("")
+                  setMunicipalitySearchOpen(true)
+                }}
+                onFocus={() => setMunicipalitySearchOpen(true)}
+                placeholder="Digite o município envolvido"
+              />
+
+              {municipalitySearchOpen ? (
+                <div className="absolute z-50 mt-1 max-h-56 w-full overflow-auto rounded-md border border-border bg-background p-1 shadow-lg">
+                  {filteredMunicipalities.length === 0 ? (
+                    <p className="px-3 py-2 text-sm text-muted-foreground">
+                      Nenhum município de Mato Grosso do Sul localizado.
+                    </p>
+                  ) : (
+                    filteredMunicipalities.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        className="block w-full rounded px-3 py-2 text-left text-sm hover:bg-muted"
+                        onClick={() => {
+                          setMunicipalityId(item.id)
+                          setMunicipalitySearch(municipalityLabel(item).replace("/undefined", ""))
+                          setMunicipalitySearchOpen(false)
+                        }}
+                      >
+                        <span className="font-medium">{municipalityLabel(item).replace("/undefined", "")}</span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              ) : null}
+            </div>
           </div>
         </CardContent>
       </Card>

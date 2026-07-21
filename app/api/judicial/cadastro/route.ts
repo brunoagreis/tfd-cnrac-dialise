@@ -567,7 +567,7 @@ export async function POST(req: NextRequest) {
             jsonb_build_object(),
             jsonb_build_object('pge_net', $5::text, 'processo', $6::text),
             jsonb_build_array('PGE_NET', 'PROCESSO'),
-            'PGE.net e Autos da aÃ§Ã£o registrados automaticamente no cadastro judicial inicial.'
+            'PGE.net e Autos da ação registrados automaticamente no cadastro judicial inicial.'
           )
         `,
         demandaId,
@@ -661,9 +661,9 @@ export async function POST(req: NextRequest) {
           monitoramentoCriadorId,
         )
 
-        // NÃ£o atualiza public.judicial_monitoramento_execucao_diaria neste ponto.
-        // Alguns ambientes nÃ£o concedem permissÃ£o nessa tabela ao usuÃ¡rio da aplicaÃ§Ã£o.
-        // O cadastro da demanda e a atribuiÃ§Ã£o em public.judicial_monitoramento_atribuicoes permanecem ativos.
+        // Não atualiza public.judicial_monitoramento_execucao_diaria neste ponto.
+        // Alguns ambientes não concedem permissão nessa tabela ao usuário da aplicação.
+        // O cadastro da demanda e a atribuição em public.judicial_monitoramento_atribuicoes permanecem ativos.
 
       }
 
@@ -755,12 +755,12 @@ export async function POST(req: NextRequest) {
           const emailOsHistoricoTexto = [
             "OS DE E-MAIL VINCULADA AO CADASTRO JUDICIAL",
             `OS ID: ${osId}`,
-            `OS origem: ${emailOs.protocolo || "NÃ£o informado"}`,
-            `Assunto: ${emailOs.assunto || "NÃ£o informado"}`,
-            `Remetente: ${emailOs.remetente || "NÃ£o informado"}`,
+            `OS origem: ${emailOs.protocolo || "Não informado"}`,
+            `Assunto: ${emailOs.assunto || "Não informado"}`,
+            `Remetente: ${emailOs.remetente || "Não informado"}`,
             "",
             "Corpo do e-mail:",
-            emailOs.corpoResumo || "NÃ£o informado",
+            emailOs.corpoResumo || "Não informado",
             "",
             emailOsAttachmentNames.length
               ? `Anexos da OS: ${emailOsAttachmentNames.join(" | ")}`
@@ -786,7 +786,7 @@ export async function POST(req: NextRequest) {
             demandaId,
             emailOsHistoricoTexto,
             criadoPor || "sistema-email",
-            criadoPorNome || "IntegraÃ§Ã£o de e-mail",
+            criadoPorNome || "Integração de e-mail",
           )
 
           for (const attachment of emailOsAttachments) {
@@ -852,7 +852,7 @@ export async function POST(req: NextRequest) {
               attachmentSize,
               attachmentUrl ? `Anexo recebido pela OS de e-mail. Origem: ${attachmentUrl}` : "Anexo recebido pela OS de e-mail.",
               criadoPor || "sistema-email",
-              criadoPorNome || "IntegraÃ§Ã£o de e-mail",
+              criadoPorNome || "Integração de e-mail",
               attachmentName,
             )
           }

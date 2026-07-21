@@ -1,40 +1,68 @@
 import type { User } from "@/lib/types"
+import { hasUserPermission, isAdminUser } from "@/lib/access-control"
 
-export function canAccessJudicialModule(user: User | null | undefined) {
-  if (!user) return false
-  return user.role !== "VISUALIZADOR"
+type UserLike = (User & Record<string, unknown>) | null | undefined
+
+function hasPermission(
+  user: UserLike,
+  moduleCode: string,
+  actionCode = "visualizar",
+) {
+  return hasUserPermission(user as any, moduleCode, actionCode)
 }
 
-export function canAccessSchedulingModule(user: User | null | undefined) {
-  if (!user) return false
-  return ["ADMIN", "MEDICO_SES", "REGULADOR", "OPERADOR"].includes(user.role)
+function hasAnyPermission(
+  user: UserLike,
+  moduleCode: string,
+  actionCodes: string[],
+) {
+  return actionCodes.some((actionCode) =>
+    hasPermission(user, moduleCode, actionCode),
+  )
 }
 
-export function canManifestSchedulingItem(user: User | null | undefined) {
-  if (!user) return false
-  return ["ADMIN", "MEDICO_SES", "REGULADOR", "OPERADOR"].includes(user.role)
+export function canAccessJudicialModule(user: UserLike) {
+  return hasPermission(user, "JUDICIAL", "visualizar")
 }
 
-export function canImportSchedulingAgenda(user: User | null | undefined) {
-  if (!user) return false
-  return ["ADMIN", "MEDICO_SES", "REGULADOR"].includes(user.role)
+export function canAccessSchedulingModule(user: UserLike) {
+  return hasPermission(user, "AGENDAMENTO", "visualizar")
 }
 
-export function canAccessJudicialAdmin(user: User | null | undefined) {
-  return user?.role === "ADMIN"
+export function canManifestSchedulingItem(user: UserLike) {
+  return hasAnyPermission(user, "AGENDAMENTO", ["reservar", "editar", "criar"])
 }
 
-export function canReopenJudicialCase(user: User | null | undefined) {
-  return !!user && ["ADMIN", "MEDICO_SES", "REGULADOR"].includes(user.role)
+export function canImportSchedulingAgenda(user: UserLike) {
+  return hasAnyPermission(user, "AGENDAMENTO", ["criar", "editar"])
 }
 
-export function canForceSchedulingResend(user: User | null | undefined) {
-  return !!user && ["ADMIN", "MEDICO_SES"].includes(user.role)
+export function canAccessJudicialAdmin(user: UserLike) {
+  return hasPermission(user, "ADMIN_JUDICIAL", "visualizar")
+}
+
+export function canReopenJudicialCase(user: UserLike) {
+  return hasAnyPermission(user, "JUDICIAL", ["editar", "encerrar"])
+}
+
+export function canForceSchedulingResend(user: UserLike) {
+  return (
+    isAdminUser(user as any) ||
+    hasAnyPermission(user, "AGENDAMENTO", ["editar", "reservar"])
+  )
 }
 
 export function canMunicipalityManifest(
   casePendingMunicipalityAction: boolean,
-  user: User | null | undefined,
+  user: UserLike,
 ) {
-  return !!user && user.role === "UNIDADE_HOSPITALAR" && casePendingMunicipalityAction
+  const role = String((user as any)?.role ?? "").trim().toUpperCase()
+
+  return (
+    !!user &&
+    casePendingMunicipalityAction &&
+    (role === "UNIDADE_HOSPITALAR" ||
+      hasPermission(user, "PRE_JUDICIAL", "interagir") ||
+      hasPermission(user, "JUDICIAL", "interagir"))
+  )
 }

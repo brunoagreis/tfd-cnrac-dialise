@@ -155,12 +155,12 @@ function describePriorityItem(item: PriorityFocusItem) {
     item.mode === "procedure"
       ? `Procedimento ${item.label}`
       : item.mode === "combined"
-        ? `CombinaÃ§Ã£o ${item.label}`
+        ? `Combinação ${item.label}`
         : `CID ${item.label}`
 
   return item.expiresAt
-    ? `${base} â€¢ atÃ© ${new Date(`${item.expiresAt}T00:00:00`).toLocaleDateString("pt-BR")}`
-    : `${base} â€¢ sem prazo final`
+    ? `${base} • até ${new Date(`${item.expiresAt}T00:00:00`).toLocaleDateString("pt-BR")}`
+    : `${base} • sem prazo final`
 }
 
 export function JudicialAdminPanel() {
@@ -429,7 +429,7 @@ export function JudicialAdminPanel() {
       const json = await response.json().catch(() => ({}))
 
       if (!response.ok || !json?.ok) {
-        toast.error(json?.error || "Erro ao carregar municÃ­pios.")
+        toast.error(json?.error || "Erro ao carregar municípios.")
         return
       }
 
@@ -445,7 +445,7 @@ export function JudicialAdminPanel() {
       )
     } catch (error) {
       console.error("LOAD_MUNICIPIOS_ERROR", error)
-      toast.error("Erro ao carregar municÃ­pios.")
+      toast.error("Erro ao carregar municípios.")
     } finally {
       setLoadingMunicipalities(false)
     }
@@ -453,7 +453,7 @@ export function JudicialAdminPanel() {
 
   async function handleSaveMunicipality() {
     if (!municipalityName.trim()) {
-      toast.error("Informe o municÃ­pio.")
+      toast.error("Informe o município.")
       return
     }
 
@@ -486,7 +486,7 @@ export function JudicialAdminPanel() {
       const json = await response.json().catch(() => ({}))
 
       if (!response.ok || !json?.ok || !json?.item) {
-        toast.error(json?.error || "Erro ao salvar municÃ­pio.")
+        toast.error(json?.error || "Erro ao salvar município.")
         return
       }
 
@@ -506,7 +506,7 @@ export function JudicialAdminPanel() {
 
       judicial.upsertMunicipalityContact(savedItem)
 
-      toast.success("Contatos do municÃ­pio salvos.")
+      toast.success("Contatos do município salvos.")
       setEditingMunicipalityId("")
       setMunicipalityName("")
       setEmails("")
@@ -514,7 +514,7 @@ export function JudicialAdminPanel() {
       setContacts("")
     } catch (error) {
       console.error("SAVE_MUNICIPIO_ERROR", error)
-      toast.error("Erro ao salvar municÃ­pio.")
+      toast.error("Erro ao salvar município.")
     } finally {
       setSavingMunicipality(false)
     }
@@ -587,7 +587,7 @@ export function JudicialAdminPanel() {
       !templateSubject.trim() ||
       !htmlHasContent(html)
     ) {
-      toast.error("TÃ­tulo, assunto e corpo sÃ£o obrigatÃ³rios.")
+      toast.error("Título, assunto e corpo são obrigatórios.")
       return
     }
 
@@ -860,12 +860,12 @@ export function JudicialAdminPanel() {
 
   async function handleSaveSigTapCadastro() {
     if (!sigtapCodigoCadastro.trim()) {
-      toast.error("Informe o cÃ³digo do SIGTAP.")
+      toast.error("Informe o código do SIGTAP.")
       return
     }
 
     if (!sigtapDescricaoCadastro.trim()) {
-      toast.error("Informe a descriÃ§Ã£o do SIGTAP.")
+      toast.error("Informe a descrição do SIGTAP.")
       return
     }
 
@@ -948,7 +948,7 @@ export function JudicialAdminPanel() {
     setPriorityProcedureQuery("")
     setPriorityExpiresAt("")
     setPriorityProcedureOptions([])
-    toast.success("Procedimento adicionado Ã  lista de prioridade.")
+    toast.success("Procedimento adicionado à lista de prioridade.")
   }
 
   function addManualProcedurePriority() {
@@ -973,7 +973,7 @@ export function JudicialAdminPanel() {
       value: code,
       label: exactMatch
         ? `${normalizeProcedureCode(exactMatch.codigo)} - ${exactMatch.descricao}`
-        : `${code} - PROCEDIMENTO PRIORITÃRIO`,
+        : `${code} - PROCEDIMENTO PRIORITÁRIO`,
       expiresAt: priorityExpiresAt || undefined,
       createdAt: new Date().toISOString(),
     }
@@ -1002,7 +1002,7 @@ export function JudicialAdminPanel() {
     setPriorityProcedureQuery("")
     setPriorityExpiresAt("")
     setPriorityProcedureOptions([])
-    toast.success("Procedimento adicionado Ã  lista de prioridade.")
+    toast.success("Procedimento adicionado à lista de prioridade.")
   }
 
   function addCidPriority(item: CidCatalogItem) {
@@ -1038,7 +1038,7 @@ export function JudicialAdminPanel() {
 
     setPriorityCidQuery("")
     setPriorityExpiresAt("")
-    toast.success("CID adicionado Ã  lista de prioridade.")
+    toast.success("CID adicionado à lista de prioridade.")
   }
 
   function addManualCidPriority() {
@@ -1059,7 +1059,7 @@ export function JudicialAdminPanel() {
       value: code,
       label: exactMatch
         ? `${exactMatch.code} - ${exactMatch.description}`
-        : `${code} - CID prioritÃ¡rio`,
+        : `${code} - CID prioritário`,
       expiresAt: priorityExpiresAt || undefined,
       createdAt: new Date().toISOString(),
     }
@@ -1087,7 +1087,7 @@ export function JudicialAdminPanel() {
 
     setPriorityCidQuery("")
     setPriorityExpiresAt("")
-    toast.success("CID adicionado Ã  lista de prioridade.")
+    toast.success("CID adicionado à lista de prioridade.")
   }
 
   function addCombinedPriority() {
@@ -1099,7 +1099,7 @@ export function JudicialAdminPanel() {
     const filledCriteria = [cid, procedure, specialty, subspecialty].filter(Boolean)
 
     if (filledCriteria.length < 2) {
-      toast.error("Informe pelo menos dois parÃ¢metros para a prioridade combinada.")
+      toast.error("Informe pelo menos dois parâmetros para a prioridade combinada.")
       return
     }
 
@@ -1149,7 +1149,7 @@ export function JudicialAdminPanel() {
     setPriorityCombinedSpecialty("")
     setPriorityCombinedSubspecialty("")
     setPriorityExpiresAt("")
-    toast.success("CombinaÃ§Ã£o adicionada Ã  lista de prioridade.")
+    toast.success("Combinação adicionada à lista de prioridade.")
   }
 
   function removePriorityItem(itemId: string) {
@@ -1158,7 +1158,7 @@ export function JudicialAdminPanel() {
 
   async function applyPriorityFocus() {
     if (focusItems.length === 0) {
-      toast.error("Adicione pelo menos um procedimento, CID ou combinaÃ§Ã£o antes de aplicar.")
+      toast.error("Adicione pelo menos um procedimento, CID ou combinação antes de aplicar.")
       return
     }
 
@@ -1229,8 +1229,8 @@ export function JudicialAdminPanel() {
   return (
     <Tabs defaultValue="core" className="space-y-4">
       <TabsList className="flex w-full flex-wrap justify-start gap-2 bg-transparent p-0">
-        <TabsTrigger value="core">ImportaÃ§Ãµes CORE</TabsTrigger>
-        <TabsTrigger value="municipios">MunicÃ­pios</TabsTrigger>
+        <TabsTrigger value="core">Importações CORE</TabsTrigger>
+        <TabsTrigger value="municipios">Municípios</TabsTrigger>
         <TabsTrigger value="emails">E-mails</TabsTrigger>
         <TabsTrigger value="prioridade">Prioridades</TabsTrigger>
         <TabsTrigger value="bloqueio-sequestro">Bloqueio / Sequestro</TabsTrigger>
@@ -1241,25 +1241,25 @@ export function JudicialAdminPanel() {
       <TabsContent value="core" className="mt-0 space-y-4">
         <Card className="border-border">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">ImportaÃ§Ãµes CORE</CardTitle>
+            <CardTitle className="text-base">Importações CORE</CardTitle>
             <CardDescription>
-              Selecione o tipo de importaÃ§Ã£o e envie o arquivo Excel correspondente.
+              Selecione o tipo de importação e envie o arquivo Excel correspondente.
             </CardDescription>
           </CardHeader>
 
           <CardContent className="space-y-4">
             <div className="rounded-xl border border-border bg-muted/20 p-4">
-              <p className="text-sm font-medium text-foreground">Regras de atualizaÃ§Ã£o</p>
+              <p className="text-sm font-medium text-foreground">Regras de atualização</p>
               <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-muted-foreground">
                 <li>
                   <strong>CORE Ambulatorial Finalizados</strong>: apaga apenas os registros
                   do lote <strong>finalizados</strong> em <strong>core_ambulatorial</strong> e
-                  mantÃ©m os de <strong>em atendimento</strong>.
+                  mantém os de <strong>em atendimento</strong>.
                 </li>
                 <li>
                   <strong>CORE Ambulatorial Em Atendimento</strong>: apaga apenas os registros
                   do lote <strong>em_atendimento</strong> em <strong>core_ambulatorial</strong> e
-                  mantÃ©m os de <strong>finalizados</strong>.
+                  mantém os de <strong>finalizados</strong>.
                 </li>
                 <li>
                   <strong>CORE Leitos</strong>: apaga todos os dados de <strong>core_leitos</strong> e
@@ -1270,7 +1270,7 @@ export function JudicialAdminPanel() {
 
             <div className="grid gap-3 md:grid-cols-[340px_1fr]">
               <div>
-                <Label className="mb-1 block text-xs">Tipo de importaÃ§Ã£o</Label>
+                <Label className="mb-1 block text-xs">Tipo de importação</Label>
                 <select
                   value={table}
                   onChange={(e) => setTable(e.target.value as CoreTable)}
@@ -1329,7 +1329,7 @@ export function JudicialAdminPanel() {
             <Input
               value={municipalityName}
               onChange={(e) => setMunicipalityName(e.target.value)}
-              placeholder="MunicÃ­pio"
+              placeholder="Município"
             />
             <Input
               value={emails}
@@ -1344,27 +1344,27 @@ export function JudicialAdminPanel() {
             <Input
               value={contacts}
               onChange={(e) => setContacts(e.target.value)}
-              placeholder="Nome do responsÃ¡vel, outro responsÃ¡vel"
+              placeholder="Nome do responsável, outro responsável"
             />
             <Button onClick={handleSaveMunicipality} disabled={savingMunicipality}>
               <Save className="mr-2 h-4 w-4" />
-              {savingMunicipality ? "Salvando..." : "Salvar municÃ­pio"}
+              {savingMunicipality ? "Salvando..." : "Salvar município"}
             </Button>
           </CardContent>
         </Card>
 
         <Card className="border-border">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">MunicÃ­pios cadastrados</CardTitle>
+            <CardTitle className="text-base">Municípios cadastrados</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
             {loadingMunicipalities ? (
               <div className="rounded-xl border border-border p-3 text-sm text-muted-foreground">
-                Carregando municÃ­pios...
+                Carregando municípios...
               </div>
             ) : municipalityItems.length === 0 ? (
               <div className="rounded-xl border border-border p-3 text-sm text-muted-foreground">
-                Nenhum municÃ­pio cadastrado.
+                Nenhum município cadastrado.
               </div>
             ) : (
               municipalityItems.map((item) => (
@@ -1415,30 +1415,30 @@ export function JudicialAdminPanel() {
                 Demanda judicial cadastrada
               </option>
               <option value="solicitar_inclusao_ficha">
-                Solicitar inclusÃ£o de ficha
+                Solicitar inclusão de ficha
               </option>
               <option value="reiteracao_municipio">
-                ReiteraÃ§Ã£o ao municÃ­pio
+                Reiteração ao município
               </option>
               <option value="agendamento_informado">
                 Agendamento informado
               </option>
-              <option value="inercia_municipio">InÃ©rcia do municÃ­pio</option>
+              <option value="inercia_municipio">Inércia do município</option>
               <option value="demanda_prejudicial_cadastrada">
-                Demanda prÃ© judicial cadastrada
+                Demanda pré judicial cadastrada
               </option>
               <option value="prazo_prejudicial_vencendo">
-                Prazo do prÃ© judicial vencendo
+                Prazo do pré judicial vencendo
               </option>
               <option value="prazo_prejudicial_vencido">
-                Prazo do prÃ© judicial vencido
+                Prazo do pré judicial vencido
               </option>
             </select>
 
             <Input
               value={templateTitle}
               onChange={(e) => setTemplateTitle(e.target.value)}
-              placeholder="TÃ­tulo interno"
+              placeholder="Título interno"
             />
             <Input
               value={templateSubject}
@@ -1447,7 +1447,7 @@ export function JudicialAdminPanel() {
             />
 
             <div className="rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground">
-              Placeholders disponÃ­veis: $ficha_core, $cpf, $nome_paciente,
+              Placeholders disponíveis: $ficha_core, $cpf, $nome_paciente,
               $numero_processo, $protocolo_judicial, $protocolo_prejudicial,
               $data_agendamento e $user_sistema.
             </div>
@@ -1498,7 +1498,7 @@ export function JudicialAdminPanel() {
                   size="icon"
                   variant="outline"
                   className="bg-transparent"
-                  title="ItÃ¡lico"
+                  title="Itálico"
                   onClick={() => runTemplateEditorCommand("italic")}
                 >
                   <Italic className="h-4 w-4" />
@@ -1531,7 +1531,7 @@ export function JudicialAdminPanel() {
                   size="icon"
                   variant="outline"
                   className="bg-transparent"
-                  title="Alinhar Ã  esquerda"
+                  title="Alinhar à esquerda"
                   onClick={() => runTemplateEditorCommand("justifyLeft")}
                 >
                   <AlignLeft className="h-4 w-4" />
@@ -1553,7 +1553,7 @@ export function JudicialAdminPanel() {
                   size="icon"
                   variant="outline"
                   className="bg-transparent"
-                  title="Alinhar Ã  direita"
+                  title="Alinhar à direita"
                   onClick={() => runTemplateEditorCommand("justifyRight")}
                 >
                   <AlignRight className="h-4 w-4" />
@@ -1564,7 +1564,7 @@ export function JudicialAdminPanel() {
                   size="icon"
                   variant="outline"
                   className="bg-transparent"
-                  title="Lista nÃ£o ordenada"
+                  title="Lista não ordenada"
                   onClick={() => runTemplateEditorCommand("insertUnorderedList")}
                 >
                   <List className="h-4 w-4" />
@@ -1586,7 +1586,7 @@ export function JudicialAdminPanel() {
                   size="icon"
                   variant="outline"
                   className="bg-transparent"
-                  title="Formato padrÃ£o"
+                  title="Formato padrão"
                   onClick={() => runTemplateEditorCommand("formatBlock", "<p>")}
                 >
                   <Type className="h-4 w-4" />
@@ -1598,7 +1598,7 @@ export function JudicialAdminPanel() {
                   className="bg-transparent text-xs"
                   onClick={() => runTemplateEditorCommand("removeFormat")}
                 >
-                  Limpar formataÃ§Ã£o
+                  Limpar formatação
                 </Button>
               </div>
 
@@ -1665,19 +1665,19 @@ export function JudicialAdminPanel() {
           <CardHeader className="pb-3">
             <CardTitle className="text-base">Cadastro de SIGTAP</CardTitle>
             <CardDescription>
-              O SIGTAP Ã© cadastrado apenas com cÃ³digo e descriÃ§Ã£o.
+              O SIGTAP é cadastrado apenas com código e descrição.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <Input
               value={sigtapCodigoCadastro}
               onChange={(e) => setSigTapCodigoCadastro(normalizeDigitsOnlyInput(e.target.value))}
-              placeholder="CÃ³digo do SIGTAP"
+              placeholder="Código do SIGTAP"
             />
             <Input
               value={sigtapDescricaoCadastro}
               onChange={(e) => setSigTapDescricaoCadastro(normalizeUpperInput(e.target.value))}
-              placeholder="DescriÃ§Ã£o do SIGTAP"
+              placeholder="Descrição do SIGTAP"
             />
             <Button onClick={handleSaveSigTapCadastro} disabled={savingSigTapCadastro}>
               <Save className="mr-2 h-4 w-4" />
@@ -1695,7 +1695,7 @@ export function JudicialAdminPanel() {
               <Input
                 value={sigtapBuscaCadastro}
                 onChange={(e) => setSigTapBuscaCadastro(e.target.value)}
-                placeholder="Buscar SIGTAP por cÃ³digo ou descriÃ§Ã£o"
+                placeholder="Buscar SIGTAP por código ou descrição"
               />
               <Button type="button" variant="outline" onClick={fetchSigTapCadastro}>
                 <Search className="mr-2 h-4 w-4" />

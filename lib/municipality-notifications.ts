@@ -433,3 +433,407 @@ export async function sendMunicipalityDemandNotification(input: DemandNotificati
     return finishNotification(input, { ok: false, skipped: true, reason: error instanceof Error ? error.message : "Erro ao enviar e-mail." })
   }
 }
+
+type MunicipalitySchedulingNotificationInput = {
+  module: "judicial" | "pre_judicial"
+  protocolo: string
+  pacienteNome: string
+  municipio: string
+  numeroProcesso?: string | null
+  fichaNumero?: string | null
+  dataAgendamento: string
+  userSistema?: string | null
+  duplicateKey: string
+}
+
+type SchedulingDispatchRow = {
+  id: string
+}
+
+// MUNICIPALITY_SCHEDULING_NOTIFICATION
+async function ensureSchedulingDispatchTable() {
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS public.email_agendamento_disparos (
+      id BIGSERIAL PRIMARY KEY,
+      chave_unica TEXT NOT NULL,
+      protocolo TEXT NOT NULL,
+      modulo TEXT NOT NULL,
+      municipio TEXT,
+      paciente_nome TEXT,
+      numero_processo TEXT,
+      numero_ficha TEXT,
+      data_agendamento TIMESTAMPTZ,
+      status TEXT NOT NULL DEFAULT 'PENDENTE',
+      message_id TEXT,
+      accepted JSONB NOT NULL DEFAULT '[]'::jsonb,
+      rejected JSONB NOT NULL DEFAULT '[]'::jsonb,
+      erro TEXT,
+      enviado_em TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `)
+
+  await prisma.$executeRawUnsafe(`
+    CREATE UNIQUE INDEX IF NOT EXISTS
+      email_agendamento_disparos_chave_uniq
+    ON public.email_agendamento_disparos (chave_unica)
+  `)
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS
+      email_agendamento_disparos_protocolo_idx
+    ON public.email_agendamento_disparos (protocolo)
+  `)
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS
+      email_agendamento_disparos_status_idx
+    ON public.email_agendamento_disparos (status)
+  `)
+}
+
+async function finishSchedulingDispatch(
+  dispatchId: string,
+  result: NotificationResult,
+) {
+  await prisma.$executeRawUnsafe(
+    `
+      UPDATE public.email_agendamento_disparos
+      SET
+        status = $2,
+        message_id = NULLIF($3, ''),
+        accepted = COALESCE(NULLIF($4, ''), '[]')::jsonb,
+        rejected = COALESCE(NULLIF($5, ''), '[]')::jsonb,
+        erro = NULLIF($6, ''),
+        enviado_em = CASE
+          WHEN $2 = 'ENVIADO' THEN NOW()
+          ELSE enviado_em
+        END,
+        updated_at = NOW()
+      WHERE id = $1::bigint
+    `,
+    dispatchId,
+    result.ok && !result.skipped
+      ? "ENVIADO"
+      : "NAO_ENVIADO",
+    text(result.messageId),
+    JSON.stringify(result.accepted ?? []),
+    JSON.stringify(result.rejected ?? []),
+    text(result.reason),
+  )
+
+  return result
+}
+
+export async function sendMunicipalitySchedulingNotification(
+  input: MunicipalitySchedulingNotificationInput,
+) {
+  await ensureSchedulingDispatchTable()
+
+  const duplicateKey = text(input.duplicateKey)
+
+  if (!duplicateKey) {
+    return {
+      ok: false,
+      skipped: true,
+      reason:
+        "Chave de controle do agendamento não informada.",
+    } satisfies NotificationResult
+  }
+
+  let reservationRows =
+    await prisma.$queryRawUnsafe<
+      SchedulingDispatchRow[]
+    >(
+      `
+        INSERT INTO public.email_agendamento_disparos (
+          chave_unica,
+          protocolo,
+          modulo,
+          municipio,
+          paciente_nome,
+          numero_processo,
+          numero_ficha,
+          data_agendamento,
+          status,
+          created_at,
+          updated_at
+        )
+        VALUES (
+          $1,
+          $2,
+          $3,
+          $4,
+          $5,
+          $6,
+          $7,
+          $8::timestamptz,
+          'PENDENTE',
+          NOW(),
+          NOW()
+        )
+        ON CONFLICT (chave_unica)
+        DO NOTHING
+        RETURNING id::text AS id
+      `,
+      duplicateKey,
+      text(input.protocolo),
+      normalizeModule(input.module),
+      text(input.municipio) || null,
+      text(input.pacienteNome) || null,
+      text(input.numeroProcesso) || null,
+      text(input.fichaNumero) || null,
+      text(input.dataAgendamento),
+    )
+
+  if (reservationRows.length === 0) {
+    reservationRows =
+      await prisma.$queryRawUnsafe<
+        SchedulingDispatchRow[]
+      >(
+        `
+          UPDATE public.email_agendamento_disparos
+          SET
+            status = 'PENDENTE',
+            erro = NULL,
+            updated_at = NOW()
+          WHERE chave_unica = $1
+            AND (
+              status = 'NAO_ENVIADO'
+              OR (
+                status = 'PENDENTE'
+                AND updated_at
+                  < NOW() - INTERVAL '10 minutes'
+              )
+            )
+          RETURNING id::text AS id
+        `,
+        duplicateKey,
+      )
+  }
+
+  const reservation = reservationRows[0]
+
+  if (!reservation) {
+    return {
+      ok: true,
+      skipped: true,
+      reason:
+        "Este agendamento já foi comunicado ao município.",
+    } satisfies NotificationResult
+  }
+
+  const demandInput: DemandNotificationInput = {
+    module: input.module,
+    protocolo: text(input.protocolo),
+    pacienteNome: text(input.pacienteNome),
+    municipio: text(input.municipio),
+    numeroProcesso:
+      text(input.numeroProcesso) ||
+      text(input.protocolo),
+    fichaCore:
+      text(input.fichaNumero) ||
+      "Não informada",
+    dataAgendamento:
+      text(input.dataAgendamento),
+    userSistema:
+      text(input.userSistema) ||
+      "SIGAJUS",
+  }
+
+  try {
+    const municipio = text(input.municipio)
+
+    if (!municipio) {
+      return finishSchedulingDispatch(
+        reservation.id,
+        {
+          ok: false,
+          skipped: true,
+          reason: "Município não informado.",
+        },
+      )
+    }
+
+    const [contact] =
+      await prisma.$queryRawUnsafe<
+        MunicipalityContactRow[]
+      >(
+        `
+          SELECT
+            municipio_nome AS "municipalityName",
+            emails
+          FROM public.admin_judicial_municipios_contatos
+          WHERE
+            LOWER(TRIM(municipio_nome))
+              = LOWER(TRIM($1))
+          LIMIT 1
+        `,
+        municipio,
+      )
+
+    const recipients =
+      normalizeEmails(contact?.emails)
+
+    if (recipients.length === 0) {
+      return finishSchedulingDispatch(
+        reservation.id,
+        {
+          ok: false,
+          skipped: true,
+          reason:
+            "Município sem e-mail cadastrado.",
+        },
+      )
+    }
+
+    const templates =
+      await prisma.$queryRawUnsafe<
+        TemplateRow[]
+      >(
+        `
+          SELECT
+            assunto AS subject,
+            corpo_html AS body
+          FROM public.admin_judicial_modelos_email m
+          WHERE
+            LOWER(
+              COALESCE(
+                to_jsonb(m)->>'tipo',
+                to_jsonb(m)->>'type',
+                ''
+              )
+            ) = 'agendamento_informado'
+            AND (
+              NULLIF(TRIM(m.modulo_disparo), '')
+                IS NULL
+              OR LOWER(m.modulo_disparo)
+                = LOWER($1)
+            )
+          ORDER BY
+            CASE
+              WHEN LOWER(
+                COALESCE(m.modulo_disparo, '')
+              ) = LOWER($1)
+              THEN 0
+              ELSE 1
+            END,
+            m.updated_at DESC,
+            m.id DESC
+          LIMIT 1
+        `,
+        normalizeModule(input.module),
+      )
+
+    const template =
+      templates[0] ?? {
+        subject:
+          "Agendamento informado - $nome_paciente - $processo",
+        body: `
+          <p>Prezados(as),</p>
+
+          <p>
+            Informamos que o paciente
+            <strong>$nome_paciente</strong>
+            foi agendado.
+          </p>
+
+          <p>
+            <strong>Processo:</strong>
+            $numero_processo<br>
+            <strong>Protocolo:</strong>
+            $protocolo<br>
+            <strong>Número da ficha:</strong>
+            $ficha_core<br>
+            <strong>Data do agendamento:</strong>
+            $data_agendamento
+          </p>
+
+          <p>
+            O município deverá realizar a busca ativa
+            e comunicar o agendamento ao paciente.
+          </p>
+
+          <p>Atenciosamente,<br>$user_sistema</p>
+        `,
+      }
+
+    const config = getMailConfig()
+
+    if (!config.isConfigured) {
+      return finishSchedulingDispatch(
+        reservation.id,
+        {
+          ok: false,
+          skipped: true,
+          reason:
+            `SMTP não configurado: ${
+              config.missing.join(", ")
+            }`,
+        },
+      )
+    }
+
+    const subject = replaceTokens(
+      template.subject || "",
+      demandInput,
+    )
+
+    const html = wrapEmailHtml(
+      replaceTokens(
+        template.body || "",
+        demandInput,
+      ),
+      demandInput,
+    )
+
+    const transporter =
+      nodemailer.createTransport({
+        host: config.host,
+        port: config.port,
+        secure: config.secure,
+        auth: {
+          user: config.username,
+          pass: config.password,
+        },
+      })
+
+    const info = await transporter.sendMail({
+      from:
+        `"${config.fromName}" ` +
+        `<${config.fromAddress}>`,
+      to: recipients.join(", "),
+      subject,
+      html,
+    })
+
+    return finishSchedulingDispatch(
+      reservation.id,
+      {
+        ok: true,
+        skipped: false,
+        messageId: info.messageId,
+        accepted: info.accepted,
+        rejected: info.rejected,
+      },
+    )
+  } catch (error) {
+    console.error(
+      "SEND_MUNICIPALITY_SCHEDULING_NOTIFICATION_ERROR",
+      error,
+    )
+
+    return finishSchedulingDispatch(
+      reservation.id,
+      {
+        ok: false,
+        skipped: true,
+        reason:
+          error instanceof Error
+            ? error.message
+            : "Erro ao enviar e-mail de agendamento.",
+      },
+    )
+  }
+}

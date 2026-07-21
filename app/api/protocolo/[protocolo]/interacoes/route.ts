@@ -27,6 +27,50 @@ async function requireProtocolUserRequest(req: NextRequest) {
 
 const PENDENCIA_FINALIZAR_DEMANDA = "finalizar_demanda"
 
+// HEMODIALISE_VAGA_APROVADA_FINALIZA
+function normalizeInteractionKey(value: unknown) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[\s-]+/g, " ")
+}
+
+function extractInteractionSubject(texto: string) {
+  const subjectMatch = String(texto || "").match(
+    /^Assunto:\s*(.+)$/im,
+  )
+
+  return normalizeInteractionKey(
+    subjectMatch?.[1],
+  )
+}
+
+function inferProtocolPendencyFromText(
+  texto: string,
+  modulo?: string | null,
+) {
+  const subject = extractInteractionSubject(texto)
+
+  if (
+    subject === "encerrar processo" ||
+    subject === "arquivar processo"
+  ) {
+    return PENDENCIA_FINALIZAR_DEMANDA
+  }
+
+  if (
+    normalizeInteractionKey(modulo) ===
+      "hemodialise" &&
+    subject === "vaga aprovada"
+  ) {
+    return PENDENCIA_FINALIZAR_DEMANDA
+  }
+
+  return ""
+}
+
 type InteracaoRow = {
   id: string
   demandaId: string
@@ -207,9 +251,9 @@ export async function POST(
     const body = await req.json().catch(() => null)
 
     const texto = normalizeText(body?.texto)
-    const pendencia = normalizeText(body?.pendencia) || null
-    const createdBy = normalizeText(body?.createdBy) || null
-    const createdByName = normalizeText(body?.createdByName) || null
+    const requestedPendency = normalizeText(body?.pendencia) || null
+    const createdBy = normalizeText(body?.createdBy) || protocolGuardPost.session.id || null
+    const createdByName = normalizeText(body?.createdByName) || protocolGuardPost.session.nome || null
     const createdByCpf = normalizeText(body?.createdByCpf) || null
     const assinaturaUrl = normalizeText(body?.assinaturaUrl) || null
 
@@ -220,9 +264,16 @@ export async function POST(
       )
     }
 
-    const demandaRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+    const demandaRows = await prisma.$queryRawUnsafe<
+      Array<{
+        id: string
+        modulo: string | null
+      }>
+    >(
       `
-        SELECT id::text AS id
+        SELECT
+          id::text AS id,
+          modulo::text AS modulo
         FROM public.demandas
         WHERE protocolo = $1
         LIMIT 1
@@ -239,12 +290,47 @@ export async function POST(
       )
     }
 
-    const id = buildId("int_")
-    const isFinalizacao = pendencia === PENDENCIA_FINALIZAR_DEMANDA
+    const interactionSubject =
+      extractInteractionSubject(texto)
 
-    await prisma.$executeRawUnsafe(
+    const isHemodialiseVagaAprovada =
+      normalizeInteractionKey(demanda.modulo) ===
+        "hemodialise" &&
+      interactionSubject === "vaga aprovada"
+
+    const inferredPendency =
+      inferProtocolPendencyFromText(
+        texto,
+        demanda.modulo,
+      )
+
+    const pendencia =
+      inferredPendency ||
+      requestedPendency ||
+      null
+
+    const id = buildId("int_")
+
+    const isFinalizacao =
+      pendencia ===
+      PENDENCIA_FINALIZAR_DEMANDA
+
+    const insertedRows = await prisma.$queryRawUnsafe<
+      Array<{
+        id: string
+        demandaId: string
+        texto: string
+        pendencia: string | null
+        createdAt: string | null
+        createdBy: string | null
+        createdByName: string | null
+        createdByCpf: string | null
+        assinaturaUrl: string | null
+      }>
+    >(
       `
-        INSERT INTO public.interacoes (
+        WITH inserted AS (
+          INSERT INTO public.interacoes (
           id,
           "demandaId",
           texto,
@@ -256,6 +342,38 @@ export async function POST(
           "assinaturaUrl"
         )
         VALUES ($1, $2, $3, $4, NOW(), $5, $6, $7, $8)
+        RETURNING
+          id,
+          "demandaId"::text AS "demandaId",
+          texto,
+          pendencia,
+          "createdAt"::text AS "createdAt",
+          "createdBy",
+          "createdByName",
+          "createdByCpf",
+          "assinaturaUrl"
+        ),
+        encerramento_hemodialise AS (
+          UPDATE public.judicial_monitoramento_base
+          SET
+            ativo_monitoramento = FALSE,
+            status_monitoramento_atual = 'RESOLVIDO',
+            data_ultimo_monitoramento = NOW(),
+            data_proximo_monitoramento = NULL,
+            pendente_dia_anterior = FALSE,
+            updated_at = NOW()
+          WHERE $9::boolean = TRUE
+            AND UPPER(
+              COALESCE(origem_modulo, '')
+            ) = 'HEMODIALISE'
+            AND (
+              origem_registro_id::text = $2
+              OR demanda_id::text = $2
+            )
+          RETURNING id
+        )
+        SELECT *
+        FROM inserted
       `,
       id,
       demanda.id,
@@ -265,29 +383,43 @@ export async function POST(
       createdByName,
       createdByCpf,
       assinaturaUrl,
+      isHemodialiseVagaAprovada,
     )
+
+    const inserted = insertedRows[0]
+
+    if (!inserted) {
+      throw new Error("INSERT de interação não retornou registro.")
+    }
 
     return NextResponse.json({
       ok: true,
       finalizada: isFinalizacao,
       item: {
-        id,
-        demandaId: demanda.id,
-        texto,
-        pendencia: pendencia ?? undefined,
+        id: inserted.id,
+        demandaId: inserted.demandaId,
+        texto: inserted.texto ?? "",
+        pendencia: inserted.pendencia ?? undefined,
         anexos: [],
-        criadoEm: new Date().toISOString(),
-        criadoPor: createdBy ?? "",
-        criadoPorNome: createdByName ?? "",
-        criadoPorCpf: createdByCpf ?? "",
-        assinaturaUrl: assinaturaUrl ?? "",
+        criadoEm: inserted.createdAt ?? new Date().toISOString(),
+        criadoPor: inserted.createdBy ?? "",
+        criadoPorNome: inserted.createdByName ?? "",
+        criadoPorCpf: inserted.createdByCpf ?? "",
+        assinaturaUrl: inserted.assinaturaUrl ?? "",
       },
     })
   } catch (error) {
     console.error("[POST /api/protocolo/[protocolo]/interacoes] erro:", error)
 
     return NextResponse.json(
-      { ok: false, error: "Erro ao salvar interação do protocolo." },
+      {
+        ok: false,
+        error: "Erro ao salvar interação do protocolo.",
+        detail:
+          process.env.NODE_ENV === "development" && error instanceof Error
+            ? error.message
+            : undefined,
+      },
       { status: 500 },
     )
   }

@@ -112,6 +112,7 @@ function resolveCoreSituation(row: CoreCandidateRow): CoreSituation {
   }
 }
 
+// CORE_AUTOMATICO_MOVIMENTACAO_AUDITORIA
 async function insertAutomaticMovement(tx: any, params: {
   row: CoreCandidateRow
   tabela: string
@@ -119,6 +120,8 @@ async function insertAutomaticMovement(tx: any, params: {
   situacao: string
   description: string
 }) {
+  const movementId = `jmov_core_auto_${randomUUID()}`
+
   await tx.$executeRawUnsafe(
     `
       INSERT INTO public.judicial_movimentacoes (
@@ -137,7 +140,7 @@ async function insertAutomaticMovement(tx: any, params: {
         $1,
         $2::bigint,
         $3,
-        'monitoramento',
+        'monitoramento_automatico_core',
         $4,
         '[]'::jsonb,
         'sistema',
@@ -146,13 +149,65 @@ async function insertAutomaticMovement(tx: any, params: {
         NOW()
       )
     `,
-    `jmov_core_auto_${randomUUID()}`,
+    movementId,
     params.row.monitoramentoId,
     params.row.demandaId || null,
     params.description,
   )
-}
 
+  await tx.$executeRawUnsafe(
+    `
+      INSERT INTO public.sistema_auditoria (
+        tabela_nome,
+        acao,
+        registro_id,
+        usuario_id,
+        usuario_nome,
+        usuario_email,
+        modulo_codigo,
+        data_hora,
+        dados_anteriores,
+        dados_novos,
+        campos_alterados,
+        observacao
+      )
+      VALUES (
+        'judicial_movimentacoes',
+        'monitoramento_automatico_core',
+        $1::text,
+        'sistema',
+        'Sistema - Monitoramento Automático CORE',
+        NULL,
+        'JUDICIAL',
+        NOW(),
+        jsonb_build_object(),
+        jsonb_build_object(
+          'movimentacao_id', $2::text,
+          'monitoramento_id', $1::text,
+          'demanda_id', $3::text,
+          'type', 'monitoramento_automatico_core',
+          'tabela_core', $4::text,
+          'ficha_core', $5::text,
+          'situacao_core', $6::text,
+          'descricao', $7::text
+        ),
+        jsonb_build_array(
+          'judicial_movimentacoes',
+          'monitoramento_automatico_core',
+          'judicial_core_monitoramento_controle'
+        ),
+        $7::text
+      )
+    `,
+    params.row.monitoramentoId,
+    movementId,
+    params.row.demandaId || null,
+    params.tabela || null,
+    params.ficha || null,
+    params.situacao || null,
+    params.description,
+  )
+}
 
 function coreStatusHash(statusFicha: string, statusProcedimento: string) {
   return createHash("sha1")

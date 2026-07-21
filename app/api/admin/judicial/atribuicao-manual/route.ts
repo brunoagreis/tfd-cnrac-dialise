@@ -78,6 +78,30 @@ function addIlikeFilter(whereParts: string[], params: unknown[], columnSql: stri
   whereParts.push(`LOWER(COALESCE(${columnSql}, '')) LIKE $${params.length}`)
 }
 
+
+function addGroupedIlikeFilter(whereParts: string[], params: unknown[], columnSqls: string[], value: string) {
+  const clean = normalizeText(value).toLowerCase()
+  if (!clean) return
+
+  params.push(`%${clean}%`)
+  const idx = params.length
+  const conditions = columnSqls.map((columnSql) => "LOWER(COALESCE(" + columnSql + ", '')) LIKE $" + idx)
+
+  whereParts.push("(" + conditions.join(" OR ") + ")")
+}
+
+function addDigitsFilter(whereParts: string[], params: unknown[], columnSql: string, value: string) {
+  const clean = text(value).replace(/\D/g, "")
+
+  if (!clean) {
+    addIlikeFilter(whereParts, params, columnSql, value)
+    return
+  }
+
+  params.push("%" + clean + "%")
+  whereParts.push("REGEXP_REPLACE(COALESCE(" + columnSql + ", ''), '\\D', '', 'g') LIKE $" + params.length)
+}
+
 export async function GET(req: NextRequest) {
 
   const adminGuard = await requireAdminRequest(req)
@@ -129,18 +153,22 @@ export async function GET(req: NextRequest) {
     }
 
     addIlikeFilter(whereParts, params, "b.nome_paciente", text(searchParams.get("nome")))
-    addIlikeFilter(whereParts, params, "b.cpf", text(searchParams.get("cpf")))
-    addIlikeFilter(whereParts, params, "b.cns", text(searchParams.get("cns")))
-    addIlikeFilter(whereParts, params, "d.protocolo", text(searchParams.get("processo")))
-    addIlikeFilter(whereParts, params, "proc.processo_numeros", text(searchParams.get("processo")))
-    addIlikeFilter(whereParts, params, "proc.pgenet_numeros", text(searchParams.get("pgenet")))
-    addIlikeFilter(whereParts, params, "COALESCE(b.cid_codigo, d.cid10)", text(searchParams.get("cid")))
-    addIlikeFilter(whereParts, params, "COALESCE(b.procedimento_codigo, d.\"codigoSigtap\")", text(searchParams.get("sigtap")))
-    addIlikeFilter(whereParts, params, "d.especialidade", text(searchParams.get("especialidade")))
-    addIlikeFilter(whereParts, params, "d.subespecialidade", text(searchParams.get("subespecialidade")))
+    addDigitsFilter(whereParts, params, "b.cpf", text(searchParams.get("cpf")))
+    addDigitsFilter(whereParts, params, "b.cns", text(searchParams.get("cns")))
+    addGroupedIlikeFilter(whereParts, params, ["d.protocolo", "b.ficha_core", "proc.processo_numeros"], text(searchParams.get("processo")))
+    addGroupedIlikeFilter(whereParts, params, ["proc.pgenet_numeros"], text(searchParams.get("pgenet")))
+    addGroupedIlikeFilter(whereParts, params, ["b.cid_codigo", "d.cid10", "b.cid_descricao"], text(searchParams.get("cid")))
+    addGroupedIlikeFilter(whereParts, params, ["b.procedimento_codigo", "d.\"codigoSigtap\"", "b.procedimento_descricao", "d.\"descricaoSigtap\""], text(searchParams.get("sigtap")))
+    addGroupedIlikeFilter(whereParts, params, ["d.especialidade"], text(searchParams.get("especialidade")))
+    addGroupedIlikeFilter(whereParts, params, ["d.subespecialidade"], text(searchParams.get("subespecialidade")))
 
     if (tab !== "unassigned") {
-      addIlikeFilter(whereParts, params, "COALESCE(manual.usuario_nome, aberta.usuario_nome)", text(searchParams.get("atribuido")))
+      addGroupedIlikeFilter(whereParts, params, [
+        "manual.usuario_nome",
+        "manual.usuario_email",
+        "aberta.usuario_nome",
+        "aberta.usuario_email"
+      ], text(searchParams.get("atribuido")))
     }
 
     const whereSql = `WHERE ${whereParts.join(" AND ")}`

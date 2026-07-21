@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
@@ -27,6 +27,8 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 
+const MODULE_LIST_PAGE_SIZE = 10
+
 type PreJudicialBoardItem = {
   id: string
   patientId: string
@@ -44,6 +46,7 @@ type PreJudicialBoardItem = {
   deadlineAt: string
   deadlineWarningLevel: "ok" | "warning" | "critical" | "overdue"
   schedulingStatus: "fora_fila" | "pendente" | "reservado"
+  latestSchedulingMovementType?: string
   schedulingRequestedAt?: string
   schedulingReservedAt?: string
   schedulingResponseDeadlineAt?: string
@@ -84,6 +87,38 @@ function getSchedulingLabel(status: string) {
   return "Fila interna"
 }
 
+function getReturnFromSchedulingBadgeClass(item: PreJudicialBoardItem) {
+  const latestType = String(item.latestSchedulingMovementType || "")
+    .trim()
+    .toLowerCase()
+
+  if (latestType === "agendado") {
+    return "border-emerald-300 bg-emerald-100 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200"
+  }
+
+  if (latestType === "retorno_fila") {
+    return "border-red-300 bg-red-100 text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200"
+  }
+
+  return "border-amber-300 bg-amber-100 text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200"
+}
+
+function getReturnFromSchedulingLabel(item: PreJudicialBoardItem) {
+  const status = String(item.status || "").trim().toLowerCase()
+  const schedulingStatus = String(item.schedulingStatus || "").trim().toLowerCase()
+  const latestType = String(item.latestSchedulingMovementType || "").trim().toLowerCase()
+
+  if (status !== "ativo") return null
+  if (schedulingStatus !== "fora_fila") return null
+
+  if (latestType === "agendado") return "AGENDAMENTO REALIZADO"
+  if (latestType === "retorno_fila") return "DEVOLVIDO PELO AGENDAMENTO"
+  if (latestType === "analise_viabilidade_nao_rede") return "Voltou: não feito na rede"
+  if (latestType === "analise_viabilidade_complementacao") return "Voltou: complementar informações"
+
+  return null
+}
+
 export function PreJudicialBoard() {
   const [items, setItems] = useState<PreJudicialBoardItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -92,6 +127,7 @@ export function PreJudicialBoard() {
   const [search, setSearch] = useState("")
   const [reason, setReason] = useState("todos")
   const [status, setStatus] = useState("todos")
+  const [modulePage, setModulePage] = useState(1)
 
   useEffect(() => {
     let active = true
@@ -139,8 +175,20 @@ const response = await fetch("/api/pre-judicial/casos?somenteAtivos=false", {
 
   const filtered = useMemo(() => {
     return items.filter((item) => {
+      const selectedStatus = String(status || "todos").trim().toLowerCase()
+      const itemStatus = String(item.status || "").trim().toLowerCase()
+      const selectedFinalStatus =
+        selectedStatus !== "todos" && isResolvedPreJudicialStatus(selectedStatus)
+
+      if (selectedFinalStatus) {
+        if (itemStatus !== selectedStatus) return false
+      } else {
+        if (item.active === false) return false
+        if (isResolvedPreJudicialStatus(item.status)) return false
+        if (status !== "todos" && item.status !== status) return false
+      }
+
       if (reason !== "todos" && item.queueReason !== reason) return false
-      if (status !== "todos" && item.status !== status) return false
 
       if (search.trim()) {
         const q = search.toLowerCase()
@@ -167,8 +215,21 @@ const response = await fetch("/api/pre-judicial/casos?somenteAtivos=false", {
     })
   }, [items, reason, search, status])
 
+  // MODULE_LIST_PAGINATION_GLOBAL_SEARCH
+  const moduleTotalPages = Math.max(1, Math.ceil(filtered.length / MODULE_LIST_PAGE_SIZE))
+  const moduleCurrentPage = Math.min(modulePage, moduleTotalPages)
+
+  const modulePaginated = useMemo(() => {
+    const start = (moduleCurrentPage - 1) * MODULE_LIST_PAGE_SIZE
+    return filtered.slice(start, start + MODULE_LIST_PAGE_SIZE)
+  }, [filtered, moduleCurrentPage])
+
+  useEffect(() => {
+    setModulePage(1)
+  }, [reason, status, search])
+
 function isResolvedPreJudicialStatus(status: string) {
-  return ["resolvido", "encerrado"].includes(
+  return ["resolvido", "encerrado", "cumprido", "arquivado", "obito"].includes(
     String(status || "").trim().toLowerCase(),
   )
 }
@@ -327,7 +388,7 @@ const stats = {
             </div>
           ) : (
             <div className="flex flex-col gap-2">
-              {filtered.map((item) => {
+              {modulePaginated.map((item) => {
                 return (
                   <Link
                     key={item.id}
@@ -361,6 +422,14 @@ const stats = {
                           <Badge variant="outline" className="text-xs">
                             {item.originModule.toUpperCase()}
                           </Badge>
+                          {getReturnFromSchedulingLabel(item) ? (
+                            <Badge
+                              variant="outline"
+                              className={getReturnFromSchedulingBadgeClass(item)}
+                            >
+                              {getReturnFromSchedulingLabel(item)}
+                            </Badge>
+                          ) : null}
                         </div>
 
                         <p className="mt-1 text-lg font-semibold leading-tight text-foreground">
@@ -450,8 +519,59 @@ const stats = {
               })}
             </div>
           )}
+        <ModuleListPagination
+          page={moduleCurrentPage}
+          pages={moduleTotalPages}
+          total={filtered.length}
+          onPageChange={setModulePage}
+        />
         </CardContent>
       </Card>
+    </div>
+  )
+}
+
+function ModuleListPagination({
+  page,
+  pages,
+  total,
+  onPageChange,
+}: {
+  page: number
+  pages: number
+  total: number
+  onPageChange: (page: number) => void
+}) {
+  if (total <= MODULE_LIST_PAGE_SIZE) return null
+
+  const first = Math.min(total, (page - 1) * MODULE_LIST_PAGE_SIZE + 1)
+  const last = Math.min(total, page * MODULE_LIST_PAGE_SIZE)
+
+  return (
+    <div className="mt-4 flex flex-col gap-2 border-t pt-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+      <span className="text-muted-foreground">
+        Exibindo {first} a {last} de {total} resultado(s). Página {page} de {pages}.
+      </span>
+
+      <div className="flex gap-2">
+        <button
+          type="button"
+          className="rounded-md border border-input bg-background px-3 py-1 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={page <= 1}
+          onClick={() => onPageChange(Math.max(1, page - 1))}
+        >
+          Anterior
+        </button>
+
+        <button
+          type="button"
+          className="rounded-md border border-input bg-background px-3 py-1 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={page >= pages}
+          onClick={() => onPageChange(Math.min(pages, page + 1))}
+        >
+          Próxima
+        </button>
+      </div>
     </div>
   )
 }

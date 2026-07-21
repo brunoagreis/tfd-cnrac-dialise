@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { randomUUID } from "crypto"
 import { prisma } from "@/lib/prisma"
+import { sendMunicipalitySchedulingNotification } from "@/lib/municipality-notifications"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -9,9 +10,16 @@ type PreJudicialCaseRow = {
   id: string
   protocolNumber: string | null
   patientName: string | null
+  municipalityName: string | null
+  numeroProcesso: string | null
   statusAnterior: string | null
   activeAnterior: boolean | null
   schedulingStatusAnterior: string | null
+}
+
+type PreSchedulingFichaRow = {
+  id: string
+  fichaNumero: string | null
 }
 
 function text(value: unknown) {
@@ -37,6 +45,35 @@ function parseDateTime(value: unknown) {
 
   return date.toISOString()
 }
+
+function normalizeAppointmentFichas(value: unknown) {
+  if (!Array.isArray(value)) return []
+
+  return value
+    .map((item: any) => {
+      const id = text(item?.id || item?.fichaId || item?.ficha_id)
+      const appointmentDate = parseDateTime(
+        item?.appointmentDate || item?.appointment_date || item?.dataAgendamento,
+      )
+      const notes = text(
+        item?.notes || item?.appointmentNotes || item?.appointment_notes,
+      )
+
+      if (!id || !appointmentDate) return null
+
+      return {
+        id,
+        appointmentDate,
+        notes,
+      }
+    })
+    .filter(Boolean) as Array<{
+    id: string
+    appointmentDate: string
+    notes: string
+  }>
+}
+
 
 function normalizeAttachments(value: unknown) {
   if (!value) return []
@@ -80,6 +117,10 @@ function normalizeMovementType(value: unknown) {
   if (type === "anexo") return "anexo"
   if (type === "notificacao_municipio") return "notificacao_municipio"
   if (type === "envio_agendamento_demanda") return "envio_agendamento_demanda"
+  if (type === "encaminhar_direto_agendamento") return "encaminhar_direto_agendamento"
+  if (type === "analise_viabilidade_apta_agendamento") return "analise_viabilidade_apta_agendamento"
+  if (type === "analise_viabilidade_nao_rede") return "analise_viabilidade_nao_rede"
+  if (type === "analise_viabilidade_complementacao") return "analise_viabilidade_complementacao"
   if (type === "reserva_agendamento") return "reserva_agendamento"
   if (type === "agendado") return "agendado"
   if (type === "nao_agendado") return "nao_agendado"
@@ -103,6 +144,11 @@ function movementTypeLabel(type: string) {
     anexo: "Anexo",
     notificacao_municipio: "Notificação ao município",
     envio_agendamento_demanda: "Envio ao Agendamento da Demanda",
+    encaminhar_direto_agendamento: "Encaminhar direto para agendamento",
+    analise_viabilidade_apta_agendamento: "Análise de viabilidade apta para agendamento",
+    analise_viabilidade_apta_agendamento: "Análise de viabilidade - apto para agendamento",
+    analise_viabilidade_nao_rede: "Análise de viabilidade - não realizado na rede",
+    analise_viabilidade_complementacao: "Análise de viabilidade - complementação necessária",
     reserva_agendamento: "Reserva de agenda",
     agendado: "Agendado",
     nao_agendado: "Não agendado",
@@ -113,7 +159,7 @@ function movementTypeLabel(type: string) {
     resolvido: "Resolvido",
     cumprido: "Cumprido",
     arquivado: "Arquivado",
-    obito: "Óbito",
+    obito: "Ã“bito",
   }
 
   return labels[type] || type
@@ -134,9 +180,13 @@ function normalizeOriginModule(value: unknown) {
 }
 
 function statusFromMovement(type: string) {
+  if (type === "encaminhar_direto_agendamento") return "enviado_agendamento"
   if (type === "envio_agendamento_demanda") return "enviado_agendamento"
+  if (type === "analise_viabilidade_apta_agendamento") return "enviado_agendamento"
+  if (type === "analise_viabilidade_nao_rede") return "ativo"
+  if (type === "analise_viabilidade_complementacao") return "ativo"
   if (type === "reserva_agendamento") return "reservado"
-  if (type === "agendado") return "resolvido"
+  if (type === "agendado") return "ativo"
   if (type === "nao_agendado") return "ativo"
   if (type === "retorno_fila") return "ativo"
   if (type === "reabertura") return "ativo"
@@ -150,7 +200,11 @@ function statusFromMovement(type: string) {
 }
 
 function schedulingStatusFromMovement(type: string) {
-  if (type === "envio_agendamento_demanda") return "pendente"
+  if (type === "encaminhar_direto_agendamento") return "para_agendar"
+  if (type === "envio_agendamento_demanda") return "para_avaliar"
+  if (type === "analise_viabilidade_apta_agendamento") return "apto_agendamento"
+  if (type === "analise_viabilidade_nao_rede") return "fora_fila"
+  if (type === "analise_viabilidade_complementacao") return "fora_fila"
   if (type === "reserva_agendamento") return "reservado"
   if (type === "agendado") return "fora_fila"
   if (type === "nao_agendado") return "fora_fila"
@@ -167,7 +221,7 @@ function shouldCloseCase(type: string) {
 }
 
 function shouldReopenCase(type: string) {
-  return ["reabertura", "retorno_fila", "nao_agendado"].includes(type)
+  return ["reabertura", "retorno_fila", "nao_agendado", "agendado"].includes(type)
 }
 
 async function findPreJudicialCase(decodedId: string) {
@@ -177,6 +231,15 @@ async function findPreJudicialCase(decodedId: string) {
         c.id::text AS id,
         c.protocol_number AS "protocolNumber",
         c.patient_name AS "patientName",
+        c.municipality_name AS "municipalityName",
+        COALESCE(
+          NULLIF(to_jsonb(c)->>'action_records', ''),
+          NULLIF(to_jsonb(c)->>'numero_processo', ''),
+          NULLIF(to_jsonb(c)->>'process_number', ''),
+          NULLIF(to_jsonb(c)->>'processo', ''),
+          NULLIF(c.origin_protocol::text, ''),
+          c.protocol_number::text
+        ) AS "numeroProcesso",
         c.status AS "statusAnterior",
         c.active AS "activeAnterior",
         c.scheduling_status AS "schedulingStatusAnterior"
@@ -193,6 +256,96 @@ async function findPreJudicialCase(decodedId: string) {
   return rows[0] ?? null
 }
 
+
+// PRE_JUDICIAL_SCHEDULING_EMAIL_NOTIFICATION
+async function loadPreJudicialSchedulingFichas(
+  casoId: string,
+  fichaIds: string[],
+) {
+  const ids = Array.from(
+    new Set(
+      fichaIds
+        .map((item) => text(item))
+        .filter(Boolean),
+    ),
+  )
+
+  if (ids.length === 0) {
+    return prisma.$queryRawUnsafe<
+      PreSchedulingFichaRow[]
+    >(
+      `
+        SELECT
+          f.id::text AS id,
+          COALESCE(
+            NULLIF(to_jsonb(f)->>'number', ''),
+            NULLIF(to_jsonb(f)->>'numero', ''),
+            NULLIF(to_jsonb(f)->>'ficha_core', ''),
+            NULLIF(to_jsonb(f)->>'ficha', ''),
+            f.id::text
+          ) AS "fichaNumero"
+        FROM public.pre_judicial_fichas f
+        WHERE f.caso_id::text = $1
+          AND COALESCE(f.active, TRUE) = TRUE
+        ORDER BY
+          f.updated_at DESC NULLS LAST,
+          f.created_at DESC NULLS LAST
+        LIMIT 1
+      `,
+      casoId,
+    )
+  }
+
+  return prisma.$queryRawUnsafe<
+    PreSchedulingFichaRow[]
+  >(
+    `
+      SELECT
+        f.id::text AS id,
+        COALESCE(
+          NULLIF(to_jsonb(f)->>'number', ''),
+          NULLIF(to_jsonb(f)->>'numero', ''),
+          NULLIF(to_jsonb(f)->>'ficha_core', ''),
+          NULLIF(to_jsonb(f)->>'ficha', ''),
+          f.id::text
+        ) AS "fichaNumero"
+      FROM public.pre_judicial_fichas f
+      WHERE f.caso_id::text = $1
+        AND f.id::text IN (
+          SELECT value
+          FROM jsonb_array_elements_text($2::jsonb)
+        )
+    `,
+    casoId,
+    JSON.stringify(ids),
+  )
+}
+
+function formatPreSchedulingEmailDate(
+  value: string,
+) {
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+
+  return new Intl.DateTimeFormat("pt-BR", {
+    dateStyle: "short",
+    timeStyle: "short",
+    timeZone: "America/Campo_Grande",
+  }).format(date)
+}
+
+function preSchedulingEmailKeyPart(
+  value: unknown,
+) {
+  return text(value)
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+}
 export async function POST(
   req: NextRequest,
   context: { params: Promise<{ id: string }> },
@@ -213,11 +366,19 @@ export async function POST(
         body?.prazoResposta,
     )
 
-    const appointmentDate = parseDateTime(
+    let appointmentDate = parseDateTime(
       body?.appointmentDate || body?.appointment_date || body?.dataAgendamento,
     )
 
     const attachments = normalizeAttachments(body?.attachments)
+
+    const appointmentFichas = normalizeAppointmentFichas(
+      body?.appointmentFichas || body?.fichasAgendamento || body?.fichas || [],
+    )
+
+    if (!appointmentDate && appointmentFichas.length > 0) {
+      appointmentDate = appointmentFichas[0].appointmentDate
+    }
 
     const user = body?.user || {}
     const userId = text(user?.id || body?.userId || "sistema")
@@ -255,11 +416,11 @@ export async function POST(
     }
 
     const movementId = `pre_mov_${randomUUID()}`
-    const nextStatus = statusFromMovement(type) ?? "respondido" ?? "respondido"
-    const nextSchedulingStatus = schedulingStatusFromMovement(type) ?? "fora_fila" ?? "fora_fila"
+    const nextStatus = statusFromMovement(type)
+    const nextSchedulingStatus = schedulingStatusFromMovement(type)
 
     const descricaoAuditoria = [
-      `MOVIMENTAÇÃO PRÉ JUDICIAL: ${movementTypeLabel(type)}`,
+      `MOVIMENTAÃ‡ÃƒO PRÉ JUDICIAL: ${movementTypeLabel(type)}`,
       description,
       dueAt ? `Prazo: ${dueAt}` : "",
       appointmentDate ? `Agendamento: ${appointmentDate}` : "",
@@ -315,6 +476,34 @@ export async function POST(
         userEmail || null,
       )
 
+
+      for (const ficha of appointmentFichas) {
+        await tx.$executeRawUnsafe(
+          `
+            UPDATE public.pre_judicial_fichas
+            SET
+              appointment_date = $2::timestamptz,
+              appointment_notes = NULLIF($3, ''),
+              appointment_status = 'agendado',
+              appointment_updated_at = NOW(),
+              appointment_updated_by = $4,
+              appointment_updated_by_name = $5,
+              updated_by = $4,
+              updated_by_name = $5,
+              updated_at = NOW()
+            WHERE id::text = $1
+              AND caso_id::text = $6
+          `,
+          ficha.id,
+          ficha.appointmentDate,
+          ficha.notes || description,
+          userId,
+          userName,
+          caso.id,
+        )
+      }
+
+
       await tx.$executeRawUnsafe(
         `
           UPDATE public.pre_judicial_casos
@@ -327,7 +516,7 @@ export async function POST(
             END,
             scheduling_status = COALESCE($5, scheduling_status),
             scheduling_requested_at = CASE
-              WHEN $6 = 'envio_agendamento_demanda' THEN NOW()
+              WHEN $6 IN ('envio_agendamento_demanda', 'encaminhar_direto_agendamento') THEN NOW()
               ELSE scheduling_requested_at
             END,
             scheduling_reserved_at = CASE
@@ -335,21 +524,13 @@ export async function POST(
               ELSE scheduling_reserved_at
             END,
             scheduling_response_deadline_at = CASE
+              WHEN $6 = 'encaminhar_direto_agendamento' THEN NULL
               WHEN $6 = 'envio_agendamento_demanda' THEN $7::timestamptz
-              WHEN $6 IN ('agendado', 'nao_agendado', 'retorno_fila') THEN NULL
               ELSE scheduling_response_deadline_at
             END,
-            appointment_date = CASE
-              WHEN $6 = 'agendado' THEN $8::timestamptz
-              ELSE appointment_date
-            END,
-            deadline_at = CASE
-              WHEN $6 = 'envio_agendamento_demanda' THEN $7::timestamptz
-              ELSE deadline_at
-            END,
-            updated_by = $9,
-            updated_by_name = $10,
-            updated_by_email = $11,
+            updated_by = $8,
+            updated_by_name = $9,
+            updated_by_email = $10,
             updated_at = NOW()
           WHERE id::text = $1
         `,
@@ -360,7 +541,6 @@ export async function POST(
         nextSchedulingStatus,
         type,
         dueAt,
-        appointmentDate,
         userId,
         userName,
         userEmail || null,
@@ -434,6 +614,151 @@ export async function POST(
       )
     })
 
+
+    const emailMunicipioAgendamento:
+      Array<Record<string, unknown>> = []
+
+    if (
+      type === "agendado" &&
+      appointmentDate
+    ) {
+      try {
+        const sourceFichas =
+          appointmentFichas.length > 0
+            ? appointmentFichas
+            : [
+                {
+                  id: "",
+                  appointmentDate,
+                  notes: "",
+                },
+              ]
+
+        const fichaRows =
+          await loadPreJudicialSchedulingFichas(
+            caso.id,
+            sourceFichas
+              .map((item) => item.id)
+              .filter(Boolean),
+          )
+
+        const fichaMap = new Map(
+          fichaRows.map((item) => [
+            item.id,
+            text(item.fichaNumero),
+          ]),
+        )
+
+        const fallbackFicha =
+          text(fichaRows[0]?.fichaNumero) ||
+          "Não informada"
+
+        const groupedByDate =
+          new Map<string, string[]>()
+
+        for (const item of sourceFichas) {
+          const schedulingDate =
+            item.appointmentDate ||
+            appointmentDate
+
+          if (!schedulingDate) continue
+
+          const fichaNumero =
+            text(fichaMap.get(item.id)) ||
+            text(item.id) ||
+            fallbackFicha
+
+          const current =
+            groupedByDate.get(
+              schedulingDate,
+            ) || []
+
+          current.push(fichaNumero)
+
+          groupedByDate.set(
+            schedulingDate,
+            current,
+          )
+        }
+
+        for (
+          const [
+            schedulingDate,
+            fichaNumbers,
+          ] of groupedByDate.entries()
+        ) {
+          const fichas = Array.from(
+            new Set(
+              fichaNumbers
+                .map((item) => text(item))
+                .filter(Boolean),
+            ),
+          )
+            .sort()
+            .join(", ") || fallbackFicha
+
+          const protocolo =
+            text(caso.protocolNumber) ||
+            text(caso.id)
+
+          const numeroProcesso =
+            text(caso.numeroProcesso) ||
+            protocolo
+
+          const duplicateKey = [
+            "pre_judicial",
+            numeroProcesso,
+            fichas,
+            schedulingDate,
+          ]
+            .map(preSchedulingEmailKeyPart)
+            .join("|")
+
+          const emailResult =
+            await sendMunicipalitySchedulingNotification(
+              {
+                module: "pre_judicial",
+                protocolo,
+                pacienteNome:
+                  text(caso.patientName) ||
+                  "Paciente não informado",
+                municipio:
+                  text(caso.municipalityName),
+                numeroProcesso,
+                fichaNumero: fichas,
+                dataAgendamento:
+                  formatPreSchedulingEmailDate(
+                    schedulingDate,
+                  ),
+                userSistema:
+                  userName || "SIGAJUS",
+                duplicateKey,
+              },
+            )
+
+          emailMunicipioAgendamento.push({
+            dataAgendamento:
+              schedulingDate,
+            fichas,
+            ...emailResult,
+          })
+        }
+      } catch (emailError) {
+        console.error(
+          "PRE_JUDICIAL_SCHEDULING_EMAIL_WARNING",
+          emailError,
+        )
+
+        emailMunicipioAgendamento.push({
+          ok: false,
+          skipped: true,
+          reason:
+            emailError instanceof Error
+              ? emailError.message
+              : "Erro ao enviar e-mail de agendamento.",
+        })
+      }
+    }
     return NextResponse.json({
       ok: true,
       item: {
@@ -453,6 +778,7 @@ export async function POST(
         createdAt: new Date().toISOString(),
         createdById: userId,
         createdByName: userName,
+        emailMunicipioAgendamento,
       },
     })
   } catch (error) {

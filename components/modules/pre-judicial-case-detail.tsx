@@ -44,6 +44,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { PreJudicialFichasPanel } from "@/components/modules/pre-judicial-fichas-panel"
 
 const PRE_FINALIZATION_LABELS = {
   pendente: "Pendente",
@@ -60,6 +61,7 @@ const PRE_MOVEMENT_OPTIONS = [
   { value: "interacao", label: "Interação" },
   { value: "notificacao_municipio", label: "Notificação ao município" },
   { value: "envio_agendamento_demanda", label: "Envio ao Agendamento da Demanda" },
+  { value: "encaminhar_direto_agendamento", label: "Encaminhar direto para agendamento" },
   { value: "reserva_agendamento", label: "Reserva de agenda" },
   { value: "agendado", label: "Agendado" },
   { value: "nao_agendado", label: "Não agendado" },
@@ -71,6 +73,19 @@ const PRE_MOVEMENT_OPTIONS = [
   { value: "obito", label: "Óbito" },
   { value: "encerramento", label: "Encerramento" },
 ] as const
+
+const PRE_SCHEDULING_STATE_MOVEMENT_TYPES = new Set([
+  "envio_agendamento_demanda",
+  "encaminhar_direto_agendamento",
+  "analise_viabilidade_apta_agendamento",
+  "analise_viabilidade_nao_rede",
+  "analise_viabilidade_complementacao",
+  "reserva_agendamento",
+  "agendado",
+  "nao_agendado",
+  "retorno_fila",
+  "reabertura",
+])
 
 type UploadedFileMeta = {
   name: string
@@ -369,6 +384,7 @@ export function PreJudicialCaseDetail({ caseId }: { caseId: string }) {
   const [municipalityOpen, setMunicipalityOpen] = useState(false)
   const [procedureOpen, setProcedureOpen] = useState(false)
   const [cidOpen, setCidOpen] = useState(false)
+  const [fichaModalOpen, setFichaModalOpen] = useState(false)
   const [pgeNetOpen, setPgeNetOpen] = useState(false)
   const [processNumberOpen, setProcessNumberOpen] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
@@ -606,6 +622,29 @@ export function PreJudicialCaseDetail({ caseId }: { caseId: string }) {
     [caseItem?.movements],
   )
 
+  const latestSchedulingStateMovement = useMemo(
+    () =>
+      [...(caseItem?.movements ?? [])]
+        .reverse()
+        .find((item) => PRE_SCHEDULING_STATE_MOVEMENT_TYPES.has(item.type)),
+    [caseItem?.movements],
+  )
+
+  const returnFromSchedulingLabel = useMemo(() => {
+    const status = String(caseItem?.status ?? "").trim().toLowerCase()
+    const schedulingStatus = String(caseItem?.schedulingStatus ?? "").trim().toLowerCase()
+    const latestType = latestSchedulingStateMovement?.type
+
+    if (status !== "ativo") return null
+    if (schedulingStatus !== "fora_fila") return null
+
+    if (latestType === "retorno_fila") return "Voltou do agendamento"
+    if (latestType === "analise_viabilidade_nao_rede") return "Voltou: não feito na rede"
+    if (latestType === "analise_viabilidade_complementacao") return "Voltou: complementar informações"
+
+    return null
+  }, [caseItem?.schedulingStatus, caseItem?.status, latestSchedulingStateMovement?.type])
+
   const totalLatestMovementsPages = Math.max(
     1,
     Math.ceil(latestMovements.length / LATEST_MOVEMENTS_PAGE_SIZE),
@@ -651,6 +690,7 @@ export function PreJudicialCaseDetail({ caseId }: { caseId: string }) {
       const response = await fetch("/api/uploads", {
         method: "POST",
         body: form,
+        credentials: "include",
       })
 
       const data = await response.json()
@@ -1334,6 +1374,14 @@ export function PreJudicialCaseDetail({ caseId }: { caseId: string }) {
 
               <Badge variant="outline">{getStatusLabel(caseItem.status)}</Badge>
               <Badge variant="outline">PRE JUDICIAL</Badge>
+              {returnFromSchedulingLabel ? (
+                <Badge
+                  variant="outline"
+                  className="border-amber-300 bg-amber-100 text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200"
+                >
+                  {returnFromSchedulingLabel}
+                </Badge>
+              ) : null}
             </div>
 
             <h1 className="text-xl font-bold tracking-tight text-foreground">
@@ -1487,7 +1535,7 @@ export function PreJudicialCaseDetail({ caseId }: { caseId: string }) {
                   : activeCids
                       .map((item) => `${item.code} - ${item.description}`)
                       .join(" • ")}
-              </span>
+</span>
 
               <Button
                 type="button"
@@ -1500,13 +1548,80 @@ export function PreJudicialCaseDetail({ caseId }: { caseId: string }) {
                 <Plus className="h-4 w-4" />
               </Button>
             </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span>
+                <span className="font-semibold text-foreground">Fichas ativas:</span>{" "}
+                {(() => {
+                  const fichas = Array.isArray((caseItem as any)?.fichas)
+                    ? (caseItem as any).fichas
+                    : []
+
+                  return (
+                    fichas
+                      .filter((item: any) => item?.active !== false)
+                      .map(
+                        (item: any) =>
+                          `${item?.system || "CORE"} - ${item?.number || "Sem número"}`,
+                      )
+                      .join(" | ") || "Nenhuma ficha ativa"
+                  )
+                })()}
+                {" | "}
+                <span className="font-semibold text-foreground">Marca judicial:</span>{" "}
+                <span
+                  className={
+                    (() => {
+                      const fichas = Array.isArray((caseItem as any)?.fichas)
+                        ? (caseItem as any).fichas
+                        : []
+
+                      return fichas.some(
+                        (item: any) =>
+                          item?.active !== false &&
+                          (item?.hasJudicialMark === true ||
+                            item?.has_judicial_mark === true),
+                      )
+                    })()
+                      ? "font-semibold text-emerald-700"
+                      : "font-semibold text-red-700"
+                  }
+                >
+                  {(() => {
+                    const fichas = Array.isArray((caseItem as any)?.fichas)
+                      ? (caseItem as any).fichas
+                      : []
+
+                    return fichas.some(
+                      (item: any) =>
+                        item?.active !== false &&
+                        (item?.hasJudicialMark === true ||
+                          item?.has_judicial_mark === true),
+                    )
+                      ? "Sim"
+                      : "Não"
+                  })()}
+                </span>
+              </span>
+
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                className="h-6 w-6"
+                title="Gerenciar fichas CORE/SISREG"
+                onClick={() => setFichaModalOpen(true)}
+              >
+                <Plus className="h-3 w-3" />
+              </Button>
+            </div>
+
           </div>
         </CardContent>
       </Card>
 
       <div className="grid gap-3 lg:grid-cols-[1fr_1fr]">
         <Card className="border-border prejudicial-no-print">
-          <CardHeader className="pb-3">
+      <CardHeader className="pb-3">
             <CardTitle className="text-base">Nova movimentação</CardTitle>
             <CardDescription>
               Registre interações, envio ao Agendamento, retorno de fila ou encerramento.
@@ -1572,8 +1687,8 @@ export function PreJudicialCaseDetail({ caseId }: { caseId: string }) {
                     .map((file) => file.name)
                     .join(", ")}
                 </p>
-              )}
-            </div>
+)}
+</div>
 
             <Button onClick={handleSaveMovement} disabled={saving || uploadingMovement}>
               <Mail className="mr-2 h-4 w-4" />
@@ -1673,6 +1788,20 @@ export function PreJudicialCaseDetail({ caseId }: { caseId: string }) {
           </CardContent>
         </Card>
       </div>
+
+
+      <Dialog open={fichaModalOpen} onOpenChange={setFichaModalOpen}>
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Fichas CORE/SISREG</DialogTitle>
+            <DialogDescription>
+              Cadastre e acompanhe fichas vinculadas ao processo pré-judicial.
+            </DialogDescription>
+          </DialogHeader>
+
+          <PreJudicialFichasPanel caseId={caseItem.id} />
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={finalizeOpen} onOpenChange={setFinalizeOpen}>
         <DialogContent className="max-w-3xl">
