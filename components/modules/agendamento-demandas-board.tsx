@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
 import {
   CalendarCheck,
+  CheckCircle2,
   Download,
   Eye,
   FileSpreadsheet,
@@ -37,6 +38,17 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 
+type AgendamentoFichaItem = {
+  id: string
+  system: string
+  number: string
+  notes: string
+  active?: boolean
+  status?: string
+  appointmentDate?: string
+  appointmentStatus?: string
+  appointmentNotes?: string
+}
 type AgendamentoQueueItem = {
   id: string
   modulo: string
@@ -58,12 +70,15 @@ type AgendamentoQueueItem = {
   cidCodigo: string
   cidDescricao: string
   atualizadoEm: string
+  fichas?: AgendamentoFichaItem[]
   prioridade: number
   detalheHref: string
 }
 
 type AgendamentoStats = {
   total: number
+  paraAvaliar: number
+  paraAgendar: number
   pendentes: number
   reservados: number
   vencidos: number
@@ -72,6 +87,8 @@ type AgendamentoStats = {
 
 const EMPTY_STATS: AgendamentoStats = {
   total: 0,
+  paraAvaliar: 0,
+  paraAgendar: 0,
   pendentes: 0,
   reservados: 0,
   vencidos: 0,
@@ -218,6 +235,7 @@ export function AgendamentoDemandasBoard() {
   const [search, setSearch] = useState("")
   const [status, setStatus] = useState("todos")
   const [origem, setOrigem] = useState("todos")
+  const [etapaFiltro, setEtapaFiltro] = useState<"para_avaliar" | "para_agendar">("para_avaliar")
 
   const [selectedItem, setSelectedItem] = useState<AgendamentoQueueItem | null>(
     null,
@@ -227,8 +245,12 @@ export function AgendamentoDemandasBoard() {
   const [returnOpen, setReturnOpen] = useState(false)
 
   const [scheduleDate, setScheduleDate] = useState("")
+  const [scheduleFichaDates, setScheduleFichaDates] = useState<Record<string, string>>({})
   const [scheduleDescription, setScheduleDescription] = useState("")
   const [returnDescription, setReturnDescription] = useState("")
+  const [analysisOpen, setAnalysisOpen] = useState(false)
+  const [analysisDecision, setAnalysisDecision] = useState<"feito_rede" | "nao_rede" | "complementacao">("feito_rede")
+  const [analysisDescription, setAnalysisDescription] = useState("")
   const [saving, setSaving] = useState(false)
 
   const loadQueue = useCallback(async () => {
@@ -259,7 +281,17 @@ export function AgendamentoDemandasBoard() {
         )
       }
 
-      setItems((data.items ?? []) as AgendamentoQueueItem[])
+      const queueItems = Array.isArray(data?.items)
+        ? data.items
+        : Array.isArray(data?.stats?.items)
+          ? data.stats.items
+          : Array.isArray(data?.fila)
+            ? data.fila
+            : Array.isArray(data?.data)
+              ? data.data
+              : []
+
+      setItems(queueItems as AgendamentoQueueItem[])
       setStats((data.stats ?? EMPTY_STATS) as AgendamentoStats)
     } catch (err) {
       console.error("[AgendamentoDemandasBoard] erro ao carregar:", err)
@@ -275,11 +307,69 @@ export function AgendamentoDemandasBoard() {
   }, [origem, search, status])
 
   useEffect(() => {
+    const saved = window.localStorage.getItem("agendamento_demanda_filtro_etapa")
+
+    if (saved === "para_avaliar" || saved === "para_agendar") {
+      setEtapaFiltro(saved)
+    }
+  }, [])
+
+  useEffect(() => {
+    window.localStorage.setItem("agendamento_demanda_filtro_etapa", etapaFiltro)
+  }, [etapaFiltro])
+
+  useEffect(() => {
     loadQueue()
   }, [loadQueue])
 
   const filteredItems = useMemo(() => {
-    return items
+    return items.filter((item) => {
+      const statusAtual = String(item.statusAgendamento || "")
+        .trim()
+        .toLowerCase()
+
+      if (etapaFiltro === "para_avaliar") {
+        return [
+          "para_avaliar",
+          "analise_viabilidade",
+          "aguardando_analise",
+          "pendente",
+        ].includes(statusAtual)
+      }
+
+      return [
+        "para_agendar",
+        "apto_agendamento",
+        "reservado",
+      ].includes(statusAtual)
+    })
+  }, [etapaFiltro, items])
+
+  const cardStats = useMemo(() => {
+    const normalizeStatus = (value: unknown) =>
+      String(value || "").trim().toLowerCase()
+
+    const isParaAvaliar = (value: unknown) =>
+      [
+        "para_avaliar",
+        "analise_viabilidade",
+        "aguardando_analise",
+        "pendente",
+      ].includes(normalizeStatus(value))
+
+    const isParaAgendar = (value: unknown) =>
+      [
+        "para_agendar",
+        "apto_agendamento",
+        "reservado",
+      ].includes(normalizeStatus(value))
+
+    return {
+      total: items.length,
+      paraAvaliar: items.filter((item) => isParaAvaliar(item.statusAgendamento)).length,
+      paraAgendar: items.filter((item) => isParaAgendar(item.statusAgendamento)).length,
+      vencidos: items.filter((item) => isOverdue(item.prazoResposta)).length,
+    }
   }, [items])
 
   function getUserPayload() {
@@ -302,8 +392,13 @@ export function AgendamentoDemandasBoard() {
     item: AgendamentoQueueItem,
     body: Record<string, unknown>,
   ) {
+    const endpoint =
+      item.modulo === "judicial"
+        ? `/api/judicial/casos/${encodeURIComponent(item.id)}/movimentacoes`
+        : `/api/pre-judicial/casos/${encodeURIComponent(item.id)}/movimentacoes`
+
     const response = await fetch(
-      `/api/pre-judicial/casos/${encodeURIComponent(item.id)}/movimentacoes`,
+      endpoint,
       {
         method: "POST",
         headers: {
@@ -330,12 +425,39 @@ export function AgendamentoDemandasBoard() {
     setReserveOpen(true)
   }
 
+
+  function getItemFichas(item: AgendamentoQueueItem | null | undefined) {
+    return Array.isArray(item?.fichas) ? item.fichas : []
+  }
+
+  function formatDateTimeLocalForInput(value?: string) {
+    if (!value) return ""
+
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) return ""
+
+    const offsetMs = date.getTimezoneOffset() * 60 * 1000
+    return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16)
+  }
+
+  function buildDefaultFichaDates(item: AgendamentoQueueItem) {
+    const next: Record<string, string> = {}
+
+    for (const ficha of getItemFichas(item)) {
+      if (ficha.appointmentDate) {
+        next[ficha.id] = formatDateTimeLocalForInput(ficha.appointmentDate)
+      }
+    }
+
+    return next
+  }
+
+
   function openSchedule(item: AgendamentoQueueItem) {
     setSelectedItem(item)
     setScheduleDate("")
-    setScheduleDescription(
-      `Demanda agendada pelo módulo Agendamento da Demanda.`,
-    )
+    setScheduleFichaDates(buildDefaultFichaDates(item))
+    setScheduleDescription("")
     setScheduleOpen(true)
   }
 
@@ -343,6 +465,93 @@ export function AgendamentoDemandasBoard() {
     setSelectedItem(item)
     setReturnDescription("")
     setReturnOpen(true)
+  }
+
+  function openAnalysis(item: AgendamentoQueueItem) {
+    setSelectedItem(item)
+    setAnalysisDecision("feito_rede")
+    setAnalysisDescription("")
+    setAnalysisOpen(true)
+  }
+
+  async function handleAnalysis() {
+    if (!selectedItem) return
+
+    if (!analysisDescription.trim()) {
+      toast.error("Informe o parecer da análise.")
+      return
+    }
+
+    const movementType =
+      analysisDecision === "feito_rede"
+        ? "analise_viabilidade_apta_agendamento"
+        : analysisDecision === "nao_rede"
+          ? "analise_viabilidade_nao_rede"
+          : "analise_viabilidade_complementacao"
+
+    const decisionLabel =
+      analysisDecision === "feito_rede"
+        ? "SIM - procedimento feito na rede"
+        : analysisDecision === "nao_rede"
+          ? "NÃO - procedimento não feito na rede"
+          : "PRECISA COMPLEMENTAR INFORMAÇÕES"
+
+    try {
+      setSaving(true)
+
+      await postPreJudicialMovement(selectedItem, {
+        type: movementType,
+        description: [
+          "Análise de viabilidade registrada pelo Agendamento da Demanda.",
+          `Resultado: ${decisionLabel}.`,
+          analysisDescription.trim(),
+        ].join("\n"),
+      })
+
+      toast.success("Análise registrada com sucesso.")
+      setAnalysisOpen(false)
+      setSelectedItem(null)
+      setAnalysisDescription("")
+
+      if (analysisDecision === "feito_rede") {
+        setEtapaFiltro("para_agendar")
+      }
+
+      await loadQueue()
+    } catch (err) {
+      console.error("[AgendamentoDemandasBoard] erro ao registrar análise:", err)
+
+      toast.error(
+        err instanceof Error ? err.message : "Erro ao registrar análise.",
+      )
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleMarkAptForScheduling(item: AgendamentoQueueItem) {
+    try {
+      setSaving(true)
+
+      await postPreJudicialMovement(item, {
+        type: "analise_viabilidade_apta_agendamento",
+        description:
+          "Análise de viabilidade registrada pelo Agendamento da Demanda. Resultado: SIM - paciente apto para agendamento.",
+      })
+
+      toast.success("Demanda marcada como apta para agendamento.")
+      await loadQueue()
+    } catch (err) {
+      console.error("[AgendamentoDemandasBoard] erro ao marcar apto:", err)
+
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : "Erro ao marcar demanda como apta para agendamento.",
+      )
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function handleReserve() {
@@ -374,7 +583,20 @@ export function AgendamentoDemandasBoard() {
   async function handleSchedule() {
     if (!selectedItem) return
 
-    if (!scheduleDate) {
+    const selectedFichas = getItemFichas(selectedItem)
+
+    const appointmentFichas = selectedFichas
+      .map((ficha) => ({
+        id: ficha.id,
+        appointmentDate: scheduleFichaDates[ficha.id] || scheduleDate,
+        notes: scheduleDescription.trim(),
+      }))
+      .filter((item) => item.id && item.appointmentDate)
+
+    const effectiveScheduleDate =
+      scheduleDate || appointmentFichas[0]?.appointmentDate || ""
+
+    if (!effectiveScheduleDate) {
       toast.error("Informe a data do agendamento.")
       return
     }
@@ -388,15 +610,17 @@ export function AgendamentoDemandasBoard() {
       setSaving(true)
 
       await postPreJudicialMovement(selectedItem, {
-        type: "agendado",
+        type: selectedItem.modulo === "judicial" ? "agendamento" : "agendado",
         description: scheduleDescription.trim(),
-        appointmentDate: scheduleDate,
+        appointmentDate: effectiveScheduleDate,
+        appointmentFichas,
       })
 
       toast.success("Agendamento registrado com sucesso.")
       setScheduleOpen(false)
       setSelectedItem(null)
       setScheduleDate("")
+      setScheduleFichaDates({})
       setScheduleDescription("")
       await loadQueue()
     } catch (err) {
@@ -500,24 +724,24 @@ export function AgendamentoDemandasBoard() {
               <p className="text-xs text-muted-foreground">
                 Fila do agendamento
               </p>
-              <p className="text-3xl font-bold">{stats.total}</p>
+              <p className="text-3xl font-bold">{cardStats.total}</p>
             </CardContent>
           </Card>
 
           <Card className="border-border">
             <CardContent className="pt-5">
-              <p className="text-xs text-muted-foreground">Pendentes</p>
+              <p className="text-xs text-muted-foreground">Para avaliar</p>
               <p className="text-3xl font-bold text-amber-600">
-                {stats.pendentes}
+                {cardStats.paraAvaliar}
               </p>
             </CardContent>
           </Card>
 
           <Card className="border-border">
             <CardContent className="pt-5">
-              <p className="text-xs text-muted-foreground">Reservados</p>
+              <p className="text-xs text-muted-foreground">Para agendar</p>
               <p className="text-3xl font-bold text-sky-600">
-                {stats.reservados}
+                {cardStats.paraAgendar}
               </p>
             </CardContent>
           </Card>
@@ -526,7 +750,7 @@ export function AgendamentoDemandasBoard() {
             <CardContent className="pt-5">
               <p className="text-xs text-muted-foreground">Prazos vencidos</p>
               <p className="text-3xl font-bold text-destructive">
-                {stats.vencidos}
+                {cardStats.vencidos}
               </p>
             </CardContent>
           </Card>
@@ -570,6 +794,32 @@ export function AgendamentoDemandasBoard() {
           </CardHeader>
 
           <CardContent className="space-y-4">
+            <div className="rounded-xl border border-border bg-muted/20 p-2">
+              <div className="grid gap-2 sm:grid-cols-2">
+                <Button
+                  type="button"
+                  variant={etapaFiltro === "para_avaliar" ? "default" : "outline"}
+                  className={etapaFiltro === "para_avaliar" ? "" : "bg-transparent"}
+                  onClick={() => setEtapaFiltro("para_avaliar")}
+                >
+                  Para Avaliar
+                </Button>
+
+                <Button
+                  type="button"
+                  variant={etapaFiltro === "para_agendar" ? "default" : "outline"}
+                  className={etapaFiltro === "para_agendar" ? "" : "bg-transparent"}
+                  onClick={() => setEtapaFiltro("para_agendar")}
+                >
+                  Para Agendar
+                </Button>
+              </div>
+
+              <p className="mt-2 text-xs text-muted-foreground">
+                O filtro selecionado fica salvo mesmo ao atualizar a página.
+              </p>
+            </div>
+
             <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_180px_180px] lg:items-end">
               <div className="space-y-1">
                 <Label className="text-xs text-muted-foreground">Buscar</Label>
@@ -599,7 +849,8 @@ export function AgendamentoDemandasBoard() {
                   onChange={(event) => setStatus(event.target.value)}
                 >
                   <option value="todos">Todos</option>
-                  <option value="pendente">Pendente</option>
+                  <option value="para_avaliar">Para avaliar</option>
+                  <option value="para_agendar">Para agendar</option>
                   <option value="reservado">Reservado</option>
                 </select>
               </div>
@@ -653,7 +904,7 @@ export function AgendamentoDemandasBoard() {
 
                             <Badge
                               variant={
-                                item.statusAgendamento === "pendente"
+                                item.statusAgendamento === "para_avaliar"
                                   ? "secondary"
                                   : "outline"
                               }
@@ -742,37 +993,61 @@ export function AgendamentoDemandasBoard() {
                         </div>
 
                         <div className="flex flex-wrap gap-2 xl:justify-end">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="bg-transparent"
-                            onClick={() => openReserve(item)}
-                            disabled={item.statusAgendamento === "reservado"}
-                          >
-                            <CalendarCheck className="mr-2 h-4 w-4" />
-                            Reservar
-                          </Button>
+                          {etapaFiltro === "para_agendar" ? (
+                            <>
+                              {item.statusAgendamento === "para_avaliar" ? (
+                            <Button
+                              type="button"
+                              size="sm"
+                              onClick={() => handleMarkAptForScheduling(item)}
+                              disabled={saving}
+                            >
+                              <CheckCircle2 className="mr-2 h-4 w-4" />
+                              Apto p/ agendamento
+                            </Button>
+                          ) : null}
 
                           <Button
-                            type="button"
-                            size="sm"
-                            onClick={() => openSchedule(item)}
-                          >
-                            <Send className="mr-2 h-4 w-4" />
-                            Agendar
-                          </Button>
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="bg-transparent"
+                                onClick={() => openReserve(item)}
+                                disabled={item.statusAgendamento === "reservado" || item.statusAgendamento === "para_avaliar"}
+                              >
+                                <CalendarCheck className="mr-2 h-4 w-4" />
+                                Reservar
+                              </Button>
 
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="bg-transparent"
-                            onClick={() => openReturn(item)}
-                          >
-                            <Undo2 className="mr-2 h-4 w-4" />
-                            Devolver
-                          </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                onClick={() => openSchedule(item)}
+                              >
+                                <Send className="mr-2 h-4 w-4" />
+                                Agendar
+                              </Button>
+
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="bg-transparent"
+                                onClick={() => openReturn(item)}
+                              >
+                                <Undo2 className="mr-2 h-4 w-4" />
+                                Devolver
+                              </Button>
+                            </>
+                          ) : (
+                            <Button
+                              type="button"
+                              size="sm"
+                              onClick={() => openAnalysis(item)}
+                            >
+                              Registrar análise
+                            </Button>
+                          )}
 
                           <Button
                             asChild
@@ -814,7 +1089,7 @@ export function AgendamentoDemandasBoard() {
 
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">Pendentes</span>
-              <Badge variant="secondary">{stats.pendentes}</Badge>
+              <Badge variant="secondary">{stats.paraAvaliar}</Badge>
             </div>
 
             <div className="flex items-center justify-between">
@@ -948,6 +1223,69 @@ export function AgendamentoDemandasBoard() {
         </Card>
       </div>
 
+      <Dialog open={analysisOpen} onOpenChange={setAnalysisOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Registrar análise de viabilidade</DialogTitle>
+            <DialogDescription>
+              Avalie se o procedimento é feito na rede e registre o parecer no histórico.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <div className="rounded-lg border border-border p-3 text-sm">
+              <p className="font-medium">{selectedItem?.pacienteNome}</p>
+              <p className="text-muted-foreground">
+                {selectedItem?.protocolo} • {selectedItem?.moduloLabel}
+              </p>
+            </div>
+
+            <div>
+              <Label className="mb-1 block text-xs">Procedimento é feito na rede?</Label>
+              <select
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={analysisDecision}
+                onChange={(event) =>
+                  setAnalysisDecision(
+                    event.target.value as "feito_rede" | "nao_rede" | "complementacao",
+                  )
+                }
+              >
+                <option value="feito_rede">Sim, é feito na rede</option>
+                <option value="nao_rede">Não é feito na rede</option>
+                <option value="complementacao">Precisa complementar informações</option>
+              </select>
+            </div>
+
+            <div>
+              <Label className="mb-1 block text-xs">Parecer técnico / observação</Label>
+              <Textarea
+                rows={5}
+                value={analysisDescription}
+                onChange={(event) => setAnalysisDescription(event.target.value)}
+                placeholder="Registre a análise, unidade/prestador de referência ou motivo da inviabilidade/complementação."
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              className="bg-transparent"
+              onClick={() => setAnalysisOpen(false)}
+              disabled={saving}
+            >
+              Cancelar
+            </Button>
+
+            <Button type="button" onClick={handleAnalysis} disabled={saving}>
+              {saving ? "Salvando..." : "Salvar análise"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={reserveOpen} onOpenChange={setReserveOpen}>
         <DialogContent>
           <DialogHeader>
@@ -996,14 +1334,163 @@ export function AgendamentoDemandasBoard() {
           <div className="space-y-3">
             <div>
               <Label className="mb-1 block text-xs">
-                Data e hora do agendamento
+                Data geral do agendamento
               </Label>
               <Input
                 type="datetime-local"
                 value={scheduleDate}
                 onChange={(event) => setScheduleDate(event.target.value)}
               />
+
+              {getItemFichas(selectedItem).length > 0 ? (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Use a data geral para aplicar o mesmo agendamento em todas as fichas sem data individual.
+                </p>
+              ) : null}
             </div>
+
+            {getItemFichas(selectedItem).length > 0 ? (
+              <div className="rounded-xl border border-border bg-muted/20 p-3">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-semibold">
+                      Data individual por ficha CORE/SISREG
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Preencha somente as fichas que serão agendadas agora.
+                    </p>
+                  </div>
+
+                  <span className="rounded-full border border-border px-2 py-1 text-xs text-muted-foreground">
+                    {
+                      getItemFichas(selectedItem).filter(
+                        (ficha) => scheduleFichaDates[ficha.id] || ficha.appointmentDate,
+                      ).length
+                    }
+                    /
+                    {getItemFichas(selectedItem).length} com data
+                  </span>
+                </div>
+
+                <div className="space-y-3">
+                  {getItemFichas(selectedItem).map((ficha) => {
+                    const hasDate = Boolean(
+                      scheduleFichaDates[ficha.id] || ficha.appointmentDate,
+                    )
+
+                    return (
+                      <div
+                        key={ficha.id}
+                        className={
+                          hasDate
+                            ? "rounded-lg border border-emerald-200 bg-emerald-50 p-3"
+                            : "rounded-lg border border-dashed border-border bg-background p-3"
+                        }
+                      >
+                        <div className="mb-2 flex flex-wrap items-center gap-2">
+                          <span className="rounded-full border border-border px-2 py-0.5 text-xs font-semibold">
+                            {ficha.system || "CORE"}
+                          </span>
+
+                          <span className="text-sm font-semibold">
+                            {ficha.number || "Ficha sem número"}
+                          </span>
+
+                          {ficha.appointmentDate ? (
+                            <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                              Já possui data
+                            </span>
+                          ) : null}
+                        </div>
+
+                        {ficha.notes ? (
+                          <p className="mb-2 whitespace-pre-line text-xs text-muted-foreground">
+                            {ficha.notes}
+                          </p>
+                        ) : null}
+
+                        <Label className="mb-1 block text-xs">
+                          Data desta ficha
+                        </Label>
+                        <Input
+                          type="datetime-local"
+                          value={scheduleFichaDates[ficha.id] || ""}
+                          onChange={(event) =>
+                            setScheduleFichaDates((prev) => ({
+                              ...prev,
+                              [ficha.id]: event.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            ) : null}
+
+            {getItemFichas(selectedItem).length > 0 && (
+              <div className="rounded-xl border border-border p-3">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-semibold">Fichas CORE/SISREG</p>
+                    <p className="text-xs text-muted-foreground">
+                      Informe a data somente nas fichas que serão agendadas.
+                    </p>
+                  </div>
+                  <Badge variant="secondary">
+                    {getItemFichas(selectedItem).filter((ficha) => scheduleFichaDates[ficha.id] || ficha.appointmentDate).length}
+                    /
+                    {getItemFichas(selectedItem).length} com data
+                  </Badge>
+                </div>
+
+                <div className="space-y-3">
+                  {getItemFichas(selectedItem).map((ficha) => (
+                    <div
+                      key={ficha.id}
+                      className={
+                        ficha.appointmentDate || scheduleFichaDates[ficha.id]
+                          ? "rounded-lg border border-emerald-200 bg-emerald-50 p-3"
+                          : "rounded-lg border border-dashed border-border p-3"
+                      }
+                    >
+                      <div className="mb-2 flex flex-wrap items-center gap-2">
+                        <Badge variant="outline">{ficha.system || "CORE"}</Badge>
+                        <span className="text-sm font-semibold">
+                          {ficha.number || "Ficha sem número"}
+                        </span>
+                        {ficha.appointmentDate && (
+                          <Badge variant="secondary">
+                            Já agendada
+                          </Badge>
+                        )}
+                      </div>
+
+                      {ficha.notes && (
+                        <p className="mb-2 whitespace-pre-line text-xs text-muted-foreground">
+                          {ficha.notes}
+                        </p>
+                      )}
+
+                      <Label className="mb-1 block text-xs">
+                        Data desta ficha
+                      </Label>
+                      <Input
+                        type="datetime-local"
+                        value={scheduleFichaDates[ficha.id] || ""}
+                        onChange={(event) =>
+                          setScheduleFichaDates((prev) => ({
+                            ...prev,
+                            [ficha.id]: event.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div>
               <Label className="mb-1 block text-xs">Descrição</Label>

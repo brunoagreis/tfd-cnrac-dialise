@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server"
+﻿import { NextRequest, NextResponse } from "next/server"
 import { randomUUID } from "crypto"
 import { prisma } from "@/lib/prisma"
 
@@ -147,7 +147,7 @@ async function insertMovement(tx: any, params: {
         $1,
         $2::bigint,
         $3,
-        'monitoramento',
+        'ficha_adicionada',
         $4,
         '[]'::jsonb,
         $5,
@@ -364,10 +364,30 @@ export async function POST(
           SET
             ficha_core = CASE WHEN $2 = 'CORE' THEN $3 ELSE ficha_core END,
             status_monitoramento_atual = CASE
-              WHEN $2 IN ('CORE', 'SISREG') THEN 'MONITORAMENTO_AUTOMATICO'
+              WHEN $2 = 'CORE' THEN 'MONITORAMENTO_AUTOMATICO'
               ELSE status_monitoramento_atual
             END,
+            pendente_dia_anterior = CASE
+              WHEN $2 = 'CORE' THEN FALSE
+              ELSE pendente_dia_anterior
+            END,
+            ativo_monitoramento = CASE
+              WHEN $2 = 'CORE' THEN TRUE
+              ELSE ativo_monitoramento
+            END,
             data_ultimo_monitoramento = NOW(),
+            data_proximo_monitoramento = CASE
+              WHEN $2 = 'CORE' THEN NOW() + INTERVAL '2 days'
+              ELSE data_proximo_monitoramento
+            END,
+            motivo_proximo_monitoramento = CASE
+              WHEN $2 = 'CORE' THEN 'CORE_MONITORAMENTO_AUTOMATICO'
+              ELSE motivo_proximo_monitoramento
+            END,
+            prazo_retorno_dias = CASE
+              WHEN $2 = 'CORE' THEN 2
+              ELSE prazo_retorno_dias
+            END,
             updated_at = NOW()
           WHERE id::text = $1
         `,
@@ -375,6 +395,60 @@ export async function POST(
         system,
         number,
       )
+
+      if (String(system || "").toUpperCase() === "CORE") {
+        await tx.$executeRawUnsafe(
+          `
+            INSERT INTO public.judicial_core_monitoramento_controle (
+              monitoramento_id,
+              demanda_id,
+              ficha_id,
+              ficha_core,
+              sistema,
+              consultas_total,
+              consultas_mesmo_status,
+              proxima_consulta_em,
+              ativo,
+              motivo_saida_automatico,
+              saiu_automatico_em,
+              observacao,
+              created_at,
+              updated_at
+            )
+            VALUES (
+              $1::bigint,
+              $2,
+              $3,
+              $4,
+              'CORE',
+              0,
+              0,
+              NOW() + INTERVAL '2 days',
+              TRUE,
+              NULL,
+              NULL,
+              'Ficha CORE cadastrada no processo judicial; monitoramento automático iniciado com retorno em 2 dias.',
+              NOW(),
+              NOW()
+            )
+            ON CONFLICT (monitoramento_id, ficha_core)
+            DO UPDATE SET
+              demanda_id = EXCLUDED.demanda_id,
+              ficha_id = EXCLUDED.ficha_id,
+              sistema = 'CORE',
+              proxima_consulta_em = EXCLUDED.proxima_consulta_em,
+              ativo = TRUE,
+              motivo_saida_automatico = NULL,
+              saiu_automatico_em = NULL,
+              observacao = EXCLUDED.observacao,
+              updated_at = NOW()
+          `,
+          processo.monitoramentoId,
+          processo.demandaId || null,
+          fichaId,
+          number,
+        )
+      }
 
       await tx.$executeRawUnsafe(
         `
@@ -394,7 +468,7 @@ export async function POST(
             $1,
             $2::bigint,
             $3,
-            'monitoramento',
+            'ficha_adicionada',
             $4,
             $5::jsonb,
             $6,
@@ -412,8 +486,7 @@ export async function POST(
         user.nome,
         user.email || null,
       )
-
-      await insertAudit(tx, {
+await insertAudit(tx, {
         processo,
         fichaId,
         action: "cadastrar_ficha_judicial",

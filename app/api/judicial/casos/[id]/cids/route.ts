@@ -182,7 +182,7 @@ export async function POST(
             $1,
             $2::bigint,
             $3,
-            'monitoramento',
+            'cid_adicionado',
             $4,
             '[]'::jsonb,
             $5,
@@ -199,8 +199,7 @@ export async function POST(
         userName,
         userEmail || null,
       )
-
-      await tx.$executeRawUnsafe(
+await tx.$executeRawUnsafe(
         `
           INSERT INTO public.sistema_auditoria (
             tabela_nome,

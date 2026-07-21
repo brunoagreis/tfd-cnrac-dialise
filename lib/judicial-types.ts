@@ -17,6 +17,7 @@ export const MOVEMENT_TYPES = [
   "descumprimento",
   "sequestro",
   "bloqueio",
+  "comunicado_agendamento",
   "agendamento",
   "manifestacao_municipio",
   "encaminhar_demanda_municipio",
@@ -24,6 +25,7 @@ export const MOVEMENT_TYPES = [
   "solicitacao_inclusao",
   "reiteracao",
   "envio_agendamento_demanda",
+  "encaminhar_direto_agendamento",
   "reserva_agendamento",
   "nao_agendado",
   "cumprimento",
@@ -201,6 +203,10 @@ export interface JudicialCase {
   patientId: string
   patientName: string
   cpf: string
+  cns?: string
+  patientCns?: string
+  pacienteCns?: string
+  cartaoSus?: string
   municipalityName: string
   originModule: "tfd" | "cnrac" | "hemodialise" | "judicial"
   originProtocol: string
@@ -263,7 +269,6 @@ export interface CoreRow {
   fichaNumber: string
   patientName: string
   cpf?: string
-  cns?: string
   procedureCode?: string
   procedureDescription?: string
   appointmentDate?: string
@@ -345,6 +350,7 @@ export const MOVEMENT_TYPE_LABELS: Record<MovementType, string> = {
   descumprimento: "Descumprimento",
   sequestro: "Sequestro",
   bloqueio: "Bloqueio",
+  comunicado_agendamento: "Comunicado Agendamento",
   agendamento: "Agendamento",
   manifestacao_municipio: "Manifestação do município",
   encaminhar_demanda_municipio: "Encaminhamento de Demanda ao Munic\u00edpio",
@@ -352,6 +358,7 @@ export const MOVEMENT_TYPE_LABELS: Record<MovementType, string> = {
   solicitacao_inclusao: "Solicitação de inclusão",
   reiteracao: "Reiteração",
   envio_agendamento_demanda: "Envio para agendamento da demanda",
+  encaminhar_direto_agendamento: "Encaminhar direto para agendamento",
   reserva_agendamento: "Reserva de agendamento",
   nao_agendado: "Não agendado",
   cumprimento: "Cumprimento",

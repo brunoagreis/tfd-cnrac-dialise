@@ -73,7 +73,7 @@ function normalizarStatus(value: unknown): StatusFinalizacao | null {
 
   if (status === "pendente") return "pendente"
   if (status === "resolvido" || status === "resolver") return "resolvido"
-  
+
   if (status === "nao_sus" || status === "nao sus") return "nao_sus"
   if (status === "competencia_municipio" || status === "competencia municipio" || status === "competencia do municipio") return "competencia_municipio"
 if (status === "cumprido" || status === "cumprida") return "cumprido"
@@ -90,7 +90,7 @@ function statusParaBanco(status: StatusFinalizacao) {
   if (status === "arquivado") return "ARQUIVADO"
   if (status === "obito") return "OBITO"
   if (status === "cumprido") return "CUMPRIDO"
-  
+
   if (status === "nao_sus") return "RESOLVIDO"
   if (status === "competencia_municipio") return "RESOLVIDO"
 return status.toUpperCase()
@@ -272,9 +272,9 @@ export async function POST(
           SET status_monitoramento_atual = $2,
               ativo_monitoramento = CASE WHEN $3 = TRUE THEN FALSE ELSE ativo_monitoramento END,
               data_ultimo_monitoramento = NOW(),
-              data_proximo_monitoramento = $4::timestamptz,
-              motivo_proximo_monitoramento = $5,
-              prazo_retorno_dias = $6::int,
+              data_proximo_monitoramento = CASE WHEN $3 = TRUE THEN NULL ELSE $4::timestamptz END,
+              motivo_proximo_monitoramento = CASE WHEN $3 = TRUE THEN NULL ELSE $5 END,
+              prazo_retorno_dias = CASE WHEN $3 = TRUE THEN NULL ELSE $6::int END,
               updated_at = NOW()
           WHERE id::text = $1
         `,
@@ -313,6 +313,28 @@ export async function POST(
           ? `Finalizado pela demanda judicial: ${statusTexto}`
           : `Finalizado pela demanda judicial: ${statusTexto}. Retorno em ${returnRule.days} dia(s).`,
       )
+
+      if (isTerminal) {
+        await tx.$executeRawUnsafe(
+          `
+            UPDATE public.judicial_monitoramento_atribuicoes
+            SET
+              status = 'FINALIZADO',
+              iniciado_em = COALESCE(iniciado_em, NOW()),
+              finalizado_em = COALESCE(finalizado_em, NOW()),
+              observacao = COALESCE(NULLIF(observacao, ''), '') || CASE
+                WHEN COALESCE(NULLIF(observacao, ''), '') = '' THEN ''
+                ELSE E'\n'
+              END || $2,
+              updated_at = NOW()
+            WHERE data_referencia = CURRENT_DATE
+              AND monitoramento_id = $1::bigint
+              AND status <> 'CANCELADO'
+          `,
+          processo.monitoramentoId,
+          `Finalizado pela demanda judicial: ${statusTexto}`,
+        )
+      }
 
       await tx.$executeRawUnsafe(
         `

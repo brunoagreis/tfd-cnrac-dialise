@@ -103,7 +103,11 @@ export async function GET(req: NextRequest) {
     const whereParts: string[] = [`UPPER(COALESCE(b.origem_modulo, '')) = 'JUDICIAL'`]
     const atribuicaoHojeWhereParts: string[] = [`a.data_referencia = CURRENT_DATE`]
     const atribuicaoEmailWhereParts: string[] = [`ea.ativo = TRUE`]
-    const atribuicaoManualWhereParts: string[] = [`m.ativo = TRUE`]
+    const atribuicaoManualWhereParts: string[] = [
+      incluirMonitoradosHoje
+        ? `(m.ativo = TRUE OR m.removida_em::date = CURRENT_DATE)`
+        : `m.ativo = TRUE`,
+    ]
     const automaticoHojeSql = `(UPPER(COALESCE(b.status_monitoramento_atual, '')) = 'MONITORAMENTO_AUTOMATICO' AND b.data_ultimo_monitoramento::date = CURRENT_DATE)`
 
     if (usuarioId) {
@@ -128,11 +132,19 @@ export async function GET(req: NextRequest) {
 
     if (somenteAtivos !== "false") whereParts.push(`COALESCE(b.ativo_monitoramento, TRUE) = TRUE`)
 
+    const retornoFuturoAbertoSql = `(
+      atb.monitoramento_id IS NOT NULL
+      AND COALESCE(atb.status, '') <> 'FINALIZADO'
+      AND b.data_proximo_monitoramento IS NOT NULL
+      AND b.data_proximo_monitoramento > NOW()
+      AND COALESCE(b.pendente_dia_anterior, FALSE) = FALSE
+    )`
+
     if (somenteAtribuidos) {
       if (incluirMonitoradosAutomaticamente) {
-        whereParts.push(`(atb.monitoramento_id IS NOT NULL OR ${automaticoHojeSql})`)
+        whereParts.push(`((atb.monitoramento_id IS NOT NULL AND NOT ${retornoFuturoAbertoSql}) OR ${automaticoHojeSql})`)
       } else {
-        whereParts.push(`atb.monitoramento_id IS NOT NULL`)
+        whereParts.push(`(atb.monitoramento_id IS NOT NULL AND NOT ${retornoFuturoAbertoSql})`)
       }
     }
 
@@ -191,9 +203,15 @@ export async function GET(req: NextRequest) {
           UNION ALL          SELECT
             'manual-' || m.id::text AS atribuicao_id,
             m.monitoramento_id::text AS monitoramento_id,
-            NULL::text AS data_referencia,
-            'ATRIBUIDO'::text AS status,
-            m.atribuida_em,
+            CASE
+              WHEN m.ativo = TRUE THEN NULL::text
+              ELSE m.removida_em::date::text
+            END AS data_referencia,
+            CASE
+              WHEN m.ativo = TRUE THEN 'ATRIBUIDO'
+              ELSE 'FINALIZADO'
+            END::text AS status,
+            COALESCE(m.removida_em, m.atribuida_em) AS atribuida_em,
             m.usuario_nome,
             0 AS bloco_numero,
             0 AS ordem_no_bloco,

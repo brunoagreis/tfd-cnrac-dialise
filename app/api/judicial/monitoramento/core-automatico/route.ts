@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { randomUUID } from "crypto"
+import { createHash, randomUUID } from "crypto"
 import { prisma } from "@/lib/prisma"
 
 export const runtime = "nodejs"
@@ -153,6 +153,123 @@ async function insertAutomaticMovement(tx: any, params: {
   )
 }
 
+
+function coreStatusHash(statusFicha: string, statusProcedimento: string) {
+  return createHash("sha1")
+    .update(`${normalizeStatus(statusFicha)}|${normalizeStatus(statusProcedimento)}`)
+    .digest("hex")
+}
+
+async function upsertCoreControl(tx: any, params: {
+  row: CoreCandidateRow
+  core: CoreSituation
+  ficha: string
+  nextDate: string | null
+  automatico: boolean
+  motivoSaida: string | null
+  observacao: string
+}) {
+  const statusFicha = params.core.encontrada ? text(params.core.situacao) : "NÃO ENCONTRADA"
+  const statusProcedimento = text(params.core.situacaoProcedimento)
+  const statusHash = coreStatusHash(statusFicha, statusProcedimento)
+  const tipoCore = params.core.encontrada ? text(params.core.tabela) : "NAO_ENCONTRADA"
+
+  await tx.$executeRawUnsafe(
+    `
+      INSERT INTO public.judicial_core_monitoramento_controle AS jcmc (
+        monitoramento_id,
+        demanda_id,
+        ficha_id,
+        ficha_core,
+        sistema,
+        tipo_core,
+        status_ficha_atual,
+        status_procedimento_atual,
+        status_hash_atual,
+        status_ficha_anterior,
+        status_procedimento_anterior,
+        status_hash_anterior,
+        consultas_total,
+        consultas_mesmo_status,
+        primeira_consulta_em,
+        ultima_consulta_em,
+        proxima_consulta_em,
+        ativo,
+        motivo_saida_automatico,
+        saiu_automatico_em,
+        observacao,
+        created_at,
+        updated_at
+      )
+      VALUES (
+        $1::bigint,
+        $2,
+        $3,
+        $4,
+        'CORE',
+        $5,
+        $6,
+        $7,
+        $8,
+        NULL,
+        NULL,
+        NULL,
+        1,
+        1,
+        NOW(),
+        NOW(),
+        $9::timestamptz,
+        $10::boolean,
+        $11,
+        CASE WHEN $10::boolean = FALSE THEN NOW() ELSE NULL END,
+        $12,
+        NOW(),
+        NOW()
+      )
+      ON CONFLICT (monitoramento_id, ficha_core)
+      DO UPDATE SET
+        demanda_id = EXCLUDED.demanda_id,
+        ficha_id = EXCLUDED.ficha_id,
+        sistema = 'CORE',
+        tipo_core = EXCLUDED.tipo_core,
+        status_ficha_anterior = jcmc.status_ficha_atual,
+        status_procedimento_anterior = jcmc.status_procedimento_atual,
+        status_hash_anterior = jcmc.status_hash_atual,
+        status_ficha_atual = EXCLUDED.status_ficha_atual,
+        status_procedimento_atual = EXCLUDED.status_procedimento_atual,
+        status_hash_atual = EXCLUDED.status_hash_atual,
+        consultas_total = COALESCE(jcmc.consultas_total, 0) + 1,
+        consultas_mesmo_status = CASE
+          WHEN jcmc.status_hash_atual = EXCLUDED.status_hash_atual THEN COALESCE(jcmc.consultas_mesmo_status, 0) + 1
+          ELSE 1
+        END,
+        primeira_consulta_em = COALESCE(jcmc.primeira_consulta_em, NOW()),
+        ultima_consulta_em = NOW(),
+        proxima_consulta_em = EXCLUDED.proxima_consulta_em,
+        ativo = EXCLUDED.ativo,
+        motivo_saida_automatico = EXCLUDED.motivo_saida_automatico,
+        saiu_automatico_em = CASE
+          WHEN EXCLUDED.ativo = FALSE THEN COALESCE(jcmc.saiu_automatico_em, NOW())
+          ELSE NULL
+        END,
+        observacao = EXCLUDED.observacao,
+        updated_at = NOW()
+    `,
+    params.row.monitoramentoId,
+    params.row.demandaId || null,
+    params.row.fichaId || null,
+    params.ficha,
+    tipoCore || null,
+    statusFicha || null,
+    statusProcedimento || null,
+    statusHash,
+    params.nextDate,
+    params.automatico,
+    params.motivoSaida,
+    params.observacao,
+  )
+}
+
 async function processCandidate(tx: any, row: CoreCandidateRow): Promise<ProcessResult> {
   const core = resolveCoreSituation(row)
   const ficha = core.ficha || resolveFicha(row)
@@ -190,6 +307,18 @@ async function processCandidate(tx: any, row: CoreCandidateRow): Promise<Process
       ficha,
       situacao: core.situacao,
       description,
+    })
+
+
+
+    await upsertCoreControl(tx, {
+      row,
+      core,
+      ficha,
+      nextDate: nextDayIso(),
+      automatico: false,
+      motivoSaida: "CORE_NAO_ENCONTRADA_ANALISE_HUMANA",
+      observacao: description,
     })
 
     return {
@@ -241,6 +370,18 @@ async function processCandidate(tx: any, row: CoreCandidateRow): Promise<Process
       description,
     })
 
+
+
+    await upsertCoreControl(tx, {
+      row,
+      core,
+      ficha,
+      nextDate: nextDaysIso(2),
+      automatico: true,
+      motivoSaida: null,
+      observacao: description,
+    })
+
     return {
       monitoramentoId: row.monitoramentoId,
       ficha,
@@ -289,7 +430,19 @@ async function processCandidate(tx: any, row: CoreCandidateRow): Promise<Process
     description,
   })
 
-  return {
+
+
+  await upsertCoreControl(tx, {
+    row,
+    core,
+    ficha,
+    nextDate: nextDayIso(),
+    automatico: false,
+    motivoSaida: "CORE_SITUACAO_DIFERENTE_ANALISE_HUMANA",
+    observacao: description,
+  })
+
+    return {
     monitoramentoId: row.monitoramentoId,
     ficha,
     tabela: core.tabela,
@@ -330,18 +483,23 @@ async function runAutomaticCoreMonitoring(limit: number) {
         FROM public.judicial_monitoramento_base jm
         LEFT JOIN ficha_core_ativa fca
           ON fca.monitoramento_id = jm.id::text
+        LEFT JOIN public.judicial_core_monitoramento_controle jcmc
+          ON jcmc.monitoramento_id = jm.id
+         AND jcmc.ficha_core = COALESCE(NULLIF(jm.ficha_core, ''), fca.ficha_numero)::text
         LEFT JOIN public.core_ambulatorial ca
           ON ca.nr_ficha::text = COALESCE(NULLIF(jm.ficha_core, ''), fca.ficha_numero)::text
         LEFT JOIN public.core_leitos cl
           ON cl.numero_ficha::text = COALESCE(NULLIF(jm.ficha_core, ''), fca.ficha_numero)::text
         WHERE COALESCE(jm.ativo_monitoramento, TRUE) = TRUE
           AND UPPER(COALESCE(jm.origem_modulo, '')) = 'JUDICIAL'
+          AND jm.status_monitoramento_atual = 'MONITORAMENTO_AUTOMATICO'
+          AND COALESCE(jcmc.ativo, TRUE) = TRUE
           AND COALESCE(NULLIF(jm.ficha_core, ''), fca.ficha_numero) IS NOT NULL
           AND (
             jm.data_ultimo_monitoramento IS NULL
-            OR jm.data_proximo_monitoramento <= NOW()
+            OR COALESCE(jcmc.proxima_consulta_em, jm.data_proximo_monitoramento) <= NOW()
             OR (
-              jm.data_proximo_monitoramento IS NULL
+              COALESCE(jcmc.proxima_consulta_em, jm.data_proximo_monitoramento) IS NULL
               AND jm.data_ultimo_monitoramento <= NOW() - INTERVAL '2 days'
             )
           )

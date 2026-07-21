@@ -191,6 +191,7 @@ export function JudicialFichasPanel({ caseId }: { caseId: string }) {
       const res = await fetch("/api/uploads", {
         method: "POST",
         body: form,
+        credentials: "include",
       })
       const data = await res.json()
       if (!res.ok || !data?.ok) {

@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
+import { randomUUID } from "crypto"
 import { prisma } from "@/lib/prisma"
 import { ensureEmailOsRoutingColumns, inferEmailOsModule, normalizeEmailOsModule } from "@/lib/email-os-routing"
 
 import { readServerSession } from "@/lib/security/server-session"
 import { finalizeEmailMessage } from "@/lib/email-triage-mailbox"
+import { reconcileEmailOsWithExistingJudicialCases } from "@/lib/judicial-email-os-reconcile"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -36,6 +38,7 @@ function isDeliveryStatusFailureSubject(value: unknown) {
 }
 
 function text(value: unknown) { return String(value ?? "").trim() }
+function digits(value: unknown) { return text(value).replace(/\D/g, "") }
 function parseArray(value: unknown) { if (Array.isArray(value)) return value; if (typeof value === "string") { try { const parsed = JSON.parse(value); return Array.isArray(parsed) ? parsed : [] } catch { return [] } } return [] }
 function parseObject(value: unknown) { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {} }
 function files(value: unknown, osId = "") {
@@ -179,6 +182,12 @@ export async function GET(req: NextRequest) {
   `).catch((error) => console.error("[GET /api/email-os] auto inativar DSN:", error))
 
   try {
+
+    // EMAIL_OS_RECONCILE_EXISTING_JUDICIAL_ON_GET
+    await reconcileEmailOsWithExistingJudicialCases().catch((error) => {
+      console.error("[EMAIL_OS_RECONCILE_EXISTING_JUDICIAL_ON_GET]", error)
+    })
+
     const moduleParam = normalizeEmailOsModule(req.nextUrl.searchParams.get("modulo"))
     const emailOsSessionGuard = requireEmailOsSession(req)
     if (emailOsSessionGuard.response) return emailOsSessionGuard.response
@@ -204,6 +213,12 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+
+    // EMAIL_OS_RECONCILE_EXISTING_JUDICIAL_ON_POST
+    await reconcileEmailOsWithExistingJudicialCases().catch((error) => {
+      console.error("[EMAIL_OS_RECONCILE_EXISTING_JUDICIAL_ON_POST]", error)
+    })
+
     await ensureEmailOsRoutingColumns()
     const body = await req.json().catch(() => ({}))
     const action = String(body?.action || "").trim().toLowerCase()
@@ -297,6 +312,226 @@ export async function POST(req: NextRequest) {
         finalProtocolo || "",
       )
 
+      // EMAIL_OS_VINCULAR_IRMAS_POR_PGENET_PROCESSO
+      if (finalDemandaId || finalProtocolo) {
+        const origemOsRows = await prisma.$queryRawUnsafe<Array<{
+          id: string
+          protocolo: string | null
+          assunto: string | null
+          remetente: string | null
+          recebidoEm: string | null
+          pgeNet: string | null
+          processo: string | null
+          corpoResumo: string | null
+          anexos: unknown
+        }>>(
+          `
+            SELECT
+              id::text AS id,
+              protocolo,
+              assunto,
+              remetente,
+              recebido_em::text AS "recebidoEm",
+              pge_net AS "pgeNet",
+              processo,
+              corpo_resumo AS "corpoResumo",
+              anexos
+            FROM public.judicial_email_os
+            WHERE id::text = $1
+            LIMIT 1
+          `,
+          id,
+        )
+
+        const origemOs = origemOsRows[0] || null
+        const pgeRaw = text(origemOs?.pgeNet)
+        const processoRaw = text(origemOs?.processo)
+        const pgeDigits = digits(pgeRaw)
+        const processoDigits = digits(processoRaw)
+        const pgeLike = pgeRaw ? "%" + pgeRaw + "%" : ""
+        const processoLike = processoRaw ? "%" + processoRaw + "%" : ""
+
+        const osVinculadas = await prisma.$queryRawUnsafe<Array<{
+          id: string
+          protocolo: string | null
+          assunto: string | null
+          remetente: string | null
+          recebidoEm: string | null
+          pgeNet: string | null
+          processo: string | null
+          corpoResumo: string | null
+          anexos: unknown
+        }>>(
+          `
+            SELECT
+              id::text AS id,
+              protocolo,
+              assunto,
+              remetente,
+              recebido_em::text AS "recebidoEm",
+              pge_net AS "pgeNet",
+              processo,
+              corpo_resumo AS "corpoResumo",
+              anexos
+            FROM public.judicial_email_os
+            WHERE id::text = $1
+               OR (
+                 COALESCE(status, 'AGUARDANDO_CADASTRO') NOT IN ('CONVERTIDA', 'CADASTRADA', 'CADASTRADO', 'CONCLUIDA', 'CONCLUÍDA', 'INATIVA')
+                 AND (
+                   ($2 <> '' AND REGEXP_REPLACE(COALESCE(pge_net, ''), '\\D', '', 'g') = $2)
+                   OR ($3 <> '' AND REGEXP_REPLACE(COALESCE(processo, ''), '\\D', '', 'g') = $3)
+                   OR ($4 <> '' AND pge_net ILIKE $4)
+                   OR ($5 <> '' AND processo ILIKE $5)
+                 )
+               )
+            ORDER BY recebido_em ASC NULLS LAST, created_at ASC NULLS LAST, id ASC
+          `,
+          id,
+          pgeDigits,
+          processoDigits,
+          pgeLike,
+          processoLike,
+        )
+
+        const monitoramentoRows = await prisma.$queryRawUnsafe<Array<{
+          monitoramentoId: string
+          demandaId: string | null
+          protocolo: string | null
+        }>>(
+          `
+            SELECT
+              b.id::text AS "monitoramentoId",
+              b.demanda_id::text AS "demandaId",
+              COALESCE(d.protocolo::text, b.demanda_id::text) AS protocolo
+            FROM public.judicial_monitoramento_base b
+            LEFT JOIN public.demandas d ON d.id = b.demanda_id
+            WHERE ($1 <> '' AND b.demanda_id::text = $1)
+               OR ($2 <> '' AND d.protocolo::text = $2)
+            ORDER BY b.id DESC
+            LIMIT 1
+          `,
+          finalDemandaId || "",
+          finalProtocolo || "",
+        )
+
+        const monitoramento = monitoramentoRows[0] || null
+
+        for (const os of osVinculadas) {
+          await prisma.$executeRawUnsafe(
+            `
+              UPDATE public.judicial_email_os
+              SET
+                status = 'CONVERTIDA',
+                modulo_destino = COALESCE(NULLIF($2, ''), modulo_destino),
+                convertido_demanda_id = COALESCE(NULLIF($3, ''), convertido_demanda_id),
+                convertido_protocolo = COALESCE(NULLIF($4, ''), convertido_protocolo),
+                convertido_em = COALESCE(convertido_em, NOW()),
+                corpo_resumo = CASE
+                  WHEN COALESCE(corpo_resumo, '') ILIKE '%DEMANDA CADASTRADA NO SIGAJUS%' THEN corpo_resumo
+                  ELSE CONCAT(COALESCE(corpo_resumo, ''), E'\n\nDEMANDA CADASTRADA NO SIGAJUS: ', $4)
+                END,
+                updated_at = NOW()
+              WHERE id::text = $1
+            `,
+            os.id,
+            moduloDestino,
+            finalDemandaId || "",
+            finalProtocolo || "",
+          )
+
+          if (finalDemandaId) {
+            await prisma.$executeRawUnsafe(
+              `
+                UPDATE public.judicial_email_processados
+                SET
+                  demanda_id = $2,
+                  status = 'DEMANDA_CADASTRADA',
+                  updated_at = NOW(),
+                  lido_em = COALESCE(lido_em, NOW())
+                WHERE os_id::text = $1
+              `,
+              os.id,
+              finalDemandaId,
+            )
+          }
+
+          if (monitoramento?.monitoramentoId) {
+            const anexosJson = JSON.stringify(parseArray(os.anexos))
+            const marker = "OS vinculada automaticamente: " + os.id
+            const description = [
+              "E-MAIL/OS VINCULADO AUTOMATICAMENTE AO PROCESSO",
+              marker,
+              "Protocolo OS: " + text(os.protocolo),
+              "Assunto: " + text(os.assunto),
+              "Remetente: " + text(os.remetente),
+              "PGE.net: " + text(os.pgeNet || pgeRaw),
+              "Processo: " + text(os.processo || processoRaw),
+              "Resumo: " + text(os.corpoResumo).slice(0, 4000),
+            ].filter(Boolean).join("\n")
+
+            await prisma.$executeRawUnsafe(
+              `
+                INSERT INTO public.judicial_movimentacoes (
+                  id,
+                  monitoramento_id,
+                  demanda_id,
+                  type,
+                  description,
+                  attachments,
+                  created_by,
+                  created_by_name,
+                  created_at
+                )
+                SELECT
+                  $1::text,
+                  $2::bigint,
+                  NULLIF($3::text, ''),
+                  'monitoramento'::text,
+                  $4::text,
+                  COALESCE($5::jsonb, '[]'::jsonb),
+                  'sistema-email'::text,
+                  'Integração de e-mail'::text,
+                  NOW()
+                WHERE NOT EXISTS (
+                  SELECT 1
+                  FROM public.judicial_movimentacoes
+                  WHERE monitoramento_id = $2::bigint
+                    AND description ILIKE $6::text
+                )
+              `,
+              "jmov_email_os_" + randomUUID(),
+              monitoramento.monitoramentoId,
+              monitoramento.demandaId || finalDemandaId || null,
+              description,
+              anexosJson,
+              "%" + marker + "%",
+            )
+          }
+        }
+
+        if (monitoramento?.monitoramentoId) {
+          await prisma.$executeRawUnsafe(
+            `
+              UPDATE public.judicial_monitoramento_base
+              SET
+                ativo_monitoramento = TRUE,
+                status_monitoramento_atual = 'PENDENTE',
+                pendente_dia_anterior = FALSE,
+                data_proximo_monitoramento = CURRENT_DATE + INTERVAL '1 day',
+                motivo_proximo_monitoramento = 'RETORNO_OS_INCORPORADA_1_DIA',
+                prazo_retorno_dias = 1,
+                prioridade_monitoramento = GREATEST(COALESCE(prioridade_monitoramento, 0), 3),
+                prioridade_motivo = 'OS incorporada ao processo; monitorar no dia seguinte com prioridade máxima.',
+                prioridade_atualizada_em = NOW(),
+                prioridade_atualizada_por = 'sistema-email-os',
+                updated_at = NOW()
+              WHERE id::text = $1
+            `,
+            monitoramento.monitoramentoId,
+          )
+        }
+      }
+
       if (finalDemandaId) {
         await prisma.$executeRawUnsafe(
           `
@@ -379,4 +614,3 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "Erro ao transferir OS." }, { status: 500 })
   }
 }
-

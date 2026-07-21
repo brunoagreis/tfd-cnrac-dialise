@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
@@ -27,6 +27,8 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { JudicialReturnBadge } from "@/components/modules/judicial-return-badge"
+
+const MODULE_LIST_PAGE_SIZE = 10
 
 type JudicialBoardItem = {
   id: string
@@ -93,6 +95,28 @@ function normalizeStatusKey(status: string) {
     .toUpperCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
+}
+
+function getSchedulingReturnBadge(item: JudicialBoardItem) {
+  const reason = String(item.motivoProximoMonitoramento || "")
+    .trim()
+    .toUpperCase()
+
+  if (reason === "AGENDAMENTO_REALIZADO") {
+    return {
+      label: "AGENDAMENTO REALIZADO",
+      className: "border-emerald-300 bg-emerald-100 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200",
+    }
+  }
+
+  if (reason === "DEVOLVIDO_PELO_AGENDAMENTO") {
+    return {
+      label: "DEVOLVIDO PELO AGENDAMENTO",
+      className: "border-red-300 bg-red-100 text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200",
+    }
+  }
+
+  return null
 }
 
 function isAutomaticMonitoring(item: JudicialBoardItem) {
@@ -179,6 +203,7 @@ export function JudicialMonitoringBoard() {
   const [status, setStatus] = useState("pendente")
   const [origemModulo, setOrigemModulo] = useState("todos")
   const [assignmentFilter, setAssignmentFilter] = useState("todos")
+  const [modulePage, setModulePage] = useState(1)
 
   const adminUser = useMemo(() => isAdminUser(user), [user])
   const monitoringUser = useMemo(() => isMonitoringUser(user), [user])
@@ -298,6 +323,19 @@ export function JudicialMonitoringBoard() {
       return true
     })
   }, [assignmentFilter, items, origemModulo, search, status])
+
+  // MODULE_LIST_PAGINATION_GLOBAL_SEARCH
+  const moduleTotalPages = Math.max(1, Math.ceil(filtered.length / MODULE_LIST_PAGE_SIZE))
+  const moduleCurrentPage = Math.min(modulePage, moduleTotalPages)
+
+  const modulePaginated = useMemo(() => {
+    const start = (moduleCurrentPage - 1) * MODULE_LIST_PAGE_SIZE
+    return filtered.slice(start, start + MODULE_LIST_PAGE_SIZE)
+  }, [filtered, moduleCurrentPage])
+
+  useEffect(() => {
+    setModulePage(1)
+  }, [status, origemModulo, assignmentFilter, search])
 
   const stats = useMemo(() => {
     const automaticos = items.filter(isAutomaticMonitoring).length
@@ -503,9 +541,61 @@ export function JudicialMonitoringBoard() {
             </div>
           ) : (
             <div className="flex flex-col gap-2">
-              {filtered.map((item) => {
+              {modulePaginated.map((item) => {
                 const automatic = isAutomaticMonitoring(item)
                 const humanToday = isMonitoredToday(item)
+                const activeMonitoring = item.ativoMonitoramento !== false
+                const statusKey = String(item.statusMonitoramentoAtual || "").trim().toUpperCase()
+                const rawStatusLabel = String(item.statusLabel || "").trim()
+                const hasNextMonitoring = Boolean(item.dataProximoMonitoramento)
+
+                const motivoAtual = String(item.motivoProximoMonitoramento || "").trim().toUpperCase()
+
+                const sentToScheduling = [
+                  "RETORNO_ENVIO_AGENDAMENTO_5_DIAS",
+                  "AGUARDANDO_AGENDAMENTO_DA_DEMANDA",
+                ].includes(motivoAtual)
+
+                const terminalStatus =
+                  !hasNextMonitoring &&
+                  [
+                    "FINALIZADO",
+                    "RESOLVIDO",
+                    "ARQUIVADO",
+                    "ENCERRADO",
+                    "OBITO",
+                    "CUMPRIDO",
+                    "BLOQUEIO",
+                    "SEQUESTRO",
+                    "PROCEDIMENTO_NAO_SUS",
+                    "COMPETENCIA_MUNICIPIO",
+                  ].includes(statusKey)
+
+                const closedLabelWithoutTerminal =
+                  ["ENCERRADO", "FINALIZADO"].includes(rawStatusLabel.toUpperCase()) &&
+                  !terminalStatus
+
+                const monitoringStatusLabel = terminalStatus
+                  ? rawStatusLabel || "Encerrado"
+                  : sentToScheduling
+                    ? "Enviado ao Agendamento"
+                    : activeMonitoring
+                      ? closedLabelWithoutTerminal
+                        ? "Pendente"
+                        : rawStatusLabel || "Pendente"
+                      : "Pausado"
+
+                const monitoringStatusVariant = terminalStatus
+                  ? getStatusVariant(item.statusMonitoramentoAtual)
+                  : activeMonitoring
+                    ? "secondary"
+                    : "outline"
+
+                const showReturnBadge = hasNextMonitoring && !terminalStatus
+
+                const schedulingReturnBadge = showReturnBadge
+                  ? getSchedulingReturnBadge(item)
+                  : null
 
                 return (
                   <Link
@@ -519,17 +609,20 @@ export function JudicialMonitoringBoard() {
                           {item.protocolo}
                         </span>
 
-                        <Badge variant={getStatusVariant(item.statusMonitoramentoAtual)}>
-                          {item.statusLabel}
+
+
+                        <Badge variant={monitoringStatusVariant}>
+                          {monitoringStatusLabel}
                         </Badge>
 
-                        {automatic && (
-                          <Badge variant="default">Monitoramento automático</Badge>
-                        )}
-
-                        <Badge variant="outline">
-                          {item.origemModulo || "JUDICIAL"}
-                        </Badge>
+                        {schedulingReturnBadge ? (
+                          <Badge
+                            variant="outline"
+                            className={schedulingReturnBadge.className}
+                          >
+                            {schedulingReturnBadge.label}
+                          </Badge>
+                        ) : null}
 
                         {item.usuarioAtribuidoNome ? (
                           <Badge variant="secondary">
@@ -584,7 +677,7 @@ export function JudicialMonitoringBoard() {
                         nextAt={item.dataProximoMonitoramento}
                         reason={item.motivoProximoMonitoramento}
                         days={item.prazoRetornoDias}
-                        active={item.ativoMonitoramento}
+                        active={showReturnBadge}
                       />
                     </div>
 
@@ -602,8 +695,60 @@ export function JudicialMonitoringBoard() {
               })}
             </div>
           )}
+        <ModuleListPagination
+          page={moduleCurrentPage}
+          pages={moduleTotalPages}
+          total={filtered.length}
+          onPageChange={setModulePage}
+        />
         </CardContent>
       </Card>
+    </div>
+  )
+}
+
+
+function ModuleListPagination({
+  page,
+  pages,
+  total,
+  onPageChange,
+}: {
+  page: number
+  pages: number
+  total: number
+  onPageChange: (page: number) => void
+}) {
+  if (total <= MODULE_LIST_PAGE_SIZE) return null
+
+  const first = Math.min(total, (page - 1) * MODULE_LIST_PAGE_SIZE + 1)
+  const last = Math.min(total, page * MODULE_LIST_PAGE_SIZE)
+
+  return (
+    <div className="mt-4 flex flex-col gap-2 border-t pt-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+      <span className="text-muted-foreground">
+        Exibindo {first} a {last} de {total} resultado(s). Página {page} de {pages}.
+      </span>
+
+      <div className="flex gap-2">
+        <button
+          type="button"
+          className="rounded-md border border-input bg-background px-3 py-1 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={page <= 1}
+          onClick={() => onPageChange(Math.max(1, page - 1))}
+        >
+          Anterior
+        </button>
+
+        <button
+          type="button"
+          className="rounded-md border border-input bg-background px-3 py-1 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={page >= pages}
+          onClick={() => onPageChange(Math.min(pages, page + 1))}
+        >
+          Próxima
+        </button>
+      </div>
     </div>
   )
 }

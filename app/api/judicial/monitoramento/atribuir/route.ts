@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from "next/server"
+﻿import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { requireLoggedRequest } from "@/lib/security/server-session"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -58,6 +59,30 @@ async function closePreviousOpenAssignments() {
   })
 }
 
+async function canReceiveJudicialMonitoringQueue(userId: string, userEmail: string) {
+  const rows = await prisma.$queryRawUnsafe<Array<{ allowed: boolean }>>(
+    `
+      SELECT TRUE AS allowed
+      FROM public.usuarios
+      WHERE COALESCE(ativo, FALSE) = TRUE
+        AND UPPER(COALESCE(role::text, '')) = 'JUDICIAL'
+        AND UPPER(COALESCE("perfilCodigo", '')) = 'MONITORAMENTO'
+        AND (
+          id = $1
+          OR (
+            $2::text IS NOT NULL
+            AND LOWER(COALESCE(email, '')) = LOWER($2::text)
+          )
+        )
+      LIMIT 1
+    `,
+    userId,
+    userEmail || null,
+  )
+
+  return rows.length > 0
+}
+
 async function ensureDailyAssignment(userId: string, userName: string, userEmail: string) {
   return prisma.$transaction(async (tx) => {
     const openedRows = await tx.$queryRawUnsafe<AssignmentRow[]>(
@@ -78,7 +103,7 @@ async function ensureDailyAssignment(userId: string, userName: string, userEmail
       userId,
     )
 
-    if (openedRows.length > 0) {
+    if (openedRows.length >= 20) {
       return {
         created: false,
         quantidade: openedRows.length,
@@ -86,18 +111,7 @@ async function ensureDailyAssignment(userId: string, userName: string, userEmail
       }
     }
 
-    const countRows = await tx.$queryRawUnsafe<Array<{ total: number }>>(
-      `
-        SELECT COUNT(*)::int AS total
-        FROM public.judicial_monitoramento_atribuicoes
-        WHERE data_referencia = CURRENT_DATE
-          AND usuario_id = $1
-      `,
-      userId,
-    )
-
-    const totalToday = Number(countRows[0]?.total ?? 0)
-    const lotSize = totalToday === 0 ? 20 : 5
+    const lotSize = Math.max(0, 20 - openedRows.length)
 
     const blockRows = await tx.$queryRawUnsafe<Array<{ nextBlock: number }>>(
       `
@@ -119,7 +133,7 @@ async function ensureDailyAssignment(userId: string, userName: string, userEmail
             GREATEST(0, LEAST(COALESCE(jm.prioridade_monitoramento, 0), 3))::int AS prioridade_manual,
             CASE
               WHEN jm.pendente_dia_anterior = TRUE THEN 1
-              WHEN jm.data_proximo_monitoramento IS NOT NULL AND jm.data_proximo_monitoramento <= NOW() THEN 2
+              WHEN jm.data_proximo_monitoramento IS NOT NULL AND jm.data_proximo_monitoramento::date <= CURRENT_DATE THEN 2
               WHEN jm.data_ultimo_monitoramento IS NULL THEN 3
               WHEN jm.data_ultimo_monitoramento <= NOW() - INTERVAL '20 days' THEN 4
               ELSE 5
@@ -129,7 +143,7 @@ async function ensureDailyAssignment(userId: string, userName: string, userEmail
               WHEN GREATEST(0, LEAST(COALESCE(jm.prioridade_monitoramento, 0), 3)) = 2 THEN '02_URGENTE'
               WHEN GREATEST(0, LEAST(COALESCE(jm.prioridade_monitoramento, 0), 3)) = 1 THEN '01_AGILIZAR'
               WHEN jm.pendente_dia_anterior = TRUE THEN 'SOBRA_DIA_ANTERIOR'
-              WHEN jm.data_proximo_monitoramento IS NOT NULL AND jm.data_proximo_monitoramento <= NOW() THEN COALESCE(jm.motivo_proximo_monitoramento, 'RETORNO_PRAZO')
+              WHEN jm.data_proximo_monitoramento IS NOT NULL AND jm.data_proximo_monitoramento::date <= CURRENT_DATE THEN COALESCE(jm.motivo_proximo_monitoramento, 'RETORNO_PRAZO')
               WHEN jm.data_ultimo_monitoramento IS NULL THEN 'NUNCA_MONITORADO'
               WHEN jm.data_ultimo_monitoramento <= NOW() - INTERVAL '20 days' THEN 'MAIS_20_DIAS'
               ELSE 'ROTINA'
@@ -137,9 +151,68 @@ async function ensureDailyAssignment(userId: string, userName: string, userEmail
             jm.data_proximo_monitoramento,
             jm.data_ultimo_monitoramento
           FROM public.judicial_monitoramento_base jm
-          WHERE COALESCE(jm.ativo_monitoramento, TRUE) = TRUE
-            AND UPPER(COALESCE(jm.modulo_codigo, 'JUDICIAL')) = 'JUDICIAL'
+          WHERE (
+              COALESCE(jm.ativo_monitoramento, TRUE) = TRUE
+              OR (
+                jm.data_proximo_monitoramento IS NOT NULL
+                AND jm.data_proximo_monitoramento::date <= CURRENT_DATE
+              )
+            )
+            AND UPPER(COALESCE(jm.origem_modulo, 'JUDICIAL')) = 'JUDICIAL'
             AND UPPER(COALESCE(jm.status_monitoramento_atual, '')) <> 'MONITORAMENTO_AUTOMATICO'
+            AND UPPER(COALESCE(jm.status_monitoramento_atual, '')) NOT IN (
+              'FINALIZADO',
+              'RESOLVIDO',
+              'ARQUIVADO',
+              'ENCERRADO',
+              'OBITO',
+              'CUMPRIDO',
+              'BLOQUEIO',
+              'SEQUESTRO',
+              'PROCEDIMENTO_NAO_SUS',
+              'COMPETENCIA_MUNICIPIO'
+            )
+            AND NOT EXISTS (
+              SELECT 1
+              FROM public.judicial_finalizacoes jf
+              WHERE jf.monitoramento_id = jm.id
+            )
+            AND NOT EXISTS (
+              SELECT 1
+              FROM public.judicial_movimentacoes mov
+              WHERE mov.monitoramento_id = jm.id
+                AND LOWER(COALESCE(mov.type, '')) IN (
+                  'cumprimento',
+                  'procedimento_nao_sus',
+                  'competencia_municipio',
+                  'cumprido',
+                  'resolvido',
+                  'arquivado',
+                  'obito',
+                  'bloqueio',
+                  'sequestro',
+                  'encerramento_processo'
+                )
+            )
+            AND (
+              jm.pendente_dia_anterior = TRUE
+              OR (jm.data_proximo_monitoramento IS NOT NULL AND jm.data_proximo_monitoramento::date <= CURRENT_DATE)
+              OR (
+                jm.data_proximo_monitoramento IS NULL
+                AND GREATEST(0, LEAST(COALESCE(jm.prioridade_monitoramento, 0), 3)) > 0
+              )
+              OR (jm.data_proximo_monitoramento IS NULL AND jm.data_ultimo_monitoramento IS NULL)
+              OR (jm.data_proximo_monitoramento IS NULL AND jm.data_ultimo_monitoramento <= NOW() - INTERVAL '20 days')
+              OR (
+                COALESCE(jm.ativo_monitoramento, TRUE) = TRUE
+                AND jm.data_proximo_monitoramento IS NULL
+              )
+            )
+            AND NOT (
+              COALESCE(jm.pendente_dia_anterior, FALSE) = FALSE
+              AND jm.data_proximo_monitoramento IS NOT NULL
+              AND jm.data_proximo_monitoramento::date > CURRENT_DATE
+            )
             AND NOT EXISTS (
               SELECT 1
               FROM public.judicial_monitoramento_atribuicoes a
@@ -150,7 +223,7 @@ async function ensureDailyAssignment(userId: string, userName: string, userEmail
             GREATEST(0, LEAST(COALESCE(jm.prioridade_monitoramento, 0), 3)) DESC,
             CASE
               WHEN jm.pendente_dia_anterior = TRUE THEN 1
-              WHEN jm.data_proximo_monitoramento IS NOT NULL AND jm.data_proximo_monitoramento <= NOW() THEN 2
+              WHEN jm.data_proximo_monitoramento IS NOT NULL AND jm.data_proximo_monitoramento::date <= CURRENT_DATE THEN 2
               WHEN jm.data_ultimo_monitoramento IS NULL THEN 3
               WHEN jm.data_ultimo_monitoramento <= NOW() - INTERVAL '20 days' THEN 4
               ELSE 5
@@ -275,20 +348,35 @@ async function ensureDailyAssignment(userId: string, userName: string, userEmail
       userEmail || null,
     )
 
+    const items = [...openedRows, ...insertedRows]
+
     return {
       created: insertedRows.length > 0,
-      quantidade: insertedRows.length,
-      items: insertedRows,
+      quantidade: items.length,
+      items,
     }
   })
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json().catch(() => ({}))
-    const userId = text(body?.user?.id || body?.userId)
-    const userName = text(body?.user?.nome || body?.user?.name || body?.userName || "Monitor")
-    const userEmail = text(body?.user?.email || body?.userEmail).toLowerCase()
+    const auth = await requireLoggedRequest(req)
+
+
+    if (!auth.ok) {
+
+      return auth.response
+
+    }
+
+
+    const session = auth.session
+
+    const userId = text(session.id)
+
+    const userName = text(session.nome || "Monitor")
+
+    const userEmail = text(session.email).toLowerCase()
 
     if (!userId) {
       return NextResponse.json(
@@ -297,7 +385,44 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    const canReceiveQueue = await canReceiveJudicialMonitoringQueue(userId, userEmail)
+
+
+
+    if (!canReceiveQueue) {
+
+
+      return NextResponse.json(
+
+
+        {
+
+
+          ok: false,
+
+
+          error: "Usuário sem perfil de monitoramento judicial.",
+
+
+          detail: "A fila de monitoramento judicial só pode ser atribuída a usuários ativos com role judicial e perfilCodigo MONITORAMENTO.",
+
+
+        },
+
+
+        { status: 403 },
+
+
+      )
+
+
+    }
+
+
+
     await closePreviousOpenAssignments()
+
+
     const result = await ensureDailyAssignment(userId, userName, userEmail)
 
     return NextResponse.json({

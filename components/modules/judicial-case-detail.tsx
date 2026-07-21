@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
@@ -122,7 +122,8 @@ const MOVEMENT_OPTIONS: MovementType[] = [
   "encaminhar_demanda_municipio",
   "resposta_procuradoria",
   "envio_agendamento_demanda",
-  "agendamento",
+  "encaminhar_direto_agendamento",
+  "comunicado_agendamento",
   "solicitacao_inclusao",
   "reiteracao",
   "descumprimento",
@@ -333,6 +334,23 @@ function formatCns(value: string | null | undefined) {
   return digits.length === 15 ? digits : "Não informado"
 }
 
+function readJudicialCaseCns(caseItem: unknown) {
+  const record = caseItem as Record<string, unknown>
+
+  for (const key of ["cns", "patientCns", "pacienteCns", "cartaoSus", "pacienteCartaoSus"]) {
+    const digits = String(record[key] ?? "").replace(/\D/g, "")
+    if (digits.length === 15) return digits
+  }
+
+  const registration = record.registration as Record<string, unknown> | undefined
+  const actionRecords = String(registration?.actionRecords ?? "")
+  const cnsMatch = actionRecords.match(/\bCNS\s*:?\s*(\d{15})\b/i)
+
+  if (cnsMatch?.[1]) return cnsMatch[1]
+
+  return ""
+}
+
 function fileListToArray(files: FileList | null) {
   return files ? Array.from(files) : []
 }
@@ -528,25 +546,6 @@ function JudicialCaseDetailContent({
   const [uploadedMovementFiles, setUploadedMovementFiles] = useState<UploadedFileMeta[]>([])
   const [uploadingMovement, setUploadingMovement] = useState(false)
 
-  const [supportMaterialFormOpen, setSupportMaterialFormOpen] = useState(false)
-  const [supportMaterialListOpen, setSupportMaterialListOpen] = useState(false)
-  const [supportMaterialName, setSupportMaterialName] = useState("")
-  const [selectedSupportMaterialFiles, setSelectedSupportMaterialFiles] = useState<FileList | null>(null)
-  const [uploadingSupportMaterial, setUploadingSupportMaterial] = useState(false)
-
-  const supportMaterials = useMemo(() => {
-    const prefix = "[MATERIAL_DE_APOIO]"
-    return (caseItem?.movements || [])
-      .filter((item) => String(item.description || "").startsWith(prefix))
-      .map((item) => ({
-        id: item.id,
-        createdAt: item.createdAt,
-        createdByName: item.createdByName,
-        name: String(item.description || "").replace(prefix, "").trim() || "Material de apoio",
-        attachments: Array.isArray(item.attachments) ? item.attachments : [],
-      }))
-      .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")))
-  }, [caseItem?.movements])
 
   const [procedureSearch, setProcedureSearch] = useState("")
   const [procedureOptions, setProcedureOptions] = useState<SigtapOption[]>([])
@@ -663,6 +662,7 @@ function JudicialCaseDetailContent({
       setMovementType("monitoramento")
       setSelectedProcuradoriaTemplateId("")
       setProcuradoriaEditorContent(defaultProcuradoriaHtml)
+      void reloadJudicialEmailTemplatesForProcuradoria()
       setProcuradoriaModalOpen(true)
       return
     }
@@ -696,7 +696,110 @@ function JudicialCaseDetailContent({
     (item) => normalizeMunicipalityKey(item.municipalityName) === caseMunicipalityKey,
   )
 
-  const availableEmailTemplates = adminJudicialResourcesLoaded ? adminEmailTemplates : []
+  const availableEmailTemplates = adminEmailTemplates
+
+
+
+  async function reloadJudicialEmailTemplatesForProcuradoria() {
+
+
+    try {
+
+
+      const response = await fetch("/api/judicial/email-modelos", {
+
+
+        method: "GET",
+
+
+        cache: "no-store",
+
+
+      })
+
+
+
+      const payload = await response.json().catch(() => null)
+
+
+
+      if (!response.ok || !payload?.ok) {
+
+
+        console.error("[JudicialCaseDetail] modelos de e-mail indisponíveis:", payload)
+
+
+        return
+
+
+      }
+
+
+
+      const emailModels = adminArray(payload)
+
+
+        .map((item) => {
+
+
+          const record = item as Record<string, unknown>
+
+
+
+          return {
+
+
+            id: adminText(record.id),
+
+
+            title: adminText(record.title || record.titulo || record.type || record.tipo_template),
+
+
+            subject: adminText(record.subject || record.assunto),
+
+
+            body: adminText(record.body || record.corpo || record.corpo_html),
+
+
+            type: adminText(record.type || record.tipo_template),
+
+
+            automaticDispatch: Boolean(record.automaticDispatch || record.disparo_automatico),
+
+
+          }
+
+
+        })
+
+
+        .filter((item) => item.id && item.body)
+
+
+
+      setAdminEmailTemplates(emailModels)
+
+
+      setAdminJudicialResourcesLoaded(true)
+
+
+    } catch (error) {
+
+
+      console.error("[JudicialCaseDetail] erro ao recarregar modelos de e-mail:", error)
+
+
+    }
+
+
+  }
+
+  useEffect(() => {
+    if (!procuradoriaModalOpen) return
+
+    void reloadJudicialEmailTemplatesForProcuradoria()
+  }, [procuradoriaModalOpen])
+
 
   const requiredMunicipalityEmails = useMemo(
     () => normalizeEmailList(contacts?.emails ?? []),
@@ -709,7 +812,7 @@ function JudicialCaseDetailContent({
     async function loadAdminJudicialResources() {
       try {
         const [emailResponse, municipalityResponse] = await Promise.all([
-          fetch("/api/admin/judicial/emails", { cache: "no-store" }),
+          fetch("/api/judicial/email-modelos", { cache: "no-store" }),
           fetch("/api/admin/judicial/municipios", { cache: "no-store" }),
         ])
 
@@ -986,18 +1089,92 @@ function JudicialCaseDetailContent({
     ? PROCESS_STATUS_LABELS[latestProcessStatus.status]
     : "Em andamento"
 
-  const processNumbers = caseItem.processNumbers?.length
-    ? caseItem.processNumbers
-    : caseItem.processNumber
-      ? [caseItem.processNumber]
-      : []
+  const splitJudicialNumbers = (value: unknown) =>
+    String(value ?? "")
+      .split(/[|;,\n]+/g)
+      .map((item) => item.trim())
+      .filter(Boolean)
 
-  const pgeNetNumbers = caseItem.registration?.pgeNetNumber
-    ? caseItem.registration.pgeNetNumber
-        .split("|")
-        .map((item) => item.trim())
-        .filter(Boolean)
-    : []
+  const uniqueJudicialNumbers = (items: string[]) =>
+    items.filter(
+      (item, index, array) =>
+        array.findIndex((other) => other.toLowerCase() === item.toLowerCase()) === index,
+    )
+
+  const readJudicialLineValue = (source: string, labels: string[]) => {
+    const lines = String(source ?? "").split(/\r?\n/g)
+
+    for (const line of lines) {
+      const normalized = line
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toUpperCase()
+
+      for (const label of labels) {
+        if (normalized.startsWith(label)) {
+          const colonIndex = line.indexOf(":")
+          return colonIndex >= 0 ? line.slice(colonIndex + 1).trim() : ""
+        }
+      }
+    }
+
+    return ""
+  }
+
+  const processNumbers = (() => {
+    const record = caseItem as any
+    const values: string[] = []
+
+    if (Array.isArray(record.processNumbers)) {
+      for (const item of record.processNumbers) {
+        values.push(...splitJudicialNumbers(item))
+      }
+    }
+
+    values.push(...splitJudicialNumbers(record.processNumber))
+
+    const actionRecords = String(record.registration?.actionRecords ?? "")
+    values.push(
+      ...splitJudicialNumbers(
+        readJudicialLineValue(actionRecords, [
+          "AUTOS DA ACAO:",
+          "AUTOS DA AÇÃO:",
+          "NUMERO DO PROCESSO:",
+          "NÚMERO DO PROCESSO:",
+          "PROCESSO:",
+        ]),
+      ),
+    )
+
+    return uniqueJudicialNumbers(values)
+  })()
+
+  const pgeNetNumbers = (() => {
+    const record = caseItem as any
+    const values: string[] = []
+
+    if (Array.isArray(record.pgeNetNumbers)) {
+      for (const item of record.pgeNetNumbers) {
+        values.push(...splitJudicialNumbers(item))
+      }
+    }
+
+    values.push(...splitJudicialNumbers(record.pgeNetNumber))
+    values.push(...splitJudicialNumbers(record.registration?.pgeNetNumber))
+
+    const actionRecords = String(record.registration?.actionRecords ?? "")
+    values.push(
+      ...splitJudicialNumbers(
+        readJudicialLineValue(actionRecords, [
+          "PGE.NET:",
+          "PGE NET:",
+          "PGENET:",
+        ]),
+      ),
+    )
+
+    return uniqueJudicialNumbers(values)
+  })()
 
   const activeProcedures = caseItem.procedures.filter(
     (item) => item.active !== false,
@@ -1127,7 +1304,7 @@ function JudicialCaseDetailContent({
         id: `core-${item.id}`,
         createdAt: item.importedAt,
         category: "core",
-        title: `${item.fichaNumber} • ${item.statusText}`,
+        title: `${item.fichaNumber} ? ${item.statusText}`,
         subtitle: item.table.replaceAll("_", " "),
         description: `${item.procedureCode || "Sem procedimento"}${
           item.procedureDescription ? ` - ${item.procedureDescription}` : ""
@@ -1202,10 +1379,20 @@ function JudicialCaseDetailContent({
   }, [requiredMunicipalityEmails])
 
   useEffect(() => {
-    if (editorRef.current && editorRef.current.innerHTML !== manifestHtml) {
-      editorRef.current.innerHTML = manifestHtml
+    const editor = editorRef.current
+    if (!editor) return
+
+    const activeElement =
+      typeof document !== "undefined" ? document.activeElement : null
+
+    if (activeElement === editor || (activeElement && editor.contains(activeElement))) {
+      return
     }
-  }, [manifestHtml])
+
+    if (editor.innerHTML !== manifestHtml) {
+      editor.innerHTML = manifestHtml
+    }
+  }, [manifestHtml, notificationModalOpen, forwardMunicipalityMode])
 
   async function uploadFiles(params: {
     files: FileList | null
@@ -1229,7 +1416,9 @@ function JudicialCaseDetailContent({
       form.append("category", category)
       Array.from(files).forEach((file) => form.append("files", file))
 
-      const response = await fetch("/api/uploads", { method: "POST", body: form })
+      const response = await fetch("/api/uploads", { method: "POST", body: form,
+        credentials: "include",
+      })
       const data = await response.json()
 
       if (!response.ok || !data?.ok) {
@@ -1329,71 +1518,6 @@ function JudicialCaseDetailContent({
     setUploadedFichaFiles([])
   }
 
-  async function handleSaveSupportMaterial() {
-    if (!user || !caseItem) return
-
-    const materialName = supportMaterialName.trim()
-
-    if (!materialName) {
-      toast.error("Informe o nome do material de apoio.")
-      return
-    }
-
-    if (!selectedSupportMaterialFiles || selectedSupportMaterialFiles.length === 0) {
-      toast.error("Selecione o arquivo do material de apoio.")
-      return
-    }
-
-    try {
-      const uploadedFiles = await uploadFiles({
-        files: selectedSupportMaterialFiles,
-        category: "material_apoio",
-        setUploading: setUploadingSupportMaterial,
-      })
-
-      if (uploadedFiles.length === 0) {
-        toast.error("Não foi possível enviar o arquivo do material de apoio.")
-        return
-      }
-
-      const response = await fetch(
-        `/api/judicial/casos/${encodeURIComponent(caseItem.id)}/movimentacoes`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            type: "monitoramento",
-            description: `[MATERIAL_DE_APOIO] ${materialName}`,
-            attachments: uploadedFiles,
-            user,
-          }),
-        },
-      )
-
-      const data = await response.json()
-
-      if (!response.ok || !data?.ok) {
-        throw new Error(data?.error || "Erro ao salvar material de apoio.")
-      }
-
-      toast.success("Material de apoio cadastrado.")
-      setSupportMaterialName("")
-      setSelectedSupportMaterialFiles(null)
-      setSupportMaterialFormOpen(false)
-      setSupportMaterialListOpen(true)
-      window.location.reload()
-    } catch (error) {
-      console.error("[JudicialCaseDetail] erro ao salvar material de apoio:", error)
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Não foi possível salvar o material de apoio.",
-      )
-    }
-  }
-
   async function handleSaveMovement() {
     if (!user) return
 
@@ -1402,8 +1526,8 @@ function JudicialCaseDetailContent({
       return
     }
 
-    if (movementType === "agendamento" && !appointmentDate) {
-      toast.error("Informe a data do agendamento.")
+    if (["agendamento", "comunicado_agendamento"].includes(movementType) && !appointmentDate) {
+      toast.error("Informe a data do agendamento/atendimento.")
       return
     }
 
@@ -1466,6 +1590,7 @@ function JudicialCaseDetailContent({
         `/api/judicial/casos/${encodeURIComponent(caseItem.id)}/movimentacoes`,
         {
           method: "POST",
+          credentials: "include",
           headers: {
             "Content-Type": "application/json",
           },
@@ -1975,7 +2100,7 @@ function JudicialCaseDetailContent({
       if (char === " ") units += 0.28
       else if ("ilI.,:;!|'".includes(char)) units += 0.28
       else if ("mwMW".includes(char)) units += 0.9
-      else if (/[A-ZÁÉÍÓÚÂÊÔÃÕÇ]/.test(char)) units += 0.68
+      else if (/[A-Z???????????]/.test(char)) units += 0.68
       else units += 0.55
     }
 
@@ -2823,7 +2948,7 @@ function toPdfHex(value: string) {
     const defaultBodyText =
       "Cumprimentando-o cordialmente, em atenção ao Ofício supracitado, que solicita informações acerca da oferta do procedimento SIGTAP " +
       procedureText +
-      ", informamos que, no âmbito da Rede Estadual de Saúde de Mato Grosso do Sul, não há contratualização vigente com prestadores habilitados para a execução do referido procedimento."
+      ", informamos que, no âmbito da Rede Estadual de Saúde de Mato Grosso do Sul, não h? contratualização vigente com prestadores habilitados para a execução do referido procedimento."
 
     const bodyBlocks = htmlToPdfRichBlocks(html)
     const finalBodyBlocks =
@@ -2917,18 +3042,79 @@ function toPdfHex(value: string) {
     return createImagePdf(pageImages)
   }
 
+  async function runProcuradoriaStepWithTimeout<T>(
+    label: string,
+    task: () => Promise<T>,
+    timeoutMs = 45000,
+  ): Promise<T> {
+    let timeoutId: ReturnType<typeof setTimeout> | null = null
+
+    try {
+      return await Promise.race([
+        task(),
+        new Promise<T>((_, reject) => {
+          timeoutId = setTimeout(() => {
+            reject(new Error(label + " demorou mais que o esperado. A resposta ser? salva sem travar a tela."))
+          }, timeoutMs)
+        }),
+      ])
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId)
+    }
+  }
+
   async function uploadGeneratedProcuradoriaPdf(file: File) {
+    const caseAny = caseItem as unknown as Record<string, unknown>
+
+    const cpf = String(
+      caseAny.cpf ||
+      caseAny.patientCpf ||
+      caseAny.pacienteCpf ||
+      caseAny.patientId ||
+      caseAny.id ||
+      "judicial",
+    ).trim()
+
+    const protocol = String(
+      caseAny.originProtocol ||
+      caseAny.protocol ||
+      caseAny.protocolo ||
+      caseAny.processNumber ||
+      caseAny.id ||
+      "judicial",
+    ).trim()
+
     const form = new FormData()
-    form.append("cpf", caseItem.cpf)
-    form.append("protocol", caseItem.originProtocol)
+    form.append("cpf", cpf)
+    form.append("protocol", protocol)
     form.append("module", "judicial")
     form.append("category", "movimentacao")
     form.append("files", file)
 
-    const response = await fetch("/api/uploads", { method: "POST", body: form })
+    const response = await fetch("/api/uploads", {
+      method: "POST",
+      body: form,
+      credentials: "include",
+    })
+
     const data = await response.json().catch(() => ({}))
 
     if (!response.ok || !data?.ok || !Array.isArray(data?.files) || data.files.length === 0) {
+      console.error("[PROCURADORIA_UPLOAD_PDF_ERROR]", {
+        status: response.status,
+        error: data?.error,
+        cpf,
+        protocol,
+        module: "judicial",
+        fileName: file.name,
+        fileType: file.type,
+        fileSize: file.size,
+      })
+
+      if (response.status === 401) {
+        throw new Error("Sessão expirada. Saia do sistema, entre novamente e tente salvar a resposta.")
+      }
+
       throw new Error(data?.error || "Erro ao salvar PDF da resposta.")
     }
 
@@ -3014,13 +3200,36 @@ function toPdfHex(value: string) {
     try {
       setGeneratingProcuradoria(true)
 
-      const pdfBlob = await buildSimplePdfBlob("Resposta a Procuradoria", safeHtml)
+      toast.message("Gerando PDF da resposta...")
+
+      const pdfBlob = await runProcuradoriaStepWithTimeout(
+        "A geração do PDF",
+        () => buildSimplePdfBlob("Resposta a Procuradoria", safeHtml),
+        45000,
+      )
+
+      if (!pdfBlob || pdfBlob.size === 0) {
+        throw new Error("O PDF da resposta não foi gerado corretamente.")
+      }
+
       const safeProtocol = String(caseItem.originProtocol || caseItem.id || "judicial").replace(/[^a-zA-Z0-9_-]+/g, "_")
       const file = new File([pdfBlob], "resposta-a-procuradoria-" + safeProtocol + ".pdf", {
         type: "application/pdf",
       })
 
-      const uploadedPdf = await uploadGeneratedProcuradoriaPdf(file)
+      toast.message("Salvando PDF da resposta...")
+
+      const uploadedPdf = await runProcuradoriaStepWithTimeout(
+        "O upload do PDF",
+        () => uploadGeneratedProcuradoriaPdf(file),
+        45000,
+      )
+
+      if (!uploadedPdf) {
+        throw new Error("O PDF da resposta não foi anexado corretamente.")
+      }
+
+      toast.message("Salvando resposta nas movimentações...")
 
       const response = await fetch(
         `/api/judicial/casos/${encodeURIComponent(caseItem.id)}/movimentacoes`,
@@ -3044,7 +3253,7 @@ function toPdfHex(value: string) {
         throw new Error(data?.error || "Erro ao salvar resposta a Procuradoria.")
       }
 
-      toast.success("Resposta a Procuradoria salva nas movimentações.")
+      toast.success("Resposta a Procuradoria salva com PDF anexado.")
       setProcuradoriaModalOpen(false)
       setSelectedProcuradoriaTemplateId("")
       setProcuradoriaEditorContent(defaultProcuradoriaHtml)
@@ -3178,7 +3387,7 @@ function toPdfHex(value: string) {
 
     if (finalizeStatus === "pendente") {
       if (!finalizePendingLocation) {
-        toast.error("Informe onde está pendente.")
+        toast.error("Informe onde est? pendente.")
         return
       }
 
@@ -3194,7 +3403,7 @@ function toPdfHex(value: string) {
     }
 
     if ((finalizeStatus === "obito" || finalizeStatus === "arquivado") && !finalizeReason.trim()) {
-      toast.error(finalizeStatus === "obito" ? "Justifique o óbito." : "Justifique o arquivamento.")
+      toast.error(finalizeStatus === "obito" ? "Justifique o Óbito." : "Justifique o arquivamento.")
       return
     }
 
@@ -3555,12 +3764,12 @@ function toPdfHex(value: string) {
                       </div>
                       <p className="text-xs text-muted-foreground">
                         {item.createdByName}
-                        {item.specialty ? ` • ${item.specialty}` : ""}
-                        {item.subSpecialty ? ` • ${item.subSpecialty}` : ""}
+                        {item.specialty ? ` ? ${item.specialty}` : ""}
+                        {item.subSpecialty ? ` ? ${item.subSpecialty}` : ""}
                         {(item as any).updatedAt
-                          ? ` • ${new Date((item as any).updatedAt).toLocaleString("pt-BR")}`
+                          ? ` ? ${new Date((item as any).updatedAt).toLocaleString("pt-BR")}`
                           : item.statusUpdatedAt
-                            ? ` • ${new Date(item.statusUpdatedAt).toLocaleString("pt-BR")}`
+                            ? ` ? ${new Date(item.statusUpdatedAt).toLocaleString("pt-BR")}`
                             : ""}
                       </p>
                       {(item as any).inactiveReason && (
@@ -3623,7 +3832,7 @@ function toPdfHex(value: string) {
                       {item.code} - {item.description}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {item.active === false ? "Inativo" : "Ativo"} • {item.createdByName}
+                      {item.active === false ? "Inativo" : "Ativo"} ? {item.createdByName}
                     </p>
                   </div>
                   <Button
@@ -3673,7 +3882,7 @@ function toPdfHex(value: string) {
 
             <p className="text-sm leading-6">
               <span className="font-semibold">{caseItem.patientName}</span> | CPF{" "}
-              {caseItem.cpf} | CNS: {formatCns(caseItem.patientId)} | Município:{" "}
+              {caseItem.cpf} | CNS: {formatCns(readJudicialCaseCns(caseItem))} | Município:{" "}
               {caseItem.municipalityName}
             </p>
 
@@ -3706,7 +3915,7 @@ function toPdfHex(value: string) {
           <section className="space-y-4">
             {historyItems.map((item) => {
               const badgesText =
-                item.badges && item.badges.length > 0 ? item.badges.join(" • ") : ""
+                item.badges && item.badges.length > 0 ? item.badges.join(" ? ") : ""
 
               return (
                 <article
@@ -3720,7 +3929,7 @@ function toPdfHex(value: string) {
 
                   <p className="mt-1 text-sm font-bold">
                     {item.title} | {new Date(item.createdAt).toLocaleString("pt-BR")}
-                    {item.subtitle ? ` • ${item.subtitle}` : ""}
+                    {item.subtitle ? ` ? ${item.subtitle}` : ""}
                   </p>
 
                   {item.description && !(item.html || /<[^>]+>/.test(item.description)) && (
@@ -3809,8 +4018,20 @@ function toPdfHex(value: string) {
           <div className="flex flex-col gap-2">
             <div className="space-y-2">
               <div className="flex flex-wrap items-center gap-1.5">
-                <Badge variant={caseItem.active ? "secondary" : "outline"}>
-                  {caseItem.active ? "Ativo" : "Encerrado"}
+                <Badge
+                  variant={
+                    caseItem.finalization
+                      ? "outline"
+                      : caseItem.active
+                        ? "secondary"
+                        : "outline"
+                  }
+                >
+                  {caseItem.finalization
+                    ? "Encerrado"
+                    : caseItem.active
+                      ? "Ativo"
+                      : "Pausado"}
                 </Badge>
                 <Badge variant="outline">{caseItem.originModule.toUpperCase()}</Badge>
                 <Badge variant="outline">
@@ -3867,7 +4088,7 @@ function toPdfHex(value: string) {
 
                   <div className="flex flex-wrap items-center gap-1.5">
                     <span>
-                      CPF {caseItem.cpf} | CNS: {formatCns(caseItem.patientId)} | Município: {caseItem.municipalityName}
+                      CPF {caseItem.cpf} | CNS: {formatCns(readJudicialCaseCns(caseItem))} | Município: {caseItem.municipalityName}
                     </span>
                     <Button
                       type="button"
@@ -3921,7 +4142,7 @@ function toPdfHex(value: string) {
                       size="icon"
                       variant="ghost"
                       className="h-6 w-6"
-                      title="Alterar status do processo judicial"
+                      title="Alterar status e processos vinculados"
                       onClick={() => setProcessStatusOpen(true)}
                     >
                       <Edit3 className="h-3 w-3" />
@@ -4067,128 +4288,6 @@ function toPdfHex(value: string) {
             </CardHeader>
 
             <CardContent className="space-y-4">
-              <div className="rounded-2xl border border-dashed border-primary/30 bg-primary/5 p-4">
-                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-primary">
-                      MATERIAL DE APOIO
-                    </p>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      Cadastre arquivos de orientação para o Agendamento da Demanda e consulte os materiais já vinculados.
-                    </p>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      className="inline-flex h-9 items-center justify-center rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
-                      onClick={() => setSupportMaterialFormOpen((value) => !value)}
-                    >
-                      Cadastrar material
-                    </button>
-
-                    <button
-                      type="button"
-                      className="inline-flex h-9 items-center justify-center rounded-md border border-input bg-background px-3 text-sm font-medium shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground"
-                      onClick={() => setSupportMaterialListOpen((value) => !value)}
-                    >
-                      Visualizar materiais
-                    </button>
-                  </div>
-                </div>
-
-                {supportMaterialFormOpen ? (
-                  <div className="mt-4 grid gap-3 rounded-xl border border-border bg-background p-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
-                    <div>
-                      <label className="mb-1 block text-xs font-medium text-muted-foreground">
-                        Nome do material
-                      </label>
-                      <input
-                        type="text"
-                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                        placeholder="Ex.: Manual de agendamento"
-                        value={supportMaterialName}
-                        onChange={(event) => setSupportMaterialName(event.target.value)}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-1 block text-xs font-medium text-muted-foreground">
-                        Arquivo
-                      </label>
-                      <input
-                        type="file"
-                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                        onChange={(event) => setSelectedSupportMaterialFiles(event.target.files)}
-                      />
-                    </div>
-
-                    <button
-                      type="button"
-                      className="inline-flex h-10 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:opacity-60"
-                      disabled={uploadingSupportMaterial}
-                      onClick={handleSaveSupportMaterial}
-                    >
-                      {uploadingSupportMaterial ? "Enviando..." : "Salvar"}
-                    </button>
-                  </div>
-                ) : null}
-
-                {supportMaterialListOpen ? (
-                  <div className="mt-4 space-y-2">
-                    {supportMaterials.length === 0 ? (
-                      <p className="rounded-xl border border-border bg-background p-3 text-sm text-muted-foreground">
-                        Nenhum material de apoio cadastrado.
-                      </p>
-                    ) : (
-                      supportMaterials.map((material) => (
-                        <div
-                          key={material.id}
-                          className="flex flex-col gap-2 rounded-xl border border-border bg-background p-3 md:flex-row md:items-center md:justify-between"
-                        >
-                          <div>
-                            <p className="text-sm font-medium text-foreground">{material.name}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {material.createdByName || "Usuário"} • {material.createdAt ? new Date(material.createdAt).toLocaleString("pt-BR") : "Data não informada"}
-                            </p>
-                          </div>
-
-                          <div className="flex flex-wrap gap-2">
-                            {material.attachments.length === 0 ? (
-                              <span className="text-xs text-muted-foreground">Sem arquivo</span>
-                            ) : (
-                              material.attachments.map((attachment: any, index: number) => {
-                                const attachmentName = String(attachment?.name || attachment?.filename || `Arquivo ${index + 1}`)
-                                const attachmentUrl = String(attachment?.url || attachment?.relativePath || attachment?.path || "")
-
-                                return attachmentUrl ? (
-                                  <a
-                                    key={`${material.id}-${index}`}
-                                    href={attachmentUrl}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="inline-flex h-8 items-center justify-center rounded-md border border-input bg-background px-3 text-xs font-medium shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground"
-                                  >
-                                    Visualizar {attachmentName}
-                                  </a>
-                                ) : (
-                                  <span
-                                    key={`${material.id}-${index}`}
-                                    className="text-xs text-muted-foreground"
-                                  >
-                                    {attachmentName}
-                                  </span>
-                                )
-                              })
-                            )}
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                ) : null}
-              </div>
-
               <div className="grid gap-3 lg:grid-cols-2">
                 <div>
                   <Label className="mb-1 block text-xs">Movimentação</Label>
@@ -4205,10 +4304,10 @@ function toPdfHex(value: string) {
                   </select>
                 </div>
 
-                {movementType === "agendamento" && (
+                {["agendamento", "comunicado_agendamento"].includes(movementType) && (
                   <div>
                     <Label className="mb-1 block text-xs">
-                      Data do agendamento
+                      Data do agendamento/atendimento
                     </Label>
                     <Input
                       type="datetime-local"
@@ -4305,7 +4404,7 @@ function toPdfHex(value: string) {
                     <div className="mt-2 space-y-1 text-sm text-muted-foreground">
                       {fileListToArray(selectedMovementFiles).map((file) => (
                         <p key={`${file.name}-${file.size}`}>
-                          {file.name} • {formatFileSize(file.size)}
+                          {file.name} ? {formatFileSize(file.size)}
                         </p>
                       ))}
                     </div>
@@ -4361,7 +4460,7 @@ function toPdfHex(value: string) {
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Últimas movimentações</CardTitle>
               <CardDescription>
-                Exibe as últimas movimentações registradas no processo, com até 2 por página.
+                Exibe as Últimas movimentações registradas no processo, com at? 2 por página.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -4383,7 +4482,7 @@ function toPdfHex(value: string) {
                     <p className="text-sm font-semibold">{item.title}</p>
                     <p className="text-xs text-muted-foreground">
                       {new Date(item.createdAt).toLocaleString("pt-BR")}
-                      {item.subtitle ? ` • ${item.subtitle}` : ""}
+                      {item.subtitle ? ` ? ${item.subtitle}` : ""}
                     </p>
                     {item.description && (
                       <p className="mt-1 line-clamp-4 whitespace-pre-line text-sm text-muted-foreground">
@@ -4481,7 +4580,7 @@ function toPdfHex(value: string) {
                     >
                       <p className="text-sm font-medium">{file.name}</p>
                       <p className="text-xs text-muted-foreground">
-                        {scope} • {formatFileSize(file.size)}
+                        {scope} ? {formatFileSize(file.size)}
                       </p>
                     </div>
                   ))}
@@ -4517,7 +4616,7 @@ function toPdfHex(value: string) {
                       </div>
                       <p className="mt-2 text-sm font-medium">{item.name}</p>
                       <p className="text-xs text-muted-foreground">
-                        {new Date(item.createdAt).toLocaleString("pt-BR")} •{" "}
+                        {new Date(item.createdAt).toLocaleString("pt-BR")} ?{" "}
                         {item.createdByName}
                       </p>
                       <AttachmentActions attachment={item} />
@@ -4744,7 +4843,7 @@ function toPdfHex(value: string) {
                     size="icon"
                     variant="outline"
                     className="bg-transparent"
-                    title="Alinhar à esquerda"
+                    title="Alinhar ? esquerda"
                     onClick={() => runEditorCommand("justifyLeft")}
                   >
                     <AlignLeft className="h-4 w-4" />
@@ -4764,7 +4863,7 @@ function toPdfHex(value: string) {
                     size="icon"
                     variant="outline"
                     className="bg-transparent"
-                    title="Alinhar à direita"
+                    title="Alinhar ? direita"
                     onClick={() => runEditorCommand("justifyRight")}
                   >
                     <AlignRight className="h-4 w-4" />
@@ -4816,7 +4915,6 @@ function toPdfHex(value: string) {
                   onInput={(e) =>
                     setManifestHtml((e.target as HTMLDivElement).innerHTML)
                   }
-                  dangerouslySetInnerHTML={{ __html: manifestHtml }}
                 />
               </div>
 
@@ -4834,7 +4932,7 @@ function toPdfHex(value: string) {
                   <div className="rounded-lg border border-border bg-muted/20 p-3 text-sm text-muted-foreground">
                     {fileListToArray(selectedManifestFiles).map((file) => (
                       <p key={`${file.name}-${file.size}`}>
-                        {file.name} • {formatFileSize(file.size)}
+                        {file.name} ? {formatFileSize(file.size)}
                       </p>
                     ))}
                   </div>
@@ -4950,7 +5048,7 @@ function toPdfHex(value: string) {
                   <p className="text-sm font-semibold">{item.title}</p>
                   <p className="text-xs text-muted-foreground">
                     {new Date(item.createdAt).toLocaleString("pt-BR")}
-                    {item.subtitle ? ` • ${item.subtitle}` : ""}
+                    {item.subtitle ? ` ? ${item.subtitle}` : ""}
                   </p>
                   {item.description &&
                     (item.html ? (
@@ -5023,7 +5121,7 @@ function toPdfHex(value: string) {
                   {Object.values(QUEUE_REASON_LABELS)
                     .slice(0, 5)
                     .map((item) => (
-                      <p key={item}>• {item}</p>
+                      <p key={item}>? {item}</p>
                     ))}
                 </div>
               </div>
@@ -5043,7 +5141,7 @@ function toPdfHex(value: string) {
                   <div key={item.id} className="rounded-xl border border-border p-4">
                     <p className="text-sm font-medium">{item.userName}</p>
                     <p className="text-xs text-muted-foreground">
-                      {new Date(item.createdAt).toLocaleString("pt-BR")} •{" "}
+                      {new Date(item.createdAt).toLocaleString("pt-BR")} ?{" "}
                       {item.action}
                     </p>
                     {item.details && (
@@ -5220,7 +5318,6 @@ function toPdfHex(value: string) {
                   onInput={(e) =>
                     setManifestHtml((e.target as HTMLDivElement).innerHTML)
                   }
-                  dangerouslySetInnerHTML={{ __html: manifestHtml }}
                 />
 
                 <div className="space-y-3 rounded-xl border border-dashed border-border p-4">
@@ -5272,7 +5369,7 @@ function toPdfHex(value: string) {
                 <DialogTitle>{selectedHistoryItem.title}</DialogTitle>
                 <DialogDescription>
                   {new Date(selectedHistoryItem.createdAt).toLocaleString("pt-BR")}
-                  {selectedHistoryItem.subtitle ? ` • ${selectedHistoryItem.subtitle}` : ""}
+                  {selectedHistoryItem.subtitle ? ` ? ${selectedHistoryItem.subtitle}` : ""}
                 </DialogDescription>
               </DialogHeader>
 
@@ -5347,7 +5444,7 @@ function toPdfHex(value: string) {
                 <p className="text-sm font-semibold">{item.title}</p>
                 <p className="text-xs text-muted-foreground">
                   {new Date(item.createdAt).toLocaleString("pt-BR")}
-                  {item.subtitle ? ` • ${item.subtitle}` : ""}
+                  {item.subtitle ? ` ? ${item.subtitle}` : ""}
                 </p>
                 {item.description &&
                   (item.html ? (
@@ -5423,7 +5520,7 @@ function toPdfHex(value: string) {
                 {Object.values(QUEUE_REASON_LABELS)
                   .slice(0, 5)
                   .map((item) => (
-                    <p key={item}>• {item}</p>
+                    <p key={item}>? {item}</p>
                   ))}
               </div>
             </div>
@@ -5438,7 +5535,7 @@ function toPdfHex(value: string) {
                 <div key={`modal-audit-${item.id}`} className="rounded-xl border border-border p-4">
                   <p className="text-sm font-medium">{item.userName}</p>
                   <p className="text-xs text-muted-foreground">
-                    {new Date(item.createdAt).toLocaleString("pt-BR")} • {item.action}
+                    {new Date(item.createdAt).toLocaleString("pt-BR")} ? {item.action}
                   </p>
                   {item.details && (
                     <p className="mt-2 text-sm text-muted-foreground">
@@ -5456,8 +5553,8 @@ function toPdfHex(value: string) {
           <DialogHeader>
             <DialogTitle>Status do processo judicial</DialogTitle>
             <DialogDescription>
-              Informe o status atual do processo. O último status registrado aparece
-              em destaque ao lado de “Processos vinculados”.
+              Informe o status atual do processo. O Último status registrado aparece
+              em destaque ao lado de ?Processos vinculados?.
             </DialogDescription>
           </DialogHeader>
 
@@ -5536,6 +5633,73 @@ function toPdfHex(value: string) {
               <Button type="button" onClick={handleRegisterProcessStatus}>
                 Registrar status
               </Button>
+            </div>
+
+            <div className="space-y-4 border-t border-border pt-4">
+              <div>
+                <p className="text-sm font-semibold">Números vinculados ao processo</p>
+                <p className="text-xs text-muted-foreground">
+                  Use este mesmo modal para registrar PGE.net e um ou mais números de processo/autos da ação.
+                </p>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2 rounded-xl border border-border p-4">
+                  <Label className="text-xs">Adicionar PGE.net</Label>
+                  <div className="flex flex-col gap-2">
+                    <Input
+                      value={newPgeNetNumber}
+                      onChange={(e) => setNewPgeNetNumber(e.target.value)}
+                      placeholder="Número do PGE.net"
+                    />
+                    <Button type="button" onClick={handleAddPgeNetNumber}>
+                      Adicionar PGE.net
+                    </Button>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2 pt-2">
+                    {pgeNetNumbers.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">
+                        Nenhum PGE.net registrado.
+                      </p>
+                    ) : (
+                      pgeNetNumbers.map((number) => (
+                        <Badge key={number} variant="secondary">
+                          {number}
+                        </Badge>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-2 rounded-xl border border-border p-4">
+                  <Label className="text-xs">Adicionar processo/autos da ação</Label>
+                  <div className="flex flex-col gap-2">
+                    <Input
+                      value={newProcessNumber}
+                      onChange={(e) => setNewProcessNumber(e.target.value)}
+                      placeholder="Número do processo ou autos da ação"
+                    />
+                    <Button type="button" onClick={handleAddProcessNumber}>
+                      Adicionar processo
+                    </Button>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2 pt-2">
+                    {processNumbers.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">
+                        Nenhum processo vinculado.
+                      </p>
+                    ) : (
+                      processNumbers.map((number) => (
+                        <Badge key={number} variant="outline">
+                          {number}
+                        </Badge>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div className="space-y-2 border-t border-border pt-4">
@@ -5735,7 +5899,7 @@ function toPdfHex(value: string) {
           <DialogHeader>
             <DialogTitle>Gerar Resposta a Procuradoria</DialogTitle>
             <DialogDescription>
-              Selecione um modelo, confira a resposta gerada e salve o PDF nas últimas movimentações.
+              Selecione um modelo, confira a resposta gerada e salve o PDF nas Últimas movimentações.
             </DialogDescription>
           </DialogHeader>
 
@@ -5750,7 +5914,7 @@ function toPdfHex(value: string) {
                 <option value="">Selecione um modelo</option>
                 {availableEmailTemplates.map((template: any) => (
                   <option key={template.id} value={template.id}>
-                    {template.title} - {template.subject}
+                    {template.title}
                   </option>
                 ))}
               </select>
@@ -5851,7 +6015,7 @@ function toPdfHex(value: string) {
               <div className="space-y-3">
                 <div>
                   <Label className="mb-1 block text-xs">
-                    Onde está pendente?
+                    Onde est? pendente?
                   </Label>
                   <select
                     className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
@@ -5876,7 +6040,7 @@ function toPdfHex(value: string) {
                     rows={4}
                     value={finalizeReason}
                     onChange={(e) => setFinalizeReason(e.target.value)}
-                    placeholder="Descreva por que a demanda está pendente."
+                    placeholder="Descreva por que a demanda est? pendente."
                   />
                 </div>
               </div>
@@ -5931,7 +6095,7 @@ function toPdfHex(value: string) {
                   rows={4}
                   value={finalizeReason}
                   onChange={(e) => setFinalizeReason(e.target.value)}
-                  placeholder={finalizeStatus === "obito" ? "Justifique o encerramento por óbito." : "Justifique o arquivamento da demanda."}
+                  placeholder={finalizeStatus === "obito" ? "Justifique o encerramento por Óbito." : "Justifique o arquivamento da demanda."}
                 />
               </div>
             )}
@@ -5945,7 +6109,7 @@ function toPdfHex(value: string) {
                   {FINALIZATION_STATUS_LABELS[caseItem.finalization.status]}
                 </p>
                 <p>
-                  {new Date(caseItem.finalization.createdAt).toLocaleString("pt-BR")} •{" "}
+                  {new Date(caseItem.finalization.createdAt).toLocaleString("pt-BR")} ?{" "}
                   {caseItem.finalization.createdByName}
                 </p>
                 {caseItem.finalization.pendingLocation && (
@@ -5980,4 +6144,3 @@ function toPdfHex(value: string) {
     </div>
   )
 }
-

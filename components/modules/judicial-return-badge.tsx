@@ -26,7 +26,9 @@ export function judicialReturnReasonLabel(value: string, days?: number | null) {
   const key = String(value || "").trim().toUpperCase()
 
   const labels: Record<string, string> = {
-    RETORNO_ENVIO_AGENDAMENTO_5_DIAS: "Envio ao agendamento: retorna em 5 dias",
+    AGUARDANDO_AGENDAMENTO_DA_DEMANDA: "Enviado ao Agendamento da Demanda: aguardando retorno",
+    RETORNO_ENVIO_AGENDAMENTO_5_DIAS: "Enviado ao Agendamento da Demanda: aguardando retorno",
+    RETORNO_3_DIAS_APOS_COMUNICADO_AGENDAMENTO: "Comunicado Agendamento: retorna 3 dias após o atendimento",
     RETORNO_7_DIAS_APOS_AGENDAMENTO: "Agendamento: retorna 7 dias após a data registrada",
     RETORNO_3_DIAS_APOS_SOLICITACAO_INCLUSAO: "Solicitação de inclusão: retorna 3 dias após a solicitação",
     RETORNO_MONITORAMENTO_20_DIAS: "Monitoramento 20/20 dias",
